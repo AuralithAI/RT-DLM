@@ -32,6 +32,21 @@ class EmbeddingLayer():
 """
     SelfAttention class is used to create self-attention mechanism using hk.multihead_attention.
 """
-class SelfAttention():
-    def __init__(self):
+class SelfAttention(hk.Module):
+    """
+       Constructor for SelfAttention   
+    """
+    def __init__(self, d_model: int, num_heads: int):
         super().__init__()
+        self.atte = hk.MultiHeadAttention(num_heads=num_heads, key_size=d_model // num_heads)
+
+    def __call__(self, x: jnp.ndarray):
+        """
+        Apply self-attention mechanism.
+        Parameters:
+            x: jnp.ndarray - Input tensor
+        Returns:
+            jnp.ndarray: Output tensor
+            Here, assumption is that query, key and value are same. (May change later..)
+        """
+        return self.atte(x, x, x)
