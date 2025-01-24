@@ -60,4 +60,4 @@ class SelfAttention(hk.Module):
             jnp.ndarray: Output tensor
             Here, assumption is that query, key and value are same. (May change later..)
         """
-        return self.atte(x, x, x)
+        return self.attention(x, x, x)
