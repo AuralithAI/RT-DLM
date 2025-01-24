@@ -124,16 +124,17 @@ class MixtureOfExperts(hk.Module):
         """
         gate_scores = jax.nn.softmax(self.gating(x), axis=-1)
 
-        top_k_indices = jax.lax.top_k(gate_scores, self.top_k)[1]
-        top_k_scores = jax.lax.top_k(gate_scores, self.top_k)[0]
-
+        top_k_indices, top_k_scores = jax.lax.top_k(gate_scores, self.top_k)   
         outputs = []
+
         for b in range(x.shape[0]):
-            expert_outputs = [
-                self.experts[int(idx)](x[b:b+1]) * top_k_scores[b, i] 
-                for i, idx in enumerate(top_k_indices[b])
-            ]
+            expert_outputs = []
+            for i in range(self.top_k):
+                idx = int(jnp.squeeze(top_k_indices[b, :, i])[0])  
+                score = jnp.squeeze(top_k_scores[b, :, i])[0] 
+                expert_output = self.experts[idx](x[b:b+1]) * score
+                expert_outputs.append(expert_output)
+            
             outputs.append(jnp.sum(jnp.array(expert_outputs), axis=0))
 
         return jnp.concatenate(outputs, axis=0)
-

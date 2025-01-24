@@ -29,5 +29,7 @@ def test_moe():
     outputs = model.apply(params, rng, inputs)
 
     print("MoE Output Shape:", outputs.shape)
+    # This should print:  (2, 128, 512)
 
-test_moe()
+if __name__ == "__main__":
+    test_moe()
