@@ -1,3 +1,6 @@
+###########################################################################################################
+#                RT-DLM Model With Transformer Block, Embedding Layer and Mixture of Experts
+###########################################################################################################
 import haiku as hk
 import jax.numpy as jnp
 import jax
