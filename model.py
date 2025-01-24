@@ -1,5 +1,6 @@
 import haiku as hk
 import jax.numpy as jnp
+import jax
 from config import RTDLMConfig
 
 """
@@ -100,3 +101,36 @@ class TransformerBlock(hk.Module):
             jnp.ndarray: Output tensor after addition and normalization
         """
         return layer_norm(x + output)
+    
+
+"""
+    MixtureOfExperts class is used to create a Mixture of Experts mechanism.
+    This mechanism selects top-k experts and combines their outputs. (Good for scalability)
+"""
+class MixtureOfExperts(hk.Module):
+    """
+       Constructor for MixtureOfExperts:
+        
+    """
+    def __init__(self, d_model: int, num_experts: int, top_k: int):
+        super().__init__()
+        self.experts = [hk.nets.MLP([d_model * 4, d_model]) for _ in range(num_experts)]
+        self.gating = hk.Linear(num_experts)
+        self.top_k = top_k
+
+    def __call__(self, x: jnp.ndarray):
+        """
+        MoE mechanism: Select top-k experts and combine their outputs.
+        """
+        gate_scores = jax.nn.softmax(self.gating(x), axis=-1)
+        top_k_indices = jax.lax.top_k(gate_scores, self.top_k)[1]
+        outputs = []
+
+        for b in range(x.shape[0]):
+            expert_outputs = [
+                self.experts[idx](x[b:b+1]) for idx in top_k_indices[b]
+            ]
+            outputs.append(jnp.sum(jnp.stack(expert_outputs), axis=0))
+
+        return jnp.concatenate(outputs, axis=0)
+
