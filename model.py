@@ -123,14 +123,17 @@ class MixtureOfExperts(hk.Module):
         MoE mechanism: Select top-k experts and combine their outputs.
         """
         gate_scores = jax.nn.softmax(self.gating(x), axis=-1)
-        top_k_indices = jax.lax.top_k(gate_scores, self.top_k)[1]
-        outputs = []
 
+        top_k_indices = jax.lax.top_k(gate_scores, self.top_k)[1]
+        top_k_scores = jax.lax.top_k(gate_scores, self.top_k)[0]
+
+        outputs = []
         for b in range(x.shape[0]):
             expert_outputs = [
-                self.experts[idx](x[b:b+1]) for idx in top_k_indices[b]
+                self.experts[int(idx)](x[b:b+1]) * top_k_scores[b, i] 
+                for i, idx in enumerate(top_k_indices[b])
             ]
-            outputs.append(jnp.sum(jnp.stack(expert_outputs), axis=0))
+            outputs.append(jnp.sum(jnp.array(expert_outputs), axis=0))
 
         return jnp.concatenate(outputs, axis=0)
 
