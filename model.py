@@ -61,3 +61,42 @@ class SelfAttention(hk.Module):
             Here, assumption is that query, key and value [Q,K,V] are same. (May change later..)
         """
         return self.attention(x, x, x)
+    
+
+"""
+    Create a Transformer model using EmbeddingLayer and SelfAttention.
+"""
+class TransformerBlock(hk.Module):
+    """
+       Constructor for TransformerBlock:
+        Here we are using a 2 Layer MLP (Multi-Layer Preceptron) with 4*d_model and d_model units.
+    """
+    def __init__(self, d_model: int, num_heads: int):
+        super().__init__()
+        self.attention = SelfAttention(d_model, num_heads)
+        self.layer_norm_1 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+        self.feedforward = hk.nets.MLP([d_model * 4, d_model])  
+        self.layer_norm_2 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+
+    def __call__(self, x: jnp.ndarray):
+        """
+        Forward pass for Transformer Block.
+        """
+        attention_output = self.attention(x)
+        x = self.addAndNormalize(x, attention_output, self.layer_norm_1)
+        feedforward_output = self.feedforward(x)
+        x = self.addAndNormalize(x, feedforward_output, self.layer_norm_2)
+
+        return x
+    
+    def addAndNormalize(self, x: jnp.ndarray, output: jnp.ndarray, layer_norm: hk.LayerNorm) -> jnp.ndarray:
+        """
+        Add and normalize the output using the provided LayerNorm.
+        Parameters:
+            x: jnp.ndarray - Input tensor
+            output: jnp.ndarray - Output tensor to add
+            layer_norm: hk.LayerNorm - LayerNorm module to apply normalization
+        Returns:
+            jnp.ndarray: Output tensor after addition and normalization
+        """
+        return layer_norm(x + output)
