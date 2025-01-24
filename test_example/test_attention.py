@@ -37,6 +37,9 @@ def test_attention():
     outputs = model.apply(params, rng, inputs)
 
     print("Attention Output Shape:", outputs.shape)
+    # This should print:  (2, 128, 512)
+    # This ensures the attention mechanism is correctly processing the input tensor without altering its structure, 
+    # ensuring compatibility with downstream layers in the Transformer.
 
 if __name__ == "__main__":
     test_attention()

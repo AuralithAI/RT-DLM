@@ -58,6 +58,6 @@ class SelfAttention(hk.Module):
             x: jnp.ndarray - Input tensor
         Returns:
             jnp.ndarray: Output tensor
-            Here, assumption is that query, key and value are same. (May change later..)
+            Here, assumption is that query, key and value [Q,K,V] are same. (May change later..)
         """
         return self.attention(x, x, x)
