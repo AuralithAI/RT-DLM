@@ -34,11 +34,22 @@ class EmbeddingLayer():
 """
 class SelfAttention(hk.Module):
     """
-       Constructor for SelfAttention   
+       Constructor for SelfAttention 
+       By-Default:
+            MultiHeadAttention is used with key_size = d_model // num_heads
+            But it needs a w_init parameter to be passed.
+            So we are passing it as hk.initializers.VarianceScaling(1.0, "fan_avg", "uniform"):
+                * scale = 1.0 : scale factor of weights.
+                * mode = "fan_avg" : Mode of computation. (Balances initialization for both forward and backward passes)
+                * distribution = "uniform" : Distribution of weights is uniform
     """
     def __init__(self, d_model: int, num_heads: int):
         super().__init__()
-        self.atte = hk.MultiHeadAttention(num_heads=num_heads, key_size=d_model // num_heads)
+        self.attention = hk.MultiHeadAttention(
+            num_heads=num_heads, 
+            key_size=d_model // num_heads,
+            w_init=hk.initializers.VarianceScaling(1.0, "fan_avg", "uniform")
+        )
 
     def __call__(self, x: jnp.ndarray):
         """
