@@ -69,7 +69,7 @@ class SelfAttention(hk.Module):
 class TransformerBlock(hk.Module):
     """
        Constructor for TransformerBlock:
-        Here we are using a 2 Layer MLP (Multi-Layer Preceptron) with 4*d_model and d_model units.
+        Here we are using a 2 Layer MLP (Multi-Layer Preceptron) with 4*d_model and d_model units. (May change later)
     """
     def __init__(self, d_model: int, num_heads: int):
         super().__init__()
