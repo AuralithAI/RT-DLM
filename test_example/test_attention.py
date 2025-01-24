@@ -20,13 +20,23 @@ def test_attention():
     batch_size = 2
     sequence_length = 128
 
-    attention_layer = SelfAttention(d_model, num_heads)
-    inputs = jnp.ones((batch_size, sequence_length, d_model))  
+    def forward_fn(x):
+        attention_layer = SelfAttention(d_model, num_heads)
+        return attention_layer(x)
 
-    model = hk.transform(lambda x: attention_layer(x))
-    params = model.init(jax.random.PRNGKey(42), inputs)
-    outputs = model.apply(params, None, inputs)
+    # Transform the forward function with Haiku
+    model = hk.transform(forward_fn)
+
+    inputs = jnp.ones((batch_size, sequence_length, d_model))
+    rng = jax.random.PRNGKey(42)
+
+    # Initialize the model
+    params = model.init(rng, inputs)
+
+    # Apply the model to inputs
+    outputs = model.apply(params, rng, inputs)
 
     print("Attention Output Shape:", outputs.shape)
 
-test_attention()
+if __name__ == "__main__":
+    test_attention()
