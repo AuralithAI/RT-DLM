@@ -49,7 +49,7 @@ RT-DLM/
 ```
 
 ## **Model Architecture**
-
+```
 Input Sequence
      |
 [ Embedding Layer ]
@@ -59,6 +59,7 @@ Input Sequence
 [ Mixture of Experts (MoE) ]
      |
 Output Predictions
+```
 
 
 ---
