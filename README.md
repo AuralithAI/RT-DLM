@@ -36,7 +36,7 @@ Each block consists of:
 ---
 
 ## **Directory Structure**
-
+```
 RT-DLM/ 
 ├── model.py # Core model implementation 
 ├── config.py # Configuration for the model (e.g., hyperparameters) 
@@ -46,6 +46,7 @@ RT-DLM/
 │ ├── test_transformer_block.py 
 │ ├── test_moe.py 
 └── README.md # Project documentation (this file)
+```
 
 ## **Model Architecture**
 
