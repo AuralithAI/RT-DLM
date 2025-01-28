@@ -4,7 +4,28 @@
 import haiku as hk
 import jax.numpy as jnp
 import jax
+import os
 from config import RTDLMConfig
+from jax.lib import xla_bridge
+
+"""
+    GPU or CPU device selection. (Based on CUDA availability.)
+"""
+os.environ['JAX_PLATFORM_NAME'] = 'cuda'
+os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.6'
+
+print("JAX backend:", xla_bridge.get_backend().platform)
+print("Devices:", jax.devices())
+if jax.devices("gpu"):
+    print(f"Using GPU: {jax.devices('gpu')[0]}")
+    device = jax.devices("gpu")[0]
+else:
+    print("No GPU found. Falling back to CPU.")
+    device = jax.devices("cpu")[0]
+
+def to_device(x):
+    return jax.device_put(x, device)
+
 
 """
     EmbeddingLayer class is used to create embeddings for token and positional embeddings.
@@ -29,8 +50,12 @@ class EmbeddingLayer():
         """
         position_ids = jnp.arange(seq_length)[None, :] 
         token_embeds = self.token_embedding(token_ids)  
-        position_embeds = self.position_embedding(position_ids)  
-        return token_embeds + position_embeds  
+        position_embeds = self.position_embedding(position_ids) 
+
+        print(f"[EmbeddingLayer] token_ids.shape: {token_ids.shape}, position_ids.shape: {position_ids.shape}")
+        print(f"[EmbeddingLayer] token_embeds.shape: {token_embeds.shape}, position_embeds.shape: {position_embeds.shape}")
+ 
+        return to_device(token_embeds + position_embeds) 
     
 
 """
@@ -86,12 +111,21 @@ class TransformerBlock(hk.Module):
         """
         Forward pass for Transformer Block.
         """
-        attention_output = self.attention(x)
-        x = self.addAndNormalize(x, attention_output, self.layer_norm_1)
-        feedforward_output = self.feedforward(x)
-        x = self.addAndNormalize(x, feedforward_output, self.layer_norm_2)
+        print(f"[TransformerBlock] Input shape: {x.shape}")
 
-        return x
+        attention_output = self.attention(x)
+        print(f"[TransformerBlock] Attention output shape: {attention_output.shape}")
+
+        x = self.addAndNormalize(x, attention_output, self.layer_norm_1)
+        print(f"[TransformerBlock] After LayerNorm 1: {x.shape}")
+
+        feedforward_output = self.feedforward(x)
+        print(f"[TransformerBlock] Feedforward output shape: {feedforward_output.shape}")
+
+        x = self.addAndNormalize(x, feedforward_output, self.layer_norm_2)
+        print(f"[TransformerBlock] After LayerNorm 2: {x.shape}")
+
+        return to_device(x)
     
     def addAndNormalize(self, x: jnp.ndarray, output: jnp.ndarray, layer_norm: hk.LayerNorm) -> jnp.ndarray:
         """
@@ -112,32 +146,73 @@ class TransformerBlock(hk.Module):
 """
 class MixtureOfExperts(hk.Module):
     """
-       Constructor for MixtureOfExperts:
-        
+    Advanced Mixture of Experts (MoE):
+    - Uses dynamic gating to determine expert allocation.
+    - Supports top-k expert selection.
+    - Incorporates dropout for regularization.
     """
-    def __init__(self, d_model: int, num_experts: int, top_k: int):
+    def __init__(self, d_model: int, num_experts: int, top_k: int, dropout_rate: float = 0.1):
         super().__init__()
         self.experts = [hk.nets.MLP([d_model * 4, d_model]) for _ in range(num_experts)]
         self.gating = hk.Linear(num_experts)
         self.top_k = top_k
+        self.dropout_rate = dropout_rate
 
-    def __call__(self, x: jnp.ndarray):
-        """
-        MoE mechanism: Select top-k experts and combine their outputs.
-        """
+    def __call__(self, x: jnp.ndarray, is_training: bool = True):
         gate_scores = jax.nn.softmax(self.gating(x), axis=-1)
+        if is_training:
+            gate_scores = hk.dropout(hk.next_rng_key(), self.dropout_rate, gate_scores)
 
-        top_k_indices, top_k_scores = jax.lax.top_k(gate_scores, self.top_k)   
-        outputs = []
+        print(f"[MixtureOfExperts] Gate scores shape: {gate_scores.shape}")
 
-        for b in range(x.shape[0]):
-            expert_outputs = []
-            for i in range(self.top_k):
-                idx = int(jnp.squeeze(top_k_indices[b, :, i])[0])  
-                score = jnp.squeeze(top_k_scores[b, :, i])[0] 
-                expert_output = self.experts[idx](x[b:b+1]) * score
-                expert_outputs.append(expert_output)
-            
-            outputs.append(jnp.sum(jnp.array(expert_outputs), axis=0))
+        top_k_scores, top_k_indices = jax.lax.top_k(gate_scores, self.top_k)
+        print(f"[MixtureOfExperts] Top-k scores shape: {top_k_scores.shape}, Top-k indices shape: {top_k_indices.shape}")
 
-        return jnp.concatenate(outputs, axis=0)
+        outputs = jax.vmap(
+            lambda x_batch, scores, indices: self._process_batch(x_batch, scores, indices),
+            in_axes=(0, 0, 0)
+        )(x, top_k_scores, top_k_indices)
+
+        print(f"[MixtureOfExperts] Output shape: {outputs.shape}")
+        return to_device(outputs)
+
+    def _process_batch(self, x_batch, scores, indices):
+        """
+        Process a batch of inputs by computing outputs for top-k experts.
+        Args:
+            x_batch (jnp.ndarray): Input batch of shape [seq_length, d_model].
+            scores (jnp.ndarray): Gating scores of shape [seq_length, top_k].
+            indices (jnp.ndarray): Top-k expert indices of shape [seq_length, top_k].
+        Returns:
+            jnp.ndarray: Combined outputs of shape [seq_length, d_model].
+        """
+
+        def compute_expert_output(index, x_slice):
+            """
+            Compute the output of a single expert.
+            Args:
+                index: Index of the expert to invoke.
+                x_slice: Input slice for the expert.
+            Returns:
+                Output of the expert computation.
+            """
+            return hk.switch(index, [lambda x_slice=x_slice: expert(x_slice) for expert in self.experts])
+
+        def process_single_position(x_slice, scores_pos, indices_pos):
+            """
+            Compute outputs for the top-k experts at a single position.
+            Args:
+                x_slice: A single input slice of shape [d_model].
+                scores_pos: Gating scores for top-k experts of shape [top_k].
+                indices_pos: Top-k expert indices of shape [top_k].
+            """
+            x_repeated = jnp.repeat(x_slice[None, :], self.top_k, axis=0)  
+            expert_outputs = hk.vmap(compute_expert_output, split_rng=False)(indices_pos, x_repeated)  
+            return jnp.sum(expert_outputs * scores_pos[:, None], axis=0)  
+
+        combined_outputs = hk.vmap(process_single_position, split_rng=False)(
+            x_batch, scores, indices
+        ) 
+
+        print(f"[MixtureOfExperts] Combined outputs shape: {combined_outputs.shape}")
+        return to_device(combined_outputs)
