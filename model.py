@@ -11,11 +11,6 @@ from jax.lib import xla_bridge
 """
     GPU or CPU device selection. (Based on CUDA availability.)
 """
-os.environ['JAX_PLATFORM_NAME'] = 'cuda'
-os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.6'
-
-print("JAX backend:", xla_bridge.get_backend().platform)
-print("Devices:", jax.devices())
 if jax.devices("gpu"):
     print(f"Using GPU: {jax.devices('gpu')[0]}")
     device = jax.devices("gpu")[0]
