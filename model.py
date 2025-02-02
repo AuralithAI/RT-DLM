@@ -28,10 +28,11 @@ class EmbeddingLayer():
     """
        Constructor for EmbeddingLayer   
     """
-    def __init__(self, vocab_size: int, d_model: int, max_seq_length: int):
-        super().__init__()
-        self.token_embedding = hk.Embed(vocab_size, d_model)
-        self.position_embedding = hk.Embed(max_seq_length, d_model)
+    def __init__(self, vocab_size: int, d_model: int, max_seq_length: int, name=None):
+        super().__init__(name=name)
+        self.vocab_size = vocab_size
+        self.d_model = d_model
+        self.max_seq_length = max_seq_length
 
     def __call__(self, token_ids: jnp.ndarray, seq_length: int):
         """
