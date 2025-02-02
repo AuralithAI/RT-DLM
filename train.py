@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import haiku as hk
 import optax
 import os
-from model import EmbeddingLayer, TransformerBlock, MixtureOfExperts
+from model import EmbeddingLayer, TransformerBlock, MixtureOfExperts, to_device
 from config import RTDLMConfig
 from data_utils import DataProcessor, load_data, preprocess_batch
 from sklearn.decomposition import PCA
@@ -11,19 +11,20 @@ import matplotlib.pyplot as plt
 
 jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_platform_name", "gpu")
+jax.config.update("jax_mem_fraction", 0.6)
 
 class TrainConfig:
     def __init__(self):
-        self.vocab_size = 32000
-        self.d_model = 512
-        self.num_heads = 8
-        self.num_layers = 6
-        self.moe_experts = 8
-        self.moe_top_k = 4
-        self.max_seq_length = 128
-        self.batch_size = 2
+        self.vocab_size = 16000
+        self.d_model = 256
+        self.num_heads = 4
+        self.num_layers = 3
+        self.moe_experts = 2
+        self.moe_top_k = 2
+        self.max_seq_length = 64
+        self.batch_size = 1
         self.learning_rate = 3e-4
-        self.num_epochs = 10
+        self.num_epochs = 5
         self.eval_interval = 100
 
 def visualize_embeddings(embeddings, step):
@@ -69,7 +70,7 @@ def train():
         moe_layer = MixtureOfExperts(config.d_model, config.moe_experts, config.moe_top_k, dropout_rate=0.1)
         x = moe_layer(x, is_training=True)
 
-        return x
+        return to_device(x)
 
     model = hk.transform(forward_fn)
     optimizer = optax.adamw(config.learning_rate)
