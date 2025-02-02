@@ -7,6 +7,7 @@ import jax
 import os
 from config import RTDLMConfig
 from jax.lib import xla_bridge
+from jax.sharding import Mesh
 
 """
     GPU or CPU device selection. (Based on CUDA availability.)
@@ -21,6 +22,9 @@ else:
 def to_device(x):
     return jax.device_put(x, device)
 
+device = jax.devices("gpu")[0]
+devices = jax.devices()
+mesh = Mesh(devices, axis_names=('data',))
 
 """
     EmbeddingLayer class is used to create embeddings for token and positional embeddings.
@@ -84,7 +88,10 @@ class SelfAttention(hk.Module):
             jnp.ndarray: Output tensor
             Here, assumption is that query, key and value [Q,K,V] are same. (May change later..)
         """
-        return self.attention(x, x, x)
+        print(f"[SelfAttention] Input shape: {x.shape}")
+        output = self.attention(x, x, x)
+        print(f"[SelfAttention] Output shape: {output.shape}")
+        return output
     
 
 """
@@ -158,7 +165,9 @@ class MixtureOfExperts(hk.Module):
         if is_training:
             gate_scores = hk.dropout(hk.next_rng_key(), self.dropout_rate, gate_scores)
 
-        print(f"[MixtureOfExperts] Gate scores shape: {gate_scores.shape}")
+        print(f"[MixtureOfExperts] Gate scores shape: {gate_scores.shape} (Computing experts...)")
+        print(f"[DEBUG] gate_scores sharding: {gate_scores.sharding}")
+        jax.debug.visualize_sharding(gate_scores.sharding, mesh)
 
         top_k_scores, top_k_indices = jax.lax.top_k(gate_scores, self.top_k)
         print(f"[MixtureOfExperts] Top-k scores shape: {top_k_scores.shape}, Top-k indices shape: {top_k_indices.shape}")
