@@ -9,6 +9,8 @@ from data_utils import DataProcessor, load_data, preprocess_batch
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
+jax.config.update("jax_disable_jit", True)
+
 class TrainConfig:
     def __init__(self):
         self.vocab_size = 32000
@@ -18,7 +20,7 @@ class TrainConfig:
         self.moe_experts = 8
         self.moe_top_k = 4
         self.max_seq_length = 128
-        self.batch_size = 8
+        self.batch_size = 2
         self.learning_rate = 3e-4
         self.num_epochs = 10
         self.eval_interval = 100
