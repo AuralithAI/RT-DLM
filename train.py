@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 
 jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_platform_name", "gpu")
-jax.config.update("jax_mem_fraction", 0.6)
 
 class TrainConfig:
     def __init__(self):
