@@ -37,6 +37,8 @@ def visualize_embeddings(embeddings, step):
     plt.ylabel("PCA Component 2")
     plt.grid(True)
     plt.show()
+    plt.savefig(f"embedding_step_{step}.png")
+    plt.close()
 
 
 def train():
@@ -90,7 +92,7 @@ def train():
     dummy_inputs, _ = next(data_generator(train_data, config.batch_size))
     assert dummy_inputs.shape == (config.batch_size, config.max_seq_length), \
     f"Expected shape: {(config.batch_size, config.max_seq_length)}, got {dummy_inputs.shape}"
-    params = model.init(rng, dummy_inputs)
+    params, state = model.init(rng, dummy_inputs)
     opt_state = optimizer.init(params)
 
     losses = []
@@ -104,7 +106,7 @@ def train():
             print(f"[Training] Step {step}, Loss: {loss:.4f}")
 
             if step % config.eval_interval == 0:
-                embeddings = model.apply(params, None, dummy_inputs)
+                embeddings, state = model.apply(params, state, None, dummy_inputs)
                 print(f"[Training] Embeddings shape: {embeddings.shape}")
                 visualize_embeddings(embeddings, step)
 
@@ -118,6 +120,8 @@ def train():
     plt.legend()
     plt.grid(True)
     plt.show()
+    plt.savefig("training_loss_plot.png")
+    plt.close()
 
 if __name__ == "__main__":
     train()
