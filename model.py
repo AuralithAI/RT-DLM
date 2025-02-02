@@ -168,7 +168,7 @@ class MixtureOfExperts(hk.Module):
         print(f"[MixtureOfExperts] Top-k scores shape: {top_k_scores.shape}, Top-k indices shape: {top_k_indices.shape}")
 
         outputs = jax.vmap(
-            lambda x_batch, scores, indices: self._process_batch(x_batch, scores, indices),
+            lambda x_batch, scores, indices: jnp.squeeze(self._process_batch(x_batch, scores, indices), axis=0),
             in_axes=(0, 0, 0)
         )(x, top_k_scores, top_k_indices)
 
@@ -195,7 +195,8 @@ class MixtureOfExperts(hk.Module):
             Returns:
                 Output of the expert computation.
             """
-            return hk.switch(index, [lambda x_slice=x_slice: expert(x_slice) for expert in self.experts])
+            output = hk.switch(index, [lambda x_slice=x_slice: expert(x_slice) for expert in self.experts])
+            return jnp.expand_dims(output, axis=0)
 
         def process_single_position(x_slice, scores_pos, indices_pos):
             """
@@ -207,7 +208,7 @@ class MixtureOfExperts(hk.Module):
             """
             x_repeated = jnp.repeat(x_slice[None, :], self.top_k, axis=0)  
             expert_outputs = hk.vmap(compute_expert_output, split_rng=False)(indices_pos, x_repeated)  
-            return jnp.sum(expert_outputs * scores_pos[:, None], axis=0)  
+            return jnp.sum(expert_outputs * scores_pos[:, None], axis=0, keepdims=True) 
 
         combined_outputs = hk.vmap(process_single_position, split_rng=False)(
             x_batch, scores, indices
