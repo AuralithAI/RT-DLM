@@ -195,8 +195,7 @@ class MixtureOfExperts(hk.Module):
             Returns:
                 Output of the expert computation.
             """
-            output = hk.switch(index, [lambda x_slice=x_slice: expert(x_slice) for expert in self.experts])
-            return jnp.expand_dims(output, axis=0)
+            return hk.switch(index, [lambda x_slice=x_slice: expert(x_slice) for expert in self.experts])
 
         def process_single_position(x_slice, scores_pos, indices_pos):
             """
@@ -207,12 +206,14 @@ class MixtureOfExperts(hk.Module):
                 indices_pos: Top-k expert indices of shape [top_k].
             """
             x_repeated = jnp.repeat(x_slice[None, :], self.top_k, axis=0)  
-            expert_outputs = hk.vmap(compute_expert_output, split_rng=False)(indices_pos, x_repeated)  
-            return jnp.sum(expert_outputs * scores_pos[:, None], axis=0, keepdims=True) 
+            expert_outputs = hk.vmap(compute_expert_output, in_axes=(0, 0), out_axes=0, split_rng=False)(
+                indices_pos, x_repeated
+            )  
+            return jnp.sum(expert_outputs * scores_pos[:, None], axis=0)
 
-        combined_outputs = hk.vmap(process_single_position, split_rng=False)(
+        combined_outputs = hk.vmap(process_single_position, in_axes=(0, 0, 0), out_axes=0, split_rng=False)(
             x_batch, scores, indices
-        ) 
+        )
 
         print(f"[MixtureOfExperts] Combined outputs shape: {combined_outputs.shape}")
         return to_device(combined_outputs)
