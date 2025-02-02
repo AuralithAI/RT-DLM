@@ -19,7 +19,7 @@ else:
     device = jax.devices("cpu")[0]
 
 def to_device(x):
-    return jax.device_put(x, device)
+    return jax.device_put(jnp.asarray(x, dtype=jnp.float16), device)
 
 """
     EmbeddingLayer class is used to create embeddings for token and positional embeddings.
