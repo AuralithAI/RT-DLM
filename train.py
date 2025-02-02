@@ -10,6 +10,7 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
 jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_platform_name", "gpu")
 
 class TrainConfig:
     def __init__(self):
