@@ -204,10 +204,12 @@ class MixtureOfExperts(hk.Module):
                 indices_pos: Top-k expert indices of shape [top_k].
             """
             x_repeated = jnp.repeat(x_slice[None, :], self.top_k, axis=0)  
-            expert_outputs = hk.vmap(compute_expert_output, in_axes=(0, 0), split_rng=False)(indices_pos, x_repeated)    
+            expert_outputs = jax.vmap(compute_expert_output, in_axes=(0, 0))(indices_pos, x_repeated)  
             return jnp.sum(expert_outputs * scores_pos[:, None], axis=0)
 
-        combined_outputs = jax.vmap(process_single_position, in_axes=(0, 0, 0))(x_batch, scores, indices)
+        combined_outputs = hk.vmap(process_single_position, in_axes=(0, 0, 0), split_rng=False)(
+            x_batch, scores, indices
+        )
 
         print(f"[MixtureOfExperts] Combined outputs shape: {combined_outputs.shape}")
         return to_device(combined_outputs)
