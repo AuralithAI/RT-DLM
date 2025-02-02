@@ -31,6 +31,9 @@ export PATH=$HOME/.local/bin:$PATH
 echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
 source ~/.bashrc
 
+echo 'export XLA_PYTHON_CLIENT_MEM_FRACTION=0.6' >> ~/.bashrc
+source ~/.bashrc
+
 # Verify pip installation
 which pip3
 pip3 --version
