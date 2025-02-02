@@ -78,15 +78,15 @@ def train():
 
     @jax.jit
     def update(params, opt_state, inputs, targets):
-        def loss_fn(params):
-            predictions = model.apply(params, None, inputs)
+        def loss_fn(params, state):
+            predictions, new_state = model.apply(params, state, rng, inputs)
             loss = jnp.mean(optax.softmax_cross_entropy(predictions, jax.nn.one_hot(targets, config.vocab_size)))
-            return loss
+            return loss, new_state  
 
-        loss, grads = jax.value_and_grad(loss_fn)(params)
+        (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state)
         updates, opt_state = optimizer.update(grads, opt_state)
         new_params = optax.apply_updates(params, updates)
-        return loss, new_params, opt_state
+        return loss, new_params, new_state, opt_state
 
     rng = jax.random.PRNGKey(42)
     dummy_inputs, _ = next(data_generator(train_data, config.batch_size))
@@ -102,11 +102,11 @@ def train():
         for step, (inputs, targets) in enumerate(data_generator(train_data, config.batch_size)):
             print(f"[Training] Step {step}, Inputs shape: {inputs.shape}, Targets shape: {targets.shape}")
             
-            loss, params, opt_state = update(params, opt_state, inputs, targets)
+            loss, params, state, opt_state = update(params, state, opt_state, inputs, targets)
             print(f"[Training] Step {step}, Loss: {loss:.4f}")
 
             if step % config.eval_interval == 0:
-                embeddings, state = model.apply(params, state, None, dummy_inputs)
+                embeddings, state = model.apply(params, state, rng, dummy_inputs)
                 print(f"[Training] Embeddings shape: {embeddings.shape}")
                 visualize_embeddings(embeddings, step)
 
