@@ -71,7 +71,7 @@ def train():
 
         return to_device(x)
 
-    model = hk.transform(forward_fn)
+    model = hk.transform_with_state(forward_fn)
     optimizer = optax.adamw(config.learning_rate)
 
     @jax.jit
