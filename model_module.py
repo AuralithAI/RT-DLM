@@ -16,7 +16,7 @@ class RTDLMModel(hk.Module):
         for block in self.transformer_blocks:
             x = block(x)
 
-        x = self.moe_layer(x, is_training=True)
+        x = self.moe_layer(x, hk.next_rng_key(), is_training=True)
 
         x = self.final_layer(x)
 
