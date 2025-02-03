@@ -91,7 +91,7 @@ def train():
     rng = jax.random.PRNGKey(42)
     dummy_inputs, _ = next(data_generator(train_data, config.batch_size))
     assert dummy_inputs.shape == (config.batch_size, config.max_seq_length), \
-    f"Expected shape: {(config.batch_size, config.max_seq_length)}, got {dummy_inputs.shape}"
+        f"Expected shape: {(config.batch_size, config.max_seq_length)}, got {dummy_inputs.shape}"
     params, state = model.init(rng, dummy_inputs)
     opt_state = optimizer.init(params)
 

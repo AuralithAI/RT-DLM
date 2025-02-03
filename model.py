@@ -30,9 +30,8 @@ class EmbeddingLayer(hk.Module):
     """
     def __init__(self, vocab_size: int, d_model: int, max_seq_length: int, name=None):
         super().__init__(name=name)
-        self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.max_seq_length = max_seq_length
+        self.token_embedding = hk.Embed(vocab_size=vocab_size, embed_dim=d_model)
+        self.position_embedding = hk.Embed(vocab_size=max_seq_length, embed_dim=d_model)
 
     def __call__(self, token_ids: jnp.ndarray, seq_length: int):
         """
@@ -43,12 +42,8 @@ class EmbeddingLayer(hk.Module):
         Returns:
             jnp.ndarray: Combined embeddings
         """
-        self.token_embedding = hk.Embed(vocab_size=self.vocab_size, embed_dim=self.d_model)
-        self.position_embedding = hk.Embed(vocab_size=self.max_seq_length, embed_dim=self.d_model)
-
         token_embeds = self.token_embedding(token_ids)
         position_embeds = self.position_embedding(jnp.arange(seq_length)[None, :])
-
         print(f"[EmbeddingLayer] token_embeds.shape: {token_embeds.shape}, position_embeds.shape: {position_embeds.shape}")
  
         return to_device(token_embeds + position_embeds) 
