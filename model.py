@@ -24,7 +24,7 @@ def to_device(x):
 """
     EmbeddingLayer class is used to create embeddings for token and positional embeddings.
 """
-class EmbeddingLayer():
+class EmbeddingLayer(hk.Module):
     """
        Constructor for EmbeddingLayer   
     """
