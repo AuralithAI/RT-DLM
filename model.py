@@ -52,12 +52,12 @@ class EmbeddingLayer(hk.Module):
                                                init=hk.initializers.RandomNormal())
 
         position_ids = jnp.arange(seq_length)[None, :]
-        token_embeds = token_embeddings[token_ids]
-        position_embeds = position_embeddings[position_ids]
+        token_embeds = jnp.take(token_embeddings, token_ids, axis=0)
+        position_embeds = jnp.take(position_embeddings, position_ids, axis=0)
         print(f"[EmbeddingLayer] position_ids.shape: {position_ids.shape}")
         print(f"[EmbeddingLayer] token_embeds.shape: {token_embeds.shape}, position_embeds.shape: {position_embeds.shape}")
  
-        return to_device(token_embeds + position_embeds) 
+        return token_embeds + position_embeds
     
 
 """

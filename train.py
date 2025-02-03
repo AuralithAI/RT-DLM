@@ -62,7 +62,7 @@ def train():
 
     def forward_fn(inputs):
         embedding_layer = EmbeddingLayer(config.vocab_size, config.d_model, config.max_seq_length)
-        x = embedding_layer(inputs, inputs.shape[1])
+        x = embedding_layer(inputs, config.max_seq_length)
 
         for _ in range(config.num_layers):
             transformer_block = TransformerBlock(config.d_model, config.num_heads)
