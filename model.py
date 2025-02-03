@@ -160,7 +160,7 @@ class MixtureOfExperts(hk.Module):
         self.top_k = top_k
         self.dropout_rate = dropout_rate
 
-    def __call__(self, x: jnp.ndarray, rng: jax.random.PRNGKey, is_training: bool = True):
+    def __call__(self, x: jnp.ndarray, rng, is_training: bool = True):
         gate_scores = jax.nn.softmax(self.gating(x), axis=-1)
 
         if is_training:
