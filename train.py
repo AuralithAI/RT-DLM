@@ -71,6 +71,10 @@ def train():
 
         x = moe_layer(x, is_training=True)
 
+        # **Add a projection layer to match vocab size**
+        final_layer = hk.Linear(config.vocab_size)
+        x = final_layer(x)
+
         return to_device(x)
 
     model = hk.transform_with_state(forward_fn)
