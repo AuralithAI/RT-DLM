@@ -69,7 +69,8 @@ def train():
         for block in transformer_blocks:
             x = block(x)
 
-        x = moe_layer(x, is_training=True)
+        rng = hk.next_rng_key()
+        x = moe_layer(x, rng, is_training=True)
 
         # **Add a projection layer to match vocab size**
         w_init = hk.initializers.TruncatedNormal(0.02)

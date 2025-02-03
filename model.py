@@ -160,11 +160,11 @@ class MixtureOfExperts(hk.Module):
         self.top_k = top_k
         self.dropout_rate = dropout_rate
 
-    def __call__(self, x: jnp.ndarray, is_training: bool = True):
+    def __call__(self, x: jnp.ndarray, rng: jax.random.PRNGKey, is_training: bool = True):
         gate_scores = jax.nn.softmax(self.gating(x), axis=-1)
         if is_training:
-            gate_scores = hk.dropout(hk.next_rng_key(), self.dropout_rate, gate_scores)
-
+            gate_scores = hk.dropout(rng, self.dropout_rate, gate_scores)
+        
         if isinstance(gate_scores, core.Tracer):
             print("[DEBUG] gate_scores is a JAX Tracer (inside a JIT computation).")
         else:
