@@ -10,20 +10,20 @@ class RTDLMModel(hk.Module):
         self.moe_layer = MixtureOfExperts(config.d_model, config.moe_experts, config.moe_top_k, dropout_rate=0.1)
         self.final_layer = hk.Linear(config.vocab_size, w_init=hk.initializers.TruncatedNormal(0.02))
 
-    def __call__(self, inputs):
+    def __call__(self, inputs, rng):
         x = self.embed(inputs, seq_length=inputs.shape[1])
 
         for block in self.transformer_blocks:
             x = block(x)
 
-        x = self.moe_layer(x, hk.next_rng_key(), is_training=True)
+        x = self.moe_layer(x, rng, is_training=True)
 
         x = self.final_layer(x)
 
         return to_device(x)
 
-def forward_fn(inputs):
+def forward_fn(inputs, rng):
     model = RTDLMModel(TrainConfig())
-    return model(inputs)
+    return model(inputs, rng)
 
 model = hk.transform_with_state(forward_fn)

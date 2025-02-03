@@ -164,7 +164,8 @@ class MixtureOfExperts(hk.Module):
         gate_scores = jax.nn.softmax(self.gating(x), axis=-1)
 
         if is_training:
-            gate_scores = hk.dropout(rng, self.dropout_rate, gate_scores)
+            dropout_rng, compute_rng = jax.random.split(rng) 
+            gate_scores = hk.dropout(dropout_rng, self.dropout_rate, gate_scores)
 
         top_k_scores, top_k_indices = jax.lax.top_k(gate_scores, self.top_k)
         print(f"[MixtureOfExperts] Top-k scores shape: {top_k_scores.shape}, Top-k indices shape: {top_k_indices.shape}")
