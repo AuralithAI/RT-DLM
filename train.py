@@ -87,7 +87,7 @@ def train():
             batch = data[i:i + batch_size]
             if len(batch) < batch_size:
                 pad_count = batch_size - len(batch)
-                batch.extend([""] * pad_count)  # Assuming empty strings for padding
+                batch.extend([""] * pad_count) 
             inputs, targets = preprocess_batch(batch, processor, config.max_seq_length)
             yield inputs, targets
 
