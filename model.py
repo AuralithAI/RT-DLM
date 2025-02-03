@@ -23,8 +23,8 @@ def to_device(x):
     return jax.device_put(jnp.asarray(x, dtype=jnp.float16), device)
 
 # Use hk next random key if needed!
-def getNextRngKey():
-    rng = hk.next_rng_key()
+def getNextRngKey() -> jax.random.PRNGKey:
+    return hk.next_rng_key()
 
 """
     EmbeddingLayer class is used to create embeddings for token and positional embeddings.
