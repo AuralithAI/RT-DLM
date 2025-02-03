@@ -72,7 +72,7 @@ def train():
         x = moe_layer(x, is_training=True)
 
         # **Add a projection layer to match vocab size**
-        final_layer = hk.Linear(config.vocab_size)
+        final_layer = hk.Linear(config.vocab_size, w_init=hk.initializers.TruncatedNormal(0.02))
         x = final_layer(x)
 
         return to_device(x)
@@ -93,10 +93,11 @@ def train():
         return loss, new_params, new_state, opt_state
 
     rng = jax.random.PRNGKey(42)
+    rng, init_rng = jax.random.split(rng)
     dummy_inputs, _ = next(data_generator(train_data, config.batch_size))
     assert dummy_inputs.shape == (config.batch_size, config.max_seq_length), \
         f"Expected shape: {(config.batch_size, config.max_seq_length)}, got {dummy_inputs.shape}"
-    params, state = model.init(rng, dummy_inputs)
+    params, state = model.init(init_rng, dummy_inputs)
     opt_state = optimizer.init(params)
 
     losses = []
