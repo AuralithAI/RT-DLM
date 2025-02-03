@@ -4,12 +4,11 @@ import haiku as hk
 import optax
 import os
 from model_module import RTDLMModel
-from config import RTDLMConfig
-from data_utils import DataProcessor, load_data, preprocess_batch
 from train_config import TrainConfig
+from data_utils import DataProcessor, load_data, preprocess_batch
+import jax.random as jrandom
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-import jax.random as jrandom
 
 jax.config.update("jax_platform_name", "gpu")
 
@@ -42,11 +41,11 @@ def update(params, state, opt_state, inputs, targets, rng):
         loss = jnp.mean(optax.softmax_cross_entropy(predictions, jax.nn.one_hot(targets, TrainConfig().vocab_size)))
         return loss, new_state  
 
-    rng, next_rng = jax.random.split(rng)
-    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng)
+    rng, next_rng = jrandom.split(rng)
+    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state)
     updates, opt_state = optimizer.update(grads, opt_state)
     new_params = optax.apply_updates(params, updates)
-    rng, next_rng = jrandom.split(rng)
+    
     return loss, new_params, new_state, opt_state, next_rng
 
 def train():
@@ -82,7 +81,7 @@ def train():
     for epoch in range(config.num_epochs):
         print(f"[Training] Starting Epoch {epoch + 1}")
         for step, (inputs, targets) in enumerate(data_generator(train_data, config.batch_size)):
-            rng, step_rng = jax.random.split(rng)
+            rng, step_rng = jrandom.split(rng)
             print(f"[Training] Step {step}, Inputs shape: {inputs.shape}, Targets shape: {targets.shape}")
             
             loss, params, state, opt_state, rng = update(params, state, opt_state, inputs, targets, step_rng)
