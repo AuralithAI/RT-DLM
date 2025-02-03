@@ -43,14 +43,12 @@ class EmbeddingLayer(hk.Module):
         Returns:
             jnp.ndarray: Combined embeddings
         """
-        token_embeddings = hk.get_parameter("token_embedding", shape=[self.vocab_size, self.d_model], init=hk.initializers.RandomNormal())
-        position_embeddings = hk.get_parameter("position_embedding", shape=[self.max_seq_length, self.d_model], init=hk.initializers.RandomNormal())
+        self.token_embedding = hk.Embed(vocab_size=self.vocab_size, embed_dim=self.d_model)
+        self.position_embedding = hk.Embed(vocab_size=self.max_seq_length, embed_dim=self.d_model)
 
-        position_ids = jnp.arange(seq_length)[None, :]
-        token_embeds = token_embeddings[token_ids]
-        position_embeds = position_embeddings[position_ids]
+        token_embeds = self.token_embedding(token_ids)
+        position_embeds = self.position_embedding(jnp.arange(seq_length)[None, :])
 
-        print(f"[EmbeddingLayer] token_ids.shape: {token_ids.shape}, position_ids.shape: {position_ids.shape}")
         print(f"[EmbeddingLayer] token_embeds.shape: {token_embeds.shape}, position_embeds.shape: {position_embeds.shape}")
  
         return to_device(token_embeds + position_embeds) 
