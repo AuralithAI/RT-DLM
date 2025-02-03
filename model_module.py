@@ -1,6 +1,6 @@
+import haiku as hk
 from model import TransformerBlock, SelfAttention, EmbeddingLayer, MixtureOfExperts, to_device
 from train_config import TrainConfig
-import haiku as hk
 
 class RTDLMModel(hk.Module):
     def __init__(self, config):
@@ -22,8 +22,9 @@ class RTDLMModel(hk.Module):
 
         return to_device(x)
 
-config = TrainConfig()
-model = RTDLMModel(config) 
-
 def forward_fn(inputs):
+    config = TrainConfig()
+    model = RTDLMModel(config)
     return model(inputs)
+
+model = hk.transform_with_state(forward_fn)
