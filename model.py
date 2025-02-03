@@ -43,22 +43,17 @@ class EmbeddingLayer(hk.Module):
         Returns:
             jnp.ndarray: Combined embeddings
         """
-        token_embeddings = hk.get_parameter("token_embedding", 
-                                            shape=[self.vocab_size, self.d_model], 
-                                            init=hk.initializers.RandomNormal())
+        token_embeddings = hk.Embed(vocab_size=self.vocab_size, embed_dim=self.d_model)
+        position_embeddings = hk.Embed(vocab_size=self.max_seq_length, embed_dim=self.d_model)
 
-        position_embeddings = hk.get_parameter("position_embedding", 
-                                               shape=[self.max_seq_length, self.d_model], 
-                                               init=hk.initializers.RandomNormal())
-
+        token_embeds = token_embeddings(token_ids)
         position_ids = jnp.arange(seq_length)[None, :]
-        token_embeds = jnp.take(token_embeddings, token_ids, axis=0)
-        position_embeds = jnp.take(position_embeddings, position_ids, axis=0)
+        position_embeds = position_embeddings(position_ids)
+
         print(f"[EmbeddingLayer] position_ids.shape: {position_ids.shape}")
         print(f"[EmbeddingLayer] token_embeds.shape: {token_embeds.shape}, position_embeds.shape: {position_embeds.shape}")
- 
-        return token_embeds + position_embeds
-    
+
+        return to_device(token_embeds + position_embeds) 
 
 """
     SelfAttention class is used to create self-attention mechanism using hk.multihead_attention.
