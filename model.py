@@ -7,6 +7,7 @@ import jax
 import os
 from config import RTDLMConfig
 from jax.lib import xla_bridge
+from jax import core
 
 """
     GPU or CPU device selection. (Based on CUDA availability.)
@@ -160,9 +161,11 @@ class MixtureOfExperts(hk.Module):
         if is_training:
             gate_scores = hk.dropout(hk.next_rng_key(), self.dropout_rate, gate_scores)
 
-        print(f"[DEBUG] gate_scores sharding type: {type(gate_scores.sharding)}")
-        print(f"[DEBUG] gate_scores device: {gate_scores.devices() if hasattr(gate_scores, 'devices') else 'N/A'}")
-
+        if isinstance(gate_scores, core.Tracer):
+            print("[DEBUG] gate_scores is a JAX Tracer (inside a JIT computation).")
+        else:
+            print(f"[DEBUG] gate_scores sharding type: {type(getattr(gate_scores, 'sharding', 'N/A'))}")
+            print(f"[DEBUG] gate_scores device: {getattr(gate_scores, 'devices', 'N/A')}")
 
         top_k_scores, top_k_indices = jax.lax.top_k(gate_scores, self.top_k)
         print(f"[MixtureOfExperts] Top-k scores shape: {top_k_scores.shape}, Top-k indices shape: {top_k_indices.shape}")
