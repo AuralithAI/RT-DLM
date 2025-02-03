@@ -39,18 +39,16 @@ def visualize_embeddings(embeddings, step):
     plt.savefig(f"embedding_step_{step}.png")
     plt.close()
 
-def forward_fn(inputs):
+def forward_fn(inputs, rng):
     config = TrainConfig()
     embed = EmbeddingLayer(config.vocab_size, config.d_model, config.max_seq_length)
     transformer_blocks = [TransformerBlock(config.d_model, config.num_heads) for _ in range(config.num_layers)]
     moe_layer = MixtureOfExperts(config.d_model, config.moe_experts, config.moe_top_k, dropout_rate=0.1)
 
-    # Apply layers
     x = embed(inputs, config.max_seq_length)
     for block in transformer_blocks:
         x = block(x)
 
-    rng = hk.next_rng_key()
     x = moe_layer(x, rng, is_training=True)
 
     w_init = hk.initializers.TruncatedNormal(0.02)
@@ -98,7 +96,7 @@ def train():
     assert dummy_inputs.shape == (config.batch_size, config.max_seq_length), \
         f"Expected shape: {(config.batch_size, config.max_seq_length)}, got {dummy_inputs.shape}"
     
-    params, state = model.init(init_rng, dummy_inputs)
+    params, state = model.init(init_rng, dummy_inputs, init_rng)
     opt_state = optimizer.init(params)
 
     losses = []
