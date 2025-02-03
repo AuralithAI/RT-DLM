@@ -6,7 +6,6 @@ import os
 from model_module import RTDLMModel
 from train_config import TrainConfig
 from data_utils import DataProcessor, load_data, preprocess_batch
-import jax.random as jrandom
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
@@ -26,27 +25,27 @@ def visualize_embeddings(embeddings, step):
     plt.savefig(f"embedding_step_{step}.png")
     plt.close()
 
-def forward_fn(inputs, rng):
+def forward_fn(inputs):
     config = TrainConfig()
     model = RTDLMModel(config)
-    return model(inputs, rng)
+    return model(inputs)
 
+# ✅ Haiku expects functions to be transformed this way
 model = hk.transform_with_state(forward_fn)
 optimizer = optax.adamw(TrainConfig().learning_rate)
 
 @jax.jit
-def update(params, state, opt_state, inputs, targets, rng):
+def update(params, state, opt_state, inputs, targets):
     def loss_fn(params, state):
-        predictions, new_state = model.apply(params, state, rng, inputs)
+        predictions, new_state = model.apply(params, state, hk.next_rng_key(), inputs)  # ✅ Fix: use Haiku's PRNG
         loss = jnp.mean(optax.softmax_cross_entropy(predictions, jax.nn.one_hot(targets, TrainConfig().vocab_size)))
         return loss, new_state  
 
-    rng, next_rng = jrandom.split(rng)
     (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state)
     updates, opt_state = optimizer.update(grads, opt_state)
     new_params = optax.apply_updates(params, updates)
     
-    return loss, new_params, new_state, opt_state, next_rng
+    return loss, new_params, new_state, opt_state
 
 def train():
     config = TrainConfig()
@@ -66,14 +65,14 @@ def train():
             yield inputs, targets
 
     rng = jax.random.PRNGKey(42)
-    rng, init_rng = jax.random.split(rng)
 
     dummy_inputs, _ = next(data_generator(train_data, config.batch_size))
     print(f"Dummy Inputs Shape: {dummy_inputs.shape}")
     assert dummy_inputs.shape == (config.batch_size, config.max_seq_length), \
         f"Expected shape: {(config.batch_size, config.max_seq_length)}, got {dummy_inputs.shape}"
     
-    params, state = model.init(init_rng, dummy_inputs, init_rng)
+    # ✅ Corrected model initialization
+    params, state = model.init(rng, dummy_inputs)
     opt_state = optimizer.init(params)
 
     losses = []
@@ -81,14 +80,13 @@ def train():
     for epoch in range(config.num_epochs):
         print(f"[Training] Starting Epoch {epoch + 1}")
         for step, (inputs, targets) in enumerate(data_generator(train_data, config.batch_size)):
-            rng, step_rng = jrandom.split(rng)
             print(f"[Training] Step {step}, Inputs shape: {inputs.shape}, Targets shape: {targets.shape}")
             
-            loss, params, state, opt_state, rng = update(params, state, opt_state, inputs, targets, step_rng)
+            loss, params, state, opt_state = update(params, state, opt_state, inputs, targets)
             print(f"[Training] Step {step}, Loss: {loss:.4f}")
 
             if step % config.eval_interval == 0:
-                embeddings, state = model.apply(params, state, rng, dummy_inputs)
+                embeddings, state = model.apply(params, state, hk.next_rng_key(), dummy_inputs)
                 print(f"[Training] Embeddings shape: {embeddings.shape}")
                 visualize_embeddings(embeddings, step)
 
