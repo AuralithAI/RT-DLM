@@ -43,10 +43,10 @@ def train():
     rng = jax.random.PRNGKey(42)
     rng, init_rng = jax.random.split(rng)
 
-    dummy_inputs, _ = next(data_generator(train_data, config.batch_size))
+    dummy_inputs = jax.random.randint(init_rng, shape=(config.batch_size, config.max_seq_length), minval=0, maxval=config.vocab_size)
     print(f"Dummy Inputs Shape: {dummy_inputs.shape}")
 
-    params, state = model.init(init_rng, dummy_inputs, rng)  
+    params, state = model.init(init_rng, dummy_inputs, rng=rng)  
     opt_state = optimizer.init(params)
 
     for epoch in range(config.num_epochs):

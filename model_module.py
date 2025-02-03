@@ -1,4 +1,5 @@
 import haiku as hk
+import jax
 from model import TransformerBlock, SelfAttention, EmbeddingLayer, MixtureOfExperts, to_device
 from train_config import TrainConfig
 
@@ -24,6 +25,7 @@ class RTDLMModel(hk.Module):
 
 def forward_fn(inputs, rng):
     model = RTDLMModel(TrainConfig())
-    return model(inputs, rng)
+    rng, *subkeys = jax.random.split(rng, num=4)
+    return model(inputs, rng=subkeys[0])
 
 model = hk.transform_with_state(forward_fn)

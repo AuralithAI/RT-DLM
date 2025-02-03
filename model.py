@@ -161,10 +161,14 @@ class MixtureOfExperts(hk.Module):
         self.dropout_rate = dropout_rate
 
     def __call__(self, x: jnp.ndarray, rng, is_training: bool = True):
+        rng, dropout_rng = jax.random.split(rng)
+        
+        print(f"x shape before gating: {x.shape}")
         gate_scores = jax.nn.softmax(self.gating(x), axis=-1)
+        print(f"Gate scores shape: {gate_scores.shape}")
 
         if is_training:
-            gate_scores = hk.dropout(rng, self.dropout_rate, gate_scores)
+            gate_scores = hk.dropout(dropout_rng, self.dropout_rate, gate_scores)
 
         top_k_scores, top_k_indices = jax.lax.top_k(gate_scores, self.top_k)
         print(f"[MixtureOfExperts] Top-k scores shape: {top_k_scores.shape}, Top-k indices shape: {top_k_indices.shape}")
