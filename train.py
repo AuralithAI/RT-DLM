@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import haiku as hk
 import optax
 import os
-from model import EmbeddingLayer, TransformerBlock, MixtureOfExperts, to_device, getNextRngKey
+from model import EmbeddingLayer, TransformerBlock, MixtureOfExperts, to_device
 from config import RTDLMConfig
 from data_utils import DataProcessor, load_data, preprocess_batch
 from sklearn.decomposition import PCA
@@ -39,6 +39,40 @@ def visualize_embeddings(embeddings, step):
     plt.savefig(f"embedding_step_{step}.png")
     plt.close()
 
+def forward_fn(inputs):
+    config = TrainConfig()
+    embed = EmbeddingLayer(config.vocab_size, config.d_model, config.max_seq_length)
+    transformer_blocks = [TransformerBlock(config.d_model, config.num_heads) for _ in range(config.num_layers)]
+    moe_layer = MixtureOfExperts(config.d_model, config.moe_experts, config.moe_top_k, dropout_rate=0.1)
+
+    # Apply layers
+    x = embed(inputs, config.max_seq_length)
+    for block in transformer_blocks:
+        x = block(x)
+
+    rng = hk.next_rng_key()
+    x = moe_layer(x, rng, is_training=True)
+
+    w_init = hk.initializers.TruncatedNormal(0.02)
+    final_layer = hk.Linear(config.vocab_size, w_init=w_init)
+    x = final_layer(x)
+
+    return to_device(x)
+
+model = hk.transform_with_state(forward_fn)
+optimizer = optax.adamw(TrainConfig().learning_rate)
+
+@jax.jit
+def update(params, state, opt_state, inputs, targets, rng):
+    def loss_fn(params, state):
+        predictions, new_state = model.apply(params, state, rng, inputs)
+        loss = jnp.mean(optax.softmax_cross_entropy(predictions, jax.nn.one_hot(targets, TrainConfig().vocab_size)))
+        return loss, new_state  
+
+    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state)
+    updates, opt_state = optimizer.update(grads, opt_state)
+    new_params = optax.apply_updates(params, updates)
+    return loss, new_params, new_state, opt_state
 
 def train():
     config = TrainConfig()
@@ -52,48 +86,10 @@ def train():
         for i in range(0, len(data), batch_size):
             batch = data[i:i + batch_size]
             if len(batch) < batch_size:
-                # Pad batch to batch_size
                 pad_count = batch_size - len(batch)
                 batch.extend([""] * pad_count)  # Assuming empty strings for padding
             inputs, targets = preprocess_batch(batch, processor, config.max_seq_length)
             yield inputs, targets
-
-
-    def forward_fn(inputs, rng):
-        embed = EmbeddingLayer(config.vocab_size, config.d_model, config.max_seq_length)
-        transformer_blocks = [TransformerBlock(config.d_model, config.num_heads) for _ in range(config.num_layers)]
-        moe_layer = MixtureOfExperts(config.d_model, config.moe_experts, config.moe_top_k, dropout_rate=0.1)
-
-        # Apply layers
-        x = embed(inputs, config.max_seq_length)
-        for block in transformer_blocks:
-            x = block(x)
-
-        rng = getNextRngKey()
-        x = moe_layer(x, rng, is_training=True)
-
-        # Correct PRNG usage for final linear layer
-        w_init = hk.initializers.TruncatedNormal(0.02)
-        final_layer = hk.Linear(config.vocab_size, w_init=w_init)
-        x = final_layer(x)
-
-        return to_device(x)
-
-    model = hk.transform_with_state(forward_fn)
-    optimizer = optax.adamw(config.learning_rate)
-
-    @jax.jit
-    def update(params, state, opt_state, inputs, targets):
-        def loss_fn(params, state):
-            rng, next_rng = jax.random.split(rng)
-            predictions, new_state = model.apply(params, state, next_rng, inputs)
-            loss = jnp.mean(optax.softmax_cross_entropy(predictions, jax.nn.one_hot(targets, config.vocab_size)))
-            return loss, new_state  
-
-        (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state)
-        updates, opt_state = optimizer.update(grads, opt_state)
-        new_params = optax.apply_updates(params, updates)
-        return loss, new_params, new_state, opt_state, rng
 
     rng = jax.random.PRNGKey(42)
     rng, init_rng = jax.random.split(rng)
@@ -101,7 +97,8 @@ def train():
     dummy_inputs, _ = next(data_generator(train_data, config.batch_size))
     assert dummy_inputs.shape == (config.batch_size, config.max_seq_length), \
         f"Expected shape: {(config.batch_size, config.max_seq_length)}, got {dummy_inputs.shape}"
-    params, state = model.init(init_rng, dummy_inputs, init_rng)
+    
+    params, state = model.init(init_rng, dummy_inputs)
     opt_state = optimizer.init(params)
 
     losses = []
@@ -112,7 +109,7 @@ def train():
             rng, step_rng = jax.random.split(rng)
             print(f"[Training] Step {step}, Inputs shape: {inputs.shape}, Targets shape: {targets.shape}")
             
-            loss, params, state, opt_state = update(params, state, opt_state, inputs, targets)
+            loss, params, state, opt_state = update(params, state, opt_state, inputs, targets, step_rng)
             print(f"[Training] Step {step}, Loss: {loss:.4f}")
 
             if step % config.eval_interval == 0:
