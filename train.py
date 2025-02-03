@@ -68,10 +68,11 @@ def train():
     rng, init_rng = jax.random.split(rng)
 
     dummy_inputs, _ = next(data_generator(train_data, config.batch_size))
+    print(f"Dummy Inputs Shape: {dummy_inputs.shape}")
     assert dummy_inputs.shape == (config.batch_size, config.max_seq_length), \
         f"Expected shape: {(config.batch_size, config.max_seq_length)}, got {dummy_inputs.shape}"
     
-    params, state = model.init(init_rng, dummy_inputs)
+    params, state = model.init(init_rng, dummy_inputs, init_rng)
     opt_state = optimizer.init(params)
 
     losses = []
