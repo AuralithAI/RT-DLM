@@ -9,6 +9,7 @@ from data_utils import DataProcessor, load_data, preprocess_batch
 from train_config import TrainConfig
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
+import jax.random as jrandom
 
 jax.config.update("jax_platform_name", "gpu")
 
@@ -45,6 +46,7 @@ def update(params, state, opt_state, inputs, targets, rng):
     (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng)
     updates, opt_state = optimizer.update(grads, opt_state)
     new_params = optax.apply_updates(params, updates)
+    rng, next_rng = jrandom.split(rng)
     return loss, new_params, new_state, opt_state, next_rng
 
 def train():
@@ -72,7 +74,7 @@ def train():
     assert dummy_inputs.shape == (config.batch_size, config.max_seq_length), \
         f"Expected shape: {(config.batch_size, config.max_seq_length)}, got {dummy_inputs.shape}"
     
-    params, state = model.init(init_rng, dummy_inputs, init_rng)
+    params, state = model.init(init_rng, dummy_inputs)
     opt_state = optimizer.init(params)
 
     losses = []
