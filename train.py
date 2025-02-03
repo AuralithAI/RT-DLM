@@ -15,12 +15,12 @@ optimizer = optax.adamw(config.learning_rate)
 @jax.jit
 def update(params, state, opt_state, rng, inputs, targets):
     def loss_fn(params, state):
-        predictions, new_state = model.apply(params, state, rng, inputs)
+        predictions, new_state = model.apply(params, state, rng, inputs, rng)
         loss = jnp.mean(optax.softmax_cross_entropy(predictions, jax.nn.one_hot(targets, config.vocab_size)))
         return loss, new_state  
 
     (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state)
-    updates, opt_state = optimizer.update(grads, opt_state, params)
+    updates, opt_state = optimizer.update(grads, opt_state, params)  
     new_params = optax.apply_updates(params, updates)
     
     return loss, new_params, new_state, opt_state
@@ -35,7 +35,8 @@ def train():
         for i in range(0, len(data), batch_size):
             batch = data[i:i + batch_size]
             if len(batch) < batch_size:
-                batch.extend([""] * (batch_size - len(batch))) 
+                pad_count = batch_size - len(batch)
+                batch.extend([""] * pad_count) 
             inputs, targets = preprocess_batch(batch, processor, config.max_seq_length)
             yield inputs, targets
 
@@ -45,7 +46,7 @@ def train():
     dummy_inputs, _ = next(data_generator(train_data, config.batch_size))
     print(f"Dummy Inputs Shape: {dummy_inputs.shape}")
 
-    params, state = model.init(init_rng, dummy_inputs, init_rng)
+    params, state = model.init(init_rng, dummy_inputs, rng)  
     opt_state = optimizer.init(params)
 
     for epoch in range(config.num_epochs):
