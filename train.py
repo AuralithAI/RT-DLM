@@ -6,24 +6,11 @@ import os
 from model_module import RTDLMModel
 from config import RTDLMConfig
 from data_utils import DataProcessor, load_data, preprocess_batch
+from train_config import TrainConfig
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
 jax.config.update("jax_platform_name", "gpu")
-
-class TrainConfig:
-    def __init__(self):
-        self.vocab_size = 4000
-        self.d_model = 64
-        self.num_heads = 2
-        self.num_layers = 2
-        self.moe_experts = 2
-        self.moe_top_k = 1
-        self.max_seq_length = 64
-        self.batch_size = 1
-        self.learning_rate = 3e-4
-        self.num_epochs = 3
-        self.eval_interval = 50
 
 def visualize_embeddings(embeddings, step):
     pca = PCA(n_components=2)

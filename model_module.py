@@ -1,5 +1,5 @@
 from model import TransformerBlock, SelfAttention, EmbeddingLayer, MixtureOfExperts, to_device
-from train import TrainConfig
+from train_config import TrainConfig
 import haiku as hk
 
 class RTDLMModel(hk.Module):
