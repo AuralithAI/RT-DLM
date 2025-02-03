@@ -13,19 +13,18 @@ class RTDLMModel(hk.Module):
 
     def __call__(self, inputs, rng):
         x = self.embed(inputs, seq_length=inputs.shape[1])
-
+        rng, *subkeys = jax.random.split(rng, num=4)
         for block in self.transformer_blocks:
             x = block(x)
 
-        x = self.moe_layer(x, rng, is_training=True)
-
+        x = self.moe_layer(x, rng=subkeys[0], is_training=True)
         x = self.final_layer(x)
 
         return to_device(x)
 
 def forward_fn(inputs, rng):
     model = RTDLMModel(TrainConfig())
-    rng, *subkeys = jax.random.split(rng, num=4)
-    return model(inputs, rng=subkeys[0])
+    rng, subkey = jax.random.split(rng)
+    return model(inputs, rng=subkey)
 
 model = hk.transform_with_state(forward_fn)

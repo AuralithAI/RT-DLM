@@ -162,7 +162,7 @@ class MixtureOfExperts(hk.Module):
 
     def __call__(self, x: jnp.ndarray, rng, is_training: bool = True):
         rng, dropout_rng = jax.random.split(rng)
-        
+
         print(f"x shape before gating: {x.shape}")
         gate_scores = jax.nn.softmax(self.gating(x), axis=-1)
         print(f"Gate scores shape: {gate_scores.shape}")
