@@ -74,7 +74,7 @@ def train():
     assert dummy_inputs.shape == (config.batch_size, config.max_seq_length), \
         f"Expected shape: {(config.batch_size, config.max_seq_length)}, got {dummy_inputs.shape}"
     
-    params, state = model.init(init_rng, dummy_inputs)
+    params, state = model.init(init_rng, dummy_inputs, init_rng)
     opt_state = optimizer.init(params)
 
     losses = []
