@@ -160,23 +160,18 @@ class MixtureOfExperts(hk.Module):
         self.top_k = top_k
         self.dropout_rate = dropout_rate
 
-    def __call__(self, x: jnp.ndarray, is_training: bool = True):
+    def __call__(self, x: jnp.ndarray, rng: jax.random.PRNGKey, is_training: bool = True):
         gate_scores = jax.nn.softmax(self.gating(x), axis=-1)
 
         if is_training:
-            dropout_rng = hk.next_rng_key()
-            gate_scores = hk.dropout(dropout_rng, self.dropout_rate, gate_scores)
-
-        if isinstance(gate_scores, core.Tracer):
-            print("[DEBUG] gate_scores is a JAX Tracer (inside a JIT computation).")
-        else:
-            print(f"[DEBUG] gate_scores sharding type: {type(getattr(gate_scores, 'sharding', 'N/A'))}")
-            print(f"[DEBUG] gate_scores device: {getattr(gate_scores, 'devices', 'N/A')}")
+            gate_scores = hk.dropout(rng, self.dropout_rate, gate_scores)
 
         top_k_scores, top_k_indices = jax.lax.top_k(gate_scores, self.top_k)
         print(f"[MixtureOfExperts] Top-k scores shape: {top_k_scores.shape}, Top-k indices shape: {top_k_indices.shape}")
 
-        outputs = hk.vmap(self._process_batch, in_axes=(0, 0, 0))(x, top_k_scores, top_k_indices)
+        outputs = hk.vmap(self._process_batch, in_axes=(0, 0, 0), split_rng=False)(
+            x, top_k_scores, top_k_indices
+        )
         print(f"[MixtureOfExperts] Output shape: {outputs.shape}")
         return to_device(outputs)
 

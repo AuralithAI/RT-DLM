@@ -23,8 +23,7 @@ class RTDLMModel(hk.Module):
         return to_device(x)
 
 def forward_fn(inputs):
-    config = TrainConfig()
-    model = RTDLMModel(config)
+    model = RTDLMModel(TrainConfig())
     return model(inputs)
 
 model = hk.transform_with_state(forward_fn)
