@@ -23,7 +23,7 @@ def to_device(x):
     return jax.device_put(jnp.asarray(x, dtype=jnp.float16), device)
 
 # Use hk next random key if needed!
-def getNextRngKey() -> jax.random.PRNGKey:
+def getNextRngKey():
     return hk.next_rng_key()
 
 """
