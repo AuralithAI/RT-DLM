@@ -9,7 +9,6 @@ from data_utils import DataProcessor, load_data, preprocess_batch
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
-jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_platform_name", "gpu")
 
 class TrainConfig:
@@ -61,17 +60,18 @@ def train():
 
 
     def forward_fn(inputs):
-        embedding_layer = EmbeddingLayer(config.vocab_size, config.d_model, config.max_seq_length)
-        x = embedding_layer(inputs, config.max_seq_length)
-
-        for _ in range(config.num_layers):
-            transformer_block = TransformerBlock(config.d_model, config.num_heads)
-            x = transformer_block(x)
-
+        embed = EmbeddingLayer(config.vocab_size, config.d_model, config.max_seq_length)
+        transformer_blocks = [TransformerBlock(config.d_model, config.num_heads) for _ in range(config.num_layers)]
         moe_layer = MixtureOfExperts(config.d_model, config.moe_experts, config.moe_top_k, dropout_rate=0.1)
+
+        # Apply layers
+        x = embed(inputs, config.max_seq_length)
+        for block in transformer_blocks:
+            x = block(x)
+
         x = moe_layer(x, is_training=True)
 
-        return x
+        return to_device(x)
 
     model = hk.transform_with_state(forward_fn)
     optimizer = optax.adamw(config.learning_rate)
