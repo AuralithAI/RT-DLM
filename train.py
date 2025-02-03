@@ -71,7 +71,7 @@ def train():
         moe_layer = MixtureOfExperts(config.d_model, config.moe_experts, config.moe_top_k, dropout_rate=0.1)
         x = moe_layer(x, is_training=True)
 
-        return to_device(x)
+        return x
 
     model = hk.transform_with_state(forward_fn)
     optimizer = optax.adamw(config.learning_rate)
