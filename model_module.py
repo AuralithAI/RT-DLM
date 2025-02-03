@@ -1,4 +1,4 @@
-from model_module import TransformerBlock, SelfAttention, EmbeddingLayer, MixtureOfExperts, to_device
+from model import TransformerBlock, SelfAttention, EmbeddingLayer, MixtureOfExperts, to_device
 from train import TrainConfig
 import haiku as hk
 
