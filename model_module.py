@@ -27,4 +27,4 @@ def forward_fn(inputs, rng):
     rng, subkey = jax.random.split(rng)
     return model(inputs, rng=subkey)
 
-model = hk.transform_with_state(forward_fn)
+model = hk.without_apply_rng(hk.transform_with_state(forward_fn))
