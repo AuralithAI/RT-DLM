@@ -105,9 +105,9 @@ class TransformerBlock(hk.Module):
     def __init__(self, d_model: int, num_heads: int):
         super().__init__()
         self.attention = SelfAttention(d_model, num_heads)
-        self.layer_norm_1 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+        self.layer_norm_1 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, eps=1e-5)
         self.feedforward = hk.nets.MLP([d_model * 4, d_model])  
-        self.layer_norm_2 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+        self.layer_norm_2 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, eps=1e-5)
 
     def __call__(self, x: jnp.ndarray):
         """
