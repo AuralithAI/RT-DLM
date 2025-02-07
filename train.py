@@ -34,11 +34,10 @@ def update(params, state, opt_state, rng, inputs, targets):
         return loss, new_state  
 
     (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng, targets)
-    grads, grad_norm = jax.tree_util.tree_map(
-        lambda g: (jnp.clip(g, -MAX_GRAD_NORM, MAX_GRAD_NORM), jnp.linalg.norm(g)), grads
-    )
-    jax.debug.print("[DEBUG] Gradient Norm: {}", grad_norm)
-    updates, opt_state = optimizer.update(grads, opt_state, params)  
+    grad_norms = jax.tree_util.tree_map(lambda g: jnp.linalg.norm(g), grads)
+    clipped_grads = jax.tree_util.tree_map(lambda g: jnp.clip(g, -MAX_GRAD_NORM, MAX_GRAD_NORM), grads)
+    jax.debug.print("[DEBUG] Gradient Norm Sample: {}", jax.tree_util.tree_leaves(grad_norms)[:3])
+    updates, opt_state = optimizer.update(clipped_grads, opt_state, params)  
     new_params = optax.apply_updates(params, updates)
 
     return loss, new_params, new_state, opt_state
