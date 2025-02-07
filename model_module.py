@@ -15,6 +15,9 @@ class RTDLMModel(hk.Module):
     def __call__(self, inputs, rng):
         print(f"[DEBUG] inputs.shape before embedding: {inputs.shape}")
 
+        if len(inputs.shape) == 1:
+            inputs = inputs.reshape(1, -1)
+
         if inputs.shape[1] != TrainConfig().max_seq_length:
             pad_width = TrainConfig().max_seq_length - inputs.shape[1]
             inputs = jnp.pad(inputs, ((0, 0), (0, pad_width)), constant_values=0)
