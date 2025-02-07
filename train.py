@@ -53,6 +53,7 @@ def train():
     for epoch in range(config.num_epochs):
         print(f"[Training] Starting Epoch {epoch + 1}")
         for step, (inputs, targets) in enumerate(data_generator(train_data, config.batch_size)):
+            print(f"[DEBUG] Step {step}: inputs.shape={inputs.shape}, targets.shape={targets.shape}")
             rng, step_rng = jax.random.split(rng)
             loss, params, state, opt_state = update(params, state, opt_state, step_rng, inputs, targets)
             print(f"[Training] Step {step}, Loss: {loss:.4f}")

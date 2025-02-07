@@ -12,7 +12,9 @@ class RTDLMModel(hk.Module):
         self.final_layer = hk.Linear(config.vocab_size, w_init=hk.initializers.TruncatedNormal(0.02))
 
     def __call__(self, inputs, rng):
+        print(f"[DEBUG] inputs.shape: {inputs.shape}")
         x = self.embed(inputs, seq_length=inputs.shape[1])
+        print(f"[DEBUG] x.shape after embedding: {x.shape}")
         rng, *subkeys = jax.random.split(rng, num=len(self.transformer_blocks) + 2)
 
         for block, subkey in zip(self.transformer_blocks, subkeys[:-1]):
