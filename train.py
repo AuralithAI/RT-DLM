@@ -19,27 +19,23 @@ def update(params, state, opt_state, rng, inputs, targets):
         rng, subkey = jax.random.split(rng)  
         predictions, new_state = model.apply(params, state, subkey, inputs)
 
-        if jnp.isnan(predictions).any():
-            print("[ERROR] NaN detected in predictions!")
+        jax.debug.print("[DEBUG] Checking for NaN in predictions: {}", jnp.isnan(predictions).any())
+        jax.debug.print("[DEBUG] Predictions Sample: {}", predictions[:2, :2, :5])  # Print first few values
 
         targets_one_hot = jax.nn.one_hot(targets, config.vocab_size)
 
-        if jnp.isnan(targets_one_hot).any():
-            print("[ERROR] NaN detected in one-hot targets!")
+        jax.debug.print("[DEBUG] Checking for NaN in targets_one_hot: {}", jnp.isnan(targets_one_hot).any())
 
-        # 🔥 Apply `log_softmax` to prevent instability
         log_probs = jax.nn.log_softmax(predictions, axis=-1)
         loss = -jnp.sum(targets_one_hot * log_probs) / targets.shape[1]
 
-        if jnp.isnan(loss):
-            print("[ERROR] NaN detected in loss!")
+        jax.debug.print("[DEBUG] Checking for NaN in loss: {}", jnp.isnan(loss))
 
         return loss, new_state  
 
     (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng, targets)
 
-    if jnp.isnan(grads).any():
-        print("[ERROR] NaN detected in gradients!")
+    jax.debug.print("[DEBUG] Checking for NaN in gradients: {}", jnp.isnan(grads).any())
 
     grads = jax.tree_map(lambda g: jnp.clip(g, -MAX_GRAD_NORM, MAX_GRAD_NORM), grads)
     updates, opt_state = optimizer.update(grads, opt_state, params)  
@@ -50,7 +46,12 @@ def update(params, state, opt_state, rng, inputs, targets):
 def train():
     processor = DataProcessor()
     data = load_data(os.path.join(os.getcwd(), f"data{os.sep}dataset.txt"))
+    print(f"[DEBUG] Loading dataset from: {os.path.join(os.getcwd(), f"data{os.sep}dataset.txt")}")
+    print(f"[DEBUG] Loaded {len(data)} lines from dataset.txt")
+    print(f"[DEBUG] Sample Data: {data[:5]}")
     processor.build_vocab(data)
+    print(f"[DEBUG] Vocabulary Size: {len(processor.vocab)}")
+
     train_data, val_data = data[:int(0.9 * len(data))], data[int(0.9 * len(data)):]
 
     def data_generator(data, batch_size):
@@ -59,7 +60,10 @@ def train():
             if len(batch) < batch_size:
                 pad_count = batch_size - len(batch)
                 batch.extend([""] * pad_count) 
+            print(f"[DEBUG] Raw Batch: {batch}")
             inputs, targets = preprocess_batch(batch, processor, config.max_seq_length)
+            print(f"[DEBUG] Processed Batch: inputs.shape={inputs.shape}, targets.shape={targets.shape}")
+            print(f"[DEBUG] Sample Tokens: {inputs[:1]}")
             yield inputs, targets
 
     rng = jax.random.PRNGKey(42)
