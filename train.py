@@ -62,6 +62,12 @@ def train():
         print(f"[Training] Starting Epoch {epoch + 1}")
         for step, (inputs, targets) in enumerate(data_generator(train_data, config.batch_size)):
             print(f"[DEBUG] Step {step}: inputs.shape={inputs.shape}, targets.shape={targets.shape}")
+            
+            if inputs.shape[1] != config.max_seq_length:
+                print(f"[DEBUG] Fixing inputs shape: {inputs.shape} → (1, {config.max_seq_length})")
+                pad_width = config.max_seq_length - inputs.shape[1]
+                inputs = jnp.pad(inputs, ((0, 0), (0, pad_width)), constant_values=0)
+
             rng, step_rng = jax.random.split(rng)
             loss, params, state, opt_state = update(params, state, opt_state, step_rng, inputs, targets)
             print(f"[Training] Step {step}, Loss: {loss:.4f}")

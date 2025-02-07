@@ -1,5 +1,6 @@
 import haiku as hk
 import jax
+import jax.numpy as jnp
 from model import TransformerBlock, SelfAttention, EmbeddingLayer, MixtureOfExperts, to_device
 from train_config import TrainConfig
 
@@ -12,16 +13,16 @@ class RTDLMModel(hk.Module):
         self.final_layer = hk.Linear(config.vocab_size, w_init=hk.initializers.TruncatedNormal(0.02))
 
     def __call__(self, inputs, rng):
-        print(f"[DEBUG] inputs.shape: {inputs.shape}")
+        print(f"[DEBUG] inputs.shape before embedding: {inputs.shape}")
 
-        if len(inputs.shape) == 1:
-            inputs = inputs.reshape(1, -1)
+        if inputs.shape[1] != TrainConfig().max_seq_length:
+            pad_width = TrainConfig().max_seq_length - inputs.shape[1]
+            inputs = jnp.pad(inputs, ((0, 0), (0, pad_width)), constant_values=0)
 
-        x = self.embed(inputs, seq_length=inputs.shape[1])
+        x = self.embed(inputs, seq_length=inputs.shape[1])  # Now it's safe
         print(f"[DEBUG] x.shape after embedding: {x.shape}")
 
         rng, *subkeys = jax.random.split(rng, num=len(self.transformer_blocks) + 2)
-
         for block, subkey in zip(self.transformer_blocks, subkeys[:-1]):
             x = block(x)
 
