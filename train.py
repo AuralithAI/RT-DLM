@@ -14,16 +14,16 @@ optimizer = optax.adamw(config.learning_rate)
 
 @jax.jit
 def update(params, state, opt_state, rng, inputs, targets):
-    def loss_fn(params, state):
-        rng, subkey = jax.random.split(rng)
+    def loss_fn(params, state, rng):
+        rng, subkey = jax.random.split(rng)  
         predictions, new_state = model.apply(params, state, subkey, inputs)
         loss = jnp.mean(optax.softmax_cross_entropy(predictions, jax.nn.one_hot(targets, config.vocab_size)))
         return loss, new_state  
 
-    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state)
+    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng)
     updates, opt_state = optimizer.update(grads, opt_state, params)  
     new_params = optax.apply_updates(params, updates)
-    
+
     return loss, new_params, new_state, opt_state
 
 def train():
