@@ -6,7 +6,7 @@ class TrainConfig:
         self.num_layers = 2
         self.moe_experts = 2
         self.moe_top_k = 1
-        self.max_seq_length = 128
+        self.max_seq_length = 64
         self.batch_size = 4
         self.learning_rate = 1e-5
         self.num_epochs = 3
