@@ -10,7 +10,8 @@ class RTDLMModel(hk.Module):
         super().__init__()
         self.embed = EmbeddingLayer(config.vocab_size, config.d_model, config.max_seq_length)
         self.transformer_blocks = [TransformerBlock(config.d_model, config.num_heads) for _ in range(config.num_layers)]
-        self.final_layer = hk.Linear(config.vocab_size, w_init=hk.initializers.GlorotUniform())
+        self.final_layer = hk.Linear(config.vocab_size, 
+                                     w_init=hk.initializers.VarianceScaling(0.02, "fan_in", "uniform"))
         # self.moe_layer = MixtureOfExperts(config.d_model, config.moe_experts, config.moe_top_k, dropout_rate=0.1)
 
     def __call__(self, inputs, rng):
