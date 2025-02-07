@@ -31,6 +31,9 @@ class DataProcessor:
             tokens = self.tokenize(self.preprocess_text(text))
             word_set.update(tokens)
 
+        if len(word_set) < 2000:
+            print(f"[WARNING] Vocabulary is too small ({len(word_set)} words)! Consider adding more data.")
+
         self.vocab = {word: idx for idx, word in enumerate(sorted(word_set), start=2)}
         self.vocab['<PAD>'] = 0  
         self.vocab['<UNK>'] = 1 

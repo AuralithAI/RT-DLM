@@ -27,7 +27,7 @@ def update(params, state, opt_state, rng, inputs, targets):
         jax.debug.print("[DEBUG] Checking for NaN in targets_one_hot: {}", jnp.isnan(targets_one_hot).any())
 
         log_probs = jax.nn.log_softmax(predictions, axis=-1)
-        loss = -jnp.sum(targets_one_hot * log_probs) / targets.shape[1]
+        loss = -jnp.mean(jnp.sum(targets_one_hot * log_probs, axis=-1))
 
         jax.debug.print("[DEBUG] Checking for NaN in loss: {}", jnp.isnan(loss))
 
