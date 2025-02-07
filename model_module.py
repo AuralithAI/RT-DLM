@@ -13,8 +13,13 @@ class RTDLMModel(hk.Module):
 
     def __call__(self, inputs, rng):
         print(f"[DEBUG] inputs.shape: {inputs.shape}")
+
+        if len(inputs.shape) == 1:
+            inputs = inputs.reshape(1, -1)
+
         x = self.embed(inputs, seq_length=inputs.shape[1])
         print(f"[DEBUG] x.shape after embedding: {x.shape}")
+
         rng, *subkeys = jax.random.split(rng, num=len(self.transformer_blocks) + 2)
 
         for block, subkey in zip(self.transformer_blocks, subkeys[:-1]):
