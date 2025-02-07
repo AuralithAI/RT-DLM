@@ -34,12 +34,6 @@ def update(params, state, opt_state, rng, inputs, targets):
         return loss, new_state  
 
     (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng, targets)
-
-    nan_grads = jax.tree_util.tree_map(lambda g: jnp.isnan(g).any(), grads)
-    
-    if jnp.any(jnp.array(jax.tree_util.tree_leaves(nan_grads))):
-        jax.debug.print("[ERROR] NaN detected in gradients!")
-
     grads = jax.tree_map(lambda g: jnp.clip(g, -MAX_GRAD_NORM, MAX_GRAD_NORM), grads)
     updates, opt_state = optimizer.update(grads, opt_state, params)  
     new_params = optax.apply_updates(params, updates)
