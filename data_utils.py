@@ -76,8 +76,10 @@ def preprocess_batch(batch: List[str], processor: DataProcessor, max_seq_length:
 
     inputs = jnp.array(inputs, dtype=jnp.int32)
     targets = jnp.array(targets, dtype=jnp.int32)
-    if len(inputs.shape) == 1:
-        inputs = inputs.reshape(1, -1)
-        targets = targets.reshape(1, -1)
+    
+    if inputs.shape[1] != max_seq_length:
+        pad_width = max_seq_length - inputs.shape[1]
+        inputs = jnp.pad(inputs, ((0, 0), (0, pad_width)), constant_values=0)
+        targets = jnp.pad(targets, ((0, 0), (0, pad_width)), constant_values=0)
 
     return inputs, targets
