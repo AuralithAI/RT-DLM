@@ -37,7 +37,7 @@ def update(params, state, opt_state, rng, inputs, targets):
 
     nan_grads = jax.tree_util.tree_map(lambda g: jnp.isnan(g).any(), grads)
     
-    if any(jax.tree_util.tree_leaves(nan_grads)):
+    if jnp.any(jnp.array(jax.tree_util.tree_leaves(nan_grads))):
         jax.debug.print("[ERROR] NaN detected in gradients!")
 
     grads = jax.tree_map(lambda g: jnp.clip(g, -MAX_GRAD_NORM, MAX_GRAD_NORM), grads)
