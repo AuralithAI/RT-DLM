@@ -28,7 +28,7 @@ def update(params, state, opt_state, rng, inputs, targets):
         loss = jnp.mean(optax.softmax_cross_entropy(predictions, targets_on_hot))
         return loss, new_state  
 
-    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng)
+    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng, targets)
     updates, opt_state = optimizer.update(grads, opt_state, params)  
     new_params = optax.apply_updates(params, updates)
 
