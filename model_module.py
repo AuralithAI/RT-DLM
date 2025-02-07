@@ -7,10 +7,12 @@ from train_config import TrainConfig
 class RTDLMModel(hk.Module):
     def __init__(self, config):
         super().__init__()
+        super().__init__()
         self.embed = EmbeddingLayer(config.vocab_size, config.d_model, config.max_seq_length)
         self.transformer_blocks = [TransformerBlock(config.d_model, config.num_heads) for _ in range(config.num_layers)]
+        self.final_layer = hk.Linear(config.vocab_size, 
+                                     w_init=hk.initializers.VarianceScaling(1.0, "fan_avg", "uniform"))
         # self.moe_layer = MixtureOfExperts(config.d_model, config.moe_experts, config.moe_top_k, dropout_rate=0.1)
-        self.final_layer = hk.Linear(config.vocab_size, w_init=hk.initializers.TruncatedNormal(0.02))
 
     def __call__(self, inputs, rng):
         print(f"[DEBUG] inputs.shape before embedding: {inputs.shape}")

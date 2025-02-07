@@ -19,17 +19,28 @@ def update(params, state, opt_state, rng, inputs, targets):
         rng, subkey = jax.random.split(rng)  
         predictions, new_state = model.apply(params, state, subkey, inputs)
 
-        if targets.shape[1] != config.max_seq_length:
-            print(f"[DEBUG] Fixing targets shape: {targets.shape} → (1, {config.max_seq_length})")
-            pad_width = config.max_seq_length - targets.shape[1]
-            targets = jnp.pad(targets, ((0, 0), (0, pad_width)), constant_values=0)
+        if jnp.isnan(predictions).any():
+            print("[ERROR] NaN detected in predictions!")
 
-        targets_on_hot = jax.nn.one_hot(targets, config.vocab_size)
-        print(f"[DEBUG] predictions.shape: {predictions.shape}, targets_on_hot.shape: {targets_on_hot.shape}")
-        loss = jnp.mean(optax.softmax_cross_entropy(predictions, targets_on_hot))
+        targets_one_hot = jax.nn.one_hot(targets, config.vocab_size)
+
+        if jnp.isnan(targets_one_hot).any():
+            print("[ERROR] NaN detected in one-hot targets!")
+
+        # 🔥 Apply `log_softmax` to prevent instability
+        log_probs = jax.nn.log_softmax(predictions, axis=-1)
+        loss = -jnp.sum(targets_one_hot * log_probs) / targets.shape[1]
+
+        if jnp.isnan(loss):
+            print("[ERROR] NaN detected in loss!")
+
         return loss, new_state  
 
     (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng, targets)
+
+    if jnp.isnan(grads).any():
+        print("[ERROR] NaN detected in gradients!")
+
     grads = jax.tree_map(lambda g: jnp.clip(g, -MAX_GRAD_NORM, MAX_GRAD_NORM), grads)
     updates, opt_state = optimizer.update(grads, opt_state, params)  
     new_params = optax.apply_updates(params, updates)
