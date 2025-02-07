@@ -8,6 +8,6 @@ class TrainConfig:
         self.moe_top_k = 1
         self.max_seq_length = 64
         self.batch_size = 1
-        self.learning_rate = 3e-4
+        self.learning_rate = 1e-4
         self.num_epochs = 3
         self.eval_interval = 50

@@ -8,6 +8,7 @@ from train_config import TrainConfig
 from data_utils import DataProcessor, load_data, preprocess_batch
 
 jax.config.update("jax_platform_name", "gpu")
+MAX_GRAD_NORM = 1.0 # Prevent exploding gradients
 
 config = TrainConfig()
 optimizer = optax.adamw(config.learning_rate)
@@ -29,6 +30,7 @@ def update(params, state, opt_state, rng, inputs, targets):
         return loss, new_state  
 
     (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng, targets)
+    grads = jax.tree_map(lambda g: jnp.clip(g, -MAX_GRAD_NORM, MAX_GRAD_NORM), grads)
     updates, opt_state = optimizer.update(grads, opt_state, params)  
     new_params = optax.apply_updates(params, updates)
 
@@ -62,7 +64,7 @@ def train():
         print(f"[Training] Starting Epoch {epoch + 1}")
         for step, (inputs, targets) in enumerate(data_generator(train_data, config.batch_size)):
             print(f"[DEBUG] Step {step}: inputs.shape={inputs.shape}, targets.shape={targets.shape}")
-            
+
             if inputs.shape[1] != config.max_seq_length:
                 print(f"[DEBUG] Fixing inputs shape: {inputs.shape} → (1, {config.max_seq_length})")
                 pad_width = config.max_seq_length - inputs.shape[1]
