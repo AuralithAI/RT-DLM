@@ -23,8 +23,10 @@ class RTDLMModel(hk.Module):
         return to_device(x)
 
 def forward_fn(inputs, rng):
-    model = RTDLMModel(TrainConfig())
+    if rng.shape != (2,):  
+        rng = jax.random.PRNGKey(42)
     subkeys = jax.random.split(rng, num=2)
+    model = RTDLMModel(TrainConfig())
     return model(inputs, rng=subkeys[0])
 
 model = hk.without_apply_rng(hk.transform_with_state(forward_fn))
