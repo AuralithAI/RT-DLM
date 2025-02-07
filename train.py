@@ -17,7 +17,15 @@ def update(params, state, opt_state, rng, inputs, targets):
     def loss_fn(params, state, rng):
         rng, subkey = jax.random.split(rng)  
         predictions, new_state = model.apply(params, state, subkey, inputs)
-        loss = jnp.mean(optax.softmax_cross_entropy(predictions, jax.nn.one_hot(targets, config.vocab_size)))
+
+        if targets.shape[1] != config.max_seq_length:
+            print(f"[DEBUG] Fixing targets shape: {targets.shape} → (1, {config.max_seq_length})")
+            pad_width = config.max_seq_length - targets.shape[1]
+            targets = jnp.pad(targets, ((0, 0), (0, pad_width)), constant_values=0)
+            
+        targets_on_hot = jax.nn.one_hot(targets, config.vocab_size)
+        print(f"[DEBUG] predictions.shape: {predictions.shape}, targets_on_hot.shape: {targets_on_hot.shape}")
+        loss = jnp.mean(optax.softmax_cross_entropy(predictions, targets_on_hot))
         return loss, new_state  
 
     (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng)

@@ -77,7 +77,8 @@ def preprocess_batch(batch, processor, max_seq_length):
     inputs = jnp.array(inputs, dtype=jnp.int32)
     targets = jnp.array(targets, dtype=jnp.int32)
 
-    if inputs.shape[1] != max_seq_length:
+    if inputs.shape[1] != max_seq_length or targets.shape[1] != max_seq_length:
+        print(f"[DEBUG] Fixing incorrect shape: inputs.shape={inputs.shape}, targets.shape={targets.shape}")
         pad_width = max_seq_length - inputs.shape[1]
         inputs = jnp.pad(inputs, ((0, 0), (0, pad_width)), constant_values=0)
         targets = jnp.pad(targets, ((0, 0), (0, pad_width)), constant_values=0)
