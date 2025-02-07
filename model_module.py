@@ -11,7 +11,7 @@ class RTDLMModel(hk.Module):
         self.embed = EmbeddingLayer(config.vocab_size, config.d_model, config.max_seq_length)
         self.transformer_blocks = [TransformerBlock(config.d_model, config.num_heads) for _ in range(config.num_layers)]
         self.final_layer = hk.Linear(config.vocab_size, 
-                                     w_init=hk.initializers.VarianceScaling(0.02, "fan_in", "uniform"))
+                                     w_init=hk.initializers.VarianceScaling(1.0, "fan_avg", "uniform"))
         # self.moe_layer = MixtureOfExperts(config.d_model, config.moe_experts, config.moe_top_k, dropout_rate=0.1)
 
     def __call__(self, inputs, rng):
@@ -32,8 +32,11 @@ class RTDLMModel(hk.Module):
             x = block(x)
 
         # x = self.moe_layer(x, rng=subkeys[-1], is_training=True)
-        x = self.final_layer(x)
-        return to_device(x)
+        logits = self.final_layer(x)
+        logits = logits - jnp.max(logits, axis=-1, keepdims=True)
+        print(f"[DEBUG] logits.shape: {logits.shape}")
+
+        return to_device(logits)
 
 def forward_fn(inputs, rng):
     if rng.shape != (2,):  
