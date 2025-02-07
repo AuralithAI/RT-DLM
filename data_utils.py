@@ -57,7 +57,7 @@ def load_data(file_path: str) -> List[str]:
     return lines
 
 
-def preprocess_batch(batch: List[str], processor: DataProcessor, max_seq_length: int) -> Tuple[jnp.ndarray, jnp.ndarray]:
+def preprocess_batch(batch, processor, max_seq_length):
     """
     Preprocess a batch of text data into tokenized and padded input and target tensors.
     Args:
@@ -76,7 +76,7 @@ def preprocess_batch(batch: List[str], processor: DataProcessor, max_seq_length:
 
     inputs = jnp.array(inputs, dtype=jnp.int32)
     targets = jnp.array(targets, dtype=jnp.int32)
-    
+
     if inputs.shape[1] != max_seq_length:
         pad_width = max_seq_length - inputs.shape[1]
         inputs = jnp.pad(inputs, ((0, 0), (0, pad_width)), constant_values=0)
