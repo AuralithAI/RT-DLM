@@ -17,13 +17,17 @@ class DataProcessor:
         """
         Remove special characters and extra whitespaces.
         """
+        print(f"[DEBUG] Preprocessing text: {text}")
         text = text.lower()
         text = re.sub(r'[^a-zA-Z0-9\s]', '', text)  
-        text = re.sub(r'\s+', ' ', text).strip()    
+        text = re.sub(r'\s+', ' ', text).strip()   
+        print(f"[DEBUG] Preprocessed text: {text}") 
         return text
 
     def tokenize(self, text: str) -> List[str]:
-        return text.split()
+        tokens = text.split()
+        print(f"[DEBUG] Tokenized words: {tokens}")
+        return tokens
 
     def build_vocab(self, texts: List[str]) -> None:
         word_set = set()
@@ -37,16 +41,24 @@ class DataProcessor:
         self.vocab = {word: idx for idx, word in enumerate(sorted(word_set), start=2)}
         self.vocab['<PAD>'] = 0  
         self.vocab['<UNK>'] = 1 
+        print(f"[DEBUG] Vocabulary Size: {len(self.vocab)}")
+        print(f"[DEBUG] Sample Vocabulary Entries: {list(self.vocab.items())[:20]}")
 
     def convert_text_to_tokens(self, text: str) -> List[int]:
         if not self.vocab:
             raise ValueError("Vocabulary is not initialized. Call `build_vocab` first.")
         tokens = self.tokenize(self.preprocess_text(text))
-        return [self.vocab.get(word, self.vocab['<UNK>']) for word in tokens]
+        token_ids = [self.vocab.get(word, self.vocab['<UNK>']) for word in tokens]
+        print(f"[DEBUG] Tokenized Text: {tokens}")
+        print(f"[DEBUG] Token IDs: {token_ids}")
+        return token_ids
 
     def pad_sequence(self, tokens: List[int], max_length: int) -> List[int]:
+        original_length = len(tokens)
         if len(tokens) < max_length:
             tokens += [self.vocab['<PAD>']] * (max_length - len(tokens))
+
+        print(f"[DEBUG] Original Length: {original_length}, Padded Length: {len(tokens)}")
         return tokens[:max_length]
 
 
