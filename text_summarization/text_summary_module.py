@@ -2,6 +2,19 @@ import haiku as hk
 import jax.numpy as jnp
 import jax
 
+"""
+    GPU or CPU device selection. (Based on CUDA availability.)
+"""
+if jax.devices("gpu"):
+    print(f"Using GPU: {jax.devices('gpu')[0]}")
+    device = jax.devices("gpu")[0]
+else:
+    print("No GPU found. Falling back to CPU.")
+    device = jax.devices("cpu")[0]
+
+def to_device(x):
+    return jax.device_put(jnp.asarray(x, dtype=jnp.float16), device)
+
 class TransformerBlock(hk.Module):
     """
     Transformer block consisting of multi-head attention, layer normalization, and a feed-forward network.
@@ -26,7 +39,7 @@ class TransformerBlock(hk.Module):
         attn_out = self.attention(x, x, x)
         x = self.norm1(x + attn_out)
         ffn_out = self.ffn(x)
-        return self.norm2(x + ffn_out)
+        return to_device(self.norm2(x + ffn_out))
 
 class TextSummarizationModel(hk.Module):
     """
@@ -60,4 +73,4 @@ class TextSummarizationModel(hk.Module):
             x = block(x)
         
         logits = self.output_layer(x)
-        return jax.nn.softmax(logits, axis=-1)
+        return to_device(jax.nn.softmax(logits, axis=-1))

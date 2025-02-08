@@ -21,12 +21,12 @@ class DataProcessor:
         text = text.lower()
         text = re.sub(r'[^a-zA-Z0-9\s]', '', text)  
         text = re.sub(r'\s+', ' ', text).strip()   
-        print(f"[DEBUG] Preprocessed text: {text}") 
+        #print(f"[DEBUG] Preprocessed text: {text}") 
         return text
 
     def tokenize(self, text: str) -> List[str]:
         tokens = text.split()
-        print(f"[DEBUG] Tokenized words: {tokens}")
+        #print(f"[DEBUG] Tokenized words: {tokens}")
         return tokens
 
     def build_vocab(self, texts: List[str]) -> None:
@@ -41,16 +41,16 @@ class DataProcessor:
         self.vocab = {word: idx for idx, word in enumerate(sorted(word_set), start=2)}
         self.vocab['<PAD>'] = 0  
         self.vocab['<UNK>'] = 1 
-        print(f"[DEBUG] Vocabulary Size: {len(self.vocab)}")
-        print(f"[DEBUG] Sample Vocabulary Entries: {list(self.vocab.items())[:20]}")
+        #print(f"[DEBUG] Vocabulary Size: {len(self.vocab)}")
+        #print(f"[DEBUG] Sample Vocabulary Entries: {list(self.vocab.items())[:20]}")
 
     def convert_text_to_tokens(self, text: str) -> List[int]:
         if not self.vocab:
             raise ValueError("Vocabulary is not initialized. Call `build_vocab` first.")
         tokens = self.tokenize(self.preprocess_text(text))
         token_ids = [self.vocab.get(word, self.vocab['<UNK>']) for word in tokens]
-        print(f"[DEBUG] Tokenized Text: {tokens}")
-        print(f"[DEBUG] Token IDs: {token_ids}")
+        #print(f"[DEBUG] Tokenized Text: {tokens}")
+        #print(f"[DEBUG] Token IDs: {token_ids}")
         return token_ids
 
     def pad_sequence(self, tokens: List[int], max_length: int) -> List[int]:
@@ -58,7 +58,7 @@ class DataProcessor:
         if len(tokens) < max_length:
             tokens += [self.vocab['<PAD>']] * (max_length - len(tokens))
 
-        print(f"[DEBUG] Original Length: {original_length}, Padded Length: {len(tokens)}")
+        #print(f"[DEBUG] Original Length: {original_length}, Padded Length: {len(tokens)}")
         return tokens[:max_length]
 
 
@@ -99,7 +99,7 @@ def preprocess_batch(batch, processor, max_seq_length):
         targets = targets.reshape(1, -1)
 
     if inputs.shape[1] != max_seq_length or targets.shape[1] != max_seq_length:
-        print(f"[DEBUG] Fixing incorrect shape: inputs.shape={inputs.shape}, targets.shape={targets.shape}")
+        #print(f"[DEBUG] Fixing incorrect shape: inputs.shape={inputs.shape}, targets.shape={targets.shape}")
         pad_width = max_seq_length - inputs.shape[1]
         inputs = jnp.pad(inputs, ((0, 0), (0, pad_width)), constant_values=0)
         targets = jnp.pad(targets, ((0, 0), (0, pad_width)), constant_values=0)

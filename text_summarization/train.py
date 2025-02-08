@@ -10,6 +10,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from data_utils import DataProcessor
 from text_summarization.text_summary_module import TextSummarizationModel
 
+jax.config.update("jax_platform_name", "gpu")
+
 # Training Configuration
 class TrainConfig:
     vocab_size = 4000
@@ -23,7 +25,7 @@ class TrainConfig:
 
 # Load dataset and build vocabulary
 processor = DataProcessor()
-data = load_dataset("cnn_dailymail", "3.0.0", split="train") 
+data = load_dataset("cnn_dailymail", "3.0.0", split="train[:5%]") 
 text_samples = [sample["article"] for sample in data][:10000]
 processor.build_vocab(text_samples)
 
