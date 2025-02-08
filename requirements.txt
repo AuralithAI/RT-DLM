@@ -7,3 +7,8 @@ scikit-learn==1.6.1
 matplotlib==3.10.0
 rich==13.9.4
 numpy==2.2.2
+fastapi==0.115.8
+pydantic==2.10.6
+gradio==5.15.0
+nltk==3.9.1
+datasets==3.2.0
