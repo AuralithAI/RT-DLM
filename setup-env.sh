@@ -28,7 +28,7 @@ install_python312() {
         sudo yum install -y python3.12
     elif [[ "$OS_NAME" == "ubuntu" || "$OS_NAME" == "debian" ]]; then
         sudo apt update -y
-        sudo apt install -y python3.12 python3.12-venv python3.12-dev
+        sudo apt install -y python3.12 python3.12-venv python3.12-dev python3-pip
     else
         echo "Unsupported OS for Python installation"
     fi
@@ -37,21 +37,32 @@ install_python312() {
 # Function to set Python 3.12 as default
 set_python_default() {
     echo "Setting Python 3.12 as default..."
-    sudo alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
-    sudo alternatives --config python3 <<EOF
+    if [[ "$OS_NAME" == "amzn" ]]; then
+        sudo alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+        sudo alternatives --config python3 <<EOF
 1
 EOF
+    elif [[ "$OS_NAME" == "ubuntu" || "$OS_NAME" == "debian" ]]; then
+        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 2
+        sudo update-alternatives --config python3  # Choose Python 3.12 manually when prompted
+    fi
+
     python3 --version
 }
 
 # Function to install Pip and JAX with CUDA 12 support
 install_pip_and_jax() {
     echo "Installing pip and JAX..."
-    python3 -m ensurepip --upgrade
+    if [[ "$OS_NAME" == "ubuntu" || "$OS_NAME" == "debian" ]]; then
+        sudo apt install -y python3-pip
+    fi
+    
     python3 -m pip install --upgrade pip
     export PATH=$HOME/.local/bin:$PATH
     echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
     source ~/.bashrc
+    
     pip3 install --upgrade "jax[cuda12]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 }
 
