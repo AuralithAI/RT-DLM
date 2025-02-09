@@ -61,7 +61,6 @@ ax.grid()
 line, = ax.plot([], [], marker="o", linestyle="-", color="b", label="Loss per Sample")
 plt.legend()
 plt.show(block=False)
-plt.pause(0.1)
 
 # Training loop
 for epoch in range(TrainConfig.num_epochs):
@@ -104,7 +103,7 @@ for epoch in range(TrainConfig.num_epochs):
             ax.relim()
             ax.autoscale_view()
             fig.canvas.flush_events()
-            plt.pause(0.1)
+            #plt.pause(0.1)
 
     avg_loss = epoch_loss / num_samples
     loss_history.append(avg_loss)
