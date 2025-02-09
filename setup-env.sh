@@ -28,7 +28,7 @@ install_python312() {
         sudo yum install -y python3.12
     elif [[ "$OS_NAME" == "ubuntu" || "$OS_NAME" == "debian" ]]; then
         sudo apt update -y
-        sudo apt install -y python3.12 python3.12-venv python3.12-dev python3-pip
+        sudo apt install -y python3.12 python3.12-venv python3.12-dev python3-pip python3-distutils python3.12-distutils
     else
         echo "Unsupported OS for Python installation"
     fi
