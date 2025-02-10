@@ -19,6 +19,18 @@ install_nvidia_drivers() {
     nvidia-smi
 }
 
+# Function to install Tkinter and GUI dependencies
+install_tkinter() {
+    echo "Installing Tkinter and GUI dependencies..."
+    if [[ "$OS_NAME" == "ubuntu" || "$OS_NAME" == "debian" ]]; then
+        sudo apt update -y
+        sudo apt install -y python3-tk python3.10-tk tk-dev
+        sudo apt install -y libxrender1 libxext6 libsm6 libxft2
+    else
+        echo "Unsupported OS for Tkinter installation"
+    fi
+}
+
 # Function to install Python 3.12
 install_python312() {
     echo "Installing Python 3.12..."
@@ -83,6 +95,7 @@ install_nvidia_drivers
 install_python312
 set_python_default
 install_pip_and_jax
+install_tkinter
 install_requirements
 fix_apt_pkg
 
