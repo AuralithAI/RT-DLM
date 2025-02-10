@@ -7,7 +7,7 @@ import jax
 import os
 from config import RTDLMConfig
 from jax.lib import xla_bridge
-from jax import core
+from jax import core, lax
 
 """
     GPU or CPU device selection. (Based on CUDA availability.)
@@ -148,74 +148,42 @@ class TransformerBlock(hk.Module):
 """
 class MixtureOfExperts(hk.Module):
     """
-    Advanced Mixture of Experts (MoE):
-    - Uses dynamic gating to determine expert allocation.
-    - Supports top-k expert selection.
-    - Incorporates dropout for regularization.
+    Improved Mixture of Experts (MoE):
+    - Uses temperature scaling for stable gating.
+    - Implements load balancing loss.
+    - Uses `lax.scan` for optimized expert computation.
     """
-    def __init__(self, d_model: int, num_experts: int, top_k: int, dropout_rate: float = 0.1):
+    def __init__(self, d_model: int, num_experts: int, top_k: int, dropout_rate: float = 0.1, temperature: float = 1.0):
         super().__init__()
         self.experts = [hk.nets.MLP([d_model * 4, d_model]) for _ in range(num_experts)]
         self.gating = hk.Linear(num_experts)
         self.top_k = top_k
         self.dropout_rate = dropout_rate
+        self.temperature = temperature
 
     def __call__(self, x: jnp.ndarray, rng, is_training: bool = True):
         rng, gating_rng, dropout_rng = jax.random.split(rng, num=3)
-    
-        print(f"x shape before gating: {x.shape}")
-        gate_scores = jax.nn.softmax(self.gating(x), axis=-1)
-        print(f"Gate scores shape: {gate_scores.shape}")
+
+        gate_scores = jax.nn.softmax(self.gating(x) / self.temperature, axis=-1)
 
         if is_training:
             gate_scores = hk.dropout(dropout_rng, self.dropout_rate, gate_scores)
 
-        top_k_scores, top_k_indices = jax.lax.top_k(gate_scores, self.top_k)
-        print(f"[MixtureOfExperts] Top-k scores shape: {top_k_scores.shape}, Top-k indices shape: {top_k_indices.shape}")
-
-        outputs = hk.vmap(self._process_batch, in_axes=(0, 0, 0), split_rng=False)(
-            x, top_k_scores, top_k_indices
-        )
-        print(f"[MixtureOfExperts] Output shape: {outputs.shape}")
-        return to_device(outputs)
-
-    def _process_batch(self, x_batch, scores, indices):
-        """
-        Process a batch of inputs by computing outputs for top-k experts.
-        Args:
-            x_batch (jnp.ndarray): Input batch of shape [seq_length, d_model].
-            scores (jnp.ndarray): Gating scores of shape [seq_length, top_k].
-            indices (jnp.ndarray): Top-k expert indices of shape [seq_length, top_k].
-        Returns:
-            jnp.ndarray: Combined outputs of shape [seq_length, d_model].
-        """
+        top_k_scores, top_k_indices = lax.top_k(gate_scores, self.top_k)
 
         def compute_expert_output(index, x_slice):
-            """
-            Compute the output of a single expert.
-            Args:
-                index: Index of the expert to invoke.
-                x_slice: Input slice for the expert.
-            Returns:
-                Output of the expert computation.
-            """
             return hk.switch(index, [lambda x_slice=x_slice: expert(x_slice) for expert in self.experts])
 
         def process_single_position(x_slice, scores_pos, indices_pos):
-            """
-            Compute outputs for the top-k experts at a single position.
-            Args:
-                x_slice: A single input slice of shape [d_model].
-                scores_pos: Gating scores for top-k experts of shape [top_k].
-                indices_pos: Top-k expert indices of shape [top_k].
-            """
-            x_repeated = jnp.repeat(x_slice[None, :], self.top_k, axis=0)  
-            expert_outputs = jax.vmap(compute_expert_output, in_axes=(0, 0))(indices_pos, x_repeated)  
+            x_repeated = jnp.repeat(x_slice[None, :], self.top_k, axis=0)
+            expert_outputs = jax.vmap(compute_expert_output, in_axes=(0, 0))(indices_pos, x_repeated)
             return jnp.sum(expert_outputs * scores_pos[:, None], axis=0)
 
-        combined_outputs = hk.vmap(process_single_position, in_axes=(0, 0, 0), split_rng=False)(
-            x_batch, scores, indices
-        )
+        combined_outputs = lax.scan(
+            lambda carry, i: (carry, process_single_position(x[i], top_k_scores[i], top_k_indices[i])),
+            None, jnp.arange(x.shape[0])
+        )[1]
 
-        print(f"[MixtureOfExperts] Combined outputs shape: {combined_outputs.shape}")
-        return to_device(combined_outputs)
+        load_balancing_loss = jnp.mean(jnp.sum(gate_scores, axis=0) ** 2)
+
+        return combined_outputs, load_balancing_loss
