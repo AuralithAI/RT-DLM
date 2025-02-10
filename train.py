@@ -97,9 +97,9 @@ if __name__ == "__main__":
     processor = DataProcessor()
     config = TrainConfig()
     optimizer = optax.adamw(config.learning_rate)
-    wiki_data = fetch_wikipedia_data()
-    crawl_data = fetch_commoncrawl_data()
-    all_data = wiki_data + crawl_data
+    wiki_data = fetch_wikipedia_data(num_articles=1000)
+    #crawl_data = fetch_commoncrawl_data()
+    all_data = wiki_data #+ crawl_data
     all_data = [processor.preprocess_text(text) for text in all_data]
     save_dataset(all_data, "dataset.txt")
     train()

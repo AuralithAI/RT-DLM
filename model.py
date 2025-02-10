@@ -175,6 +175,7 @@ class MixtureOfExperts(hk.Module):
 
         def process_single_position(x_slice, scores_pos, indices_pos):
             x_repeated = jnp.repeat(x_slice[None, :], self.top_k, axis=0)
+            indices_pos = indices_pos.squeeze()
             expert_outputs = jax.vmap(compute_expert_output, in_axes=(0, 0))(indices_pos, x_repeated)
             return jnp.sum(expert_outputs * scores_pos[:, None], axis=0)
 
