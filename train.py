@@ -1,94 +1,105 @@
 import jax
 import jax.numpy as jnp
-import haiku as hk
 import optax
 import os
+import matplotlib.pyplot as plt
+import pickle
 from model_module import model  
 from train_config import TrainConfig
-from data_utils import DataProcessor, load_data, preprocess_batch
+from data_utils import DataProcessor, load_data, preprocess_batch, fetch_wikipedia_data, fetch_commoncrawl_data, save_dataset
 
 jax.config.update("jax_platform_name", "gpu")
-MAX_GRAD_NORM = 1.0 # Prevent exploding gradients
-
-config = TrainConfig()
-optimizer = optax.adamw(config.learning_rate)
+MAX_GRAD_NORM = 1.0
 
 @jax.jit
 def update(params, state, opt_state, rng, inputs, targets):
     def loss_fn(params, state, rng, targets):
-        rng, subkey = jax.random.split(rng)  
-        predictions, new_state = model.apply(params, state, subkey, inputs)
-
-        jax.debug.print("[DEBUG] Checking for NaN in predictions: {}", jnp.isnan(predictions).any())
-        jax.debug.print("[DEBUG] Predictions Sample: {}", predictions[:2, :2, :5])  # Print first few values
+        rng, subkey = jax.random.split(rng)
+        predictions, new_state, load_balancing_loss = model.apply(params, state, subkey, inputs)
 
         targets_one_hot = jax.nn.one_hot(targets, config.vocab_size)
-
-        jax.debug.print("[DEBUG] Checking for NaN in targets_one_hot: {}", jnp.isnan(targets_one_hot).any())
-
         log_probs = jax.nn.log_softmax(predictions, axis=-1)
-        loss = -jnp.mean(jnp.sum(targets_one_hot * log_probs, axis=-1))
+        task_loss = -jnp.mean(jnp.sum(targets_one_hot * log_probs, axis=-1))
 
-        jax.debug.print("[DEBUG] Checking for NaN in loss: {}", jnp.isnan(loss))
+        total_loss = task_loss + 0.01 * load_balancing_loss
 
-        return loss, new_state  
+        return total_loss, (new_state, load_balancing_loss)
 
-    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng, targets)
-    grad_norms = jax.tree_util.tree_map(lambda g: jnp.linalg.norm(g), grads)
-    clipped_grads = jax.tree_util.tree_map(lambda g: jnp.clip(g, -MAX_GRAD_NORM, MAX_GRAD_NORM), grads)
-    jax.debug.print("[DEBUG] Gradient Norm Sample: {}", jax.tree_util.tree_leaves(grad_norms)[:3])
-    updates, opt_state = optimizer.update(clipped_grads, opt_state, params)  
+    (loss, (new_state, load_balancing_loss)), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng, targets)
+    updates, opt_state = optimizer.update(grads, opt_state, params)
     new_params = optax.apply_updates(params, updates)
 
-    return loss, new_params, new_state, opt_state
+    return loss, load_balancing_loss, new_params, new_state, opt_state
 
 def train():
-    processor = DataProcessor()
-    data = load_data(os.path.join(os.getcwd(), f"data{os.sep}dataset.txt"))
-    print(f"[DEBUG] Loading dataset from: {os.path.join(os.getcwd(), f"data{os.sep}dataset.txt")}")
-    print(f"[DEBUG] Loaded {len(data)} lines from dataset.txt")
-    print(f"[DEBUG] Sample Data: {data[:5]}")
+    data = load_data(os.path.join(os.getcwd(), "data/dataset.txt"))
     processor.build_vocab(data)
-    print(f"[DEBUG] Vocabulary Size: {len(processor.vocab)}")
 
     train_data, val_data = data[:int(0.9 * len(data))], data[int(0.9 * len(data)):]
-
-    def data_generator(data, batch_size):
-        for i in range(0, len(data), batch_size):
-            batch = data[i:i + batch_size]
-            if len(batch) < batch_size:
-                pad_count = batch_size - len(batch)
-                batch.extend([""] * pad_count) 
-            print(f"[DEBUG] Raw Batch: {batch}")
-            inputs, targets = preprocess_batch(batch, processor, config.max_seq_length)
-            print(f"[DEBUG] Processed Batch: inputs.shape={inputs.shape}, targets.shape={targets.shape}")
-            print(f"[DEBUG] Sample Tokens: {inputs[:1]}")
-            yield inputs, targets
 
     rng = jax.random.PRNGKey(42)
     rng, init_rng = jax.random.split(rng)
 
     dummy_inputs = jax.random.randint(init_rng, shape=(config.batch_size, config.max_seq_length), minval=0, maxval=config.vocab_size)
-    print(f"Dummy Inputs Shape: {dummy_inputs.shape}")
-
     params, state = model.init(init_rng, dummy_inputs, init_rng)
     opt_state = optimizer.init(params)
 
+    loss_history = []
+
     for epoch in range(config.num_epochs):
-        print(f"[Training] Starting Epoch {epoch + 1}")
+        print(f"[Training] Epoch {epoch + 1}")
+
         for step, (inputs, targets) in enumerate(data_generator(train_data, config.batch_size)):
-            print(f"[DEBUG] Step {step}: inputs.shape={inputs.shape}, targets.shape={targets.shape}")
-
-            if inputs.shape[1] != config.max_seq_length:
-                print(f"[DEBUG] Fixing inputs shape: {inputs.shape} → (1, {config.max_seq_length})")
-                pad_width = config.max_seq_length - inputs.shape[1]
-                inputs = jnp.pad(inputs, ((0, 0), (0, pad_width)), constant_values=0)
-
             rng, step_rng = jax.random.split(rng)
-            loss, params, state, opt_state = update(params, state, opt_state, step_rng, inputs, targets)
-            print(f"[Training] Step {step}, Loss: {loss:.4f}")
+            loss, load_balancing_loss, params, state, opt_state = update(params, state, opt_state, step_rng, inputs, targets)
+            loss_history.append(loss)
+            print(f"[Step {step}] Loss: {loss:.4f}, MoE Load Balancing Loss: {load_balancing_loss:.4f}")
 
+    with open("rt_dlm_model.pkl", "wb") as f:
+        pickle.dump(params, f)
+        print("[INFO] Model parameters saved to rt_dlm_model.pkl")
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(loss_history, label="Training Loss")
+    plt.xlabel("Training Steps")
+    plt.ylabel("Loss")
+    plt.title("Training Loss Over Time")
+    plt.legend()
+    plt.grid()
+    plt.savefig("loss_plot.png")
+    plt.show()
+    print("[INFO] Loss plot saved as loss_plot.png")
     print("Training complete!")
 
+def data_generator(data, batch_size):
+    """
+    Generator function that yields batches of tokenized and padded input-target pairs.
+
+    Args:
+        data (List[str]): List of text samples from the dataset.
+        batch_size (int): Number of samples per batch.
+
+    Yields:
+        Tuple[jnp.ndarray, jnp.ndarray]: Tokenized and padded input-target tensors.
+    """
+    for i in range(0, len(data), batch_size):
+        batch = data[i:i + batch_size]
+
+        if len(batch) < batch_size:
+            pad_count = batch_size - len(batch)
+            batch.extend([""] * pad_count)
+
+        inputs, targets = preprocess_batch(batch, processor, config.max_seq_length)
+        
+        yield inputs, targets
+
 if __name__ == "__main__":
+    processor = DataProcessor()
+    config = TrainConfig()
+    optimizer = optax.adamw(config.learning_rate)
+    wiki_data = fetch_wikipedia_data()
+    crawl_data = fetch_commoncrawl_data()
+    all_data = wiki_data + crawl_data
+    all_data = [processor.preprocess_text(text) for text in all_data]
+    save_dataset(all_data, "dataset.txt")
     train()
