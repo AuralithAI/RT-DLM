@@ -22,7 +22,6 @@ else:
 def to_device(x):
     return jax.device_put(jnp.asarray(x, dtype=jnp.float16), device)
 
-# Use hk next random key if needed!
 def getNextRngKey():
     return hk.next_rng_key()
 
@@ -48,7 +47,7 @@ class EmbeddingLayer(hk.Module):
             jnp.ndarray: Combined embeddings
         """
         token_ids = token_ids.astype(jnp.int32)
-        token_embeds = jnp.take(self.token_embedding.embeddings, token_ids, axis=0)  # ✅ Fixed indexing
+        token_embeds = jnp.take(self.token_embedding.embeddings, token_ids, axis=0)
         position_ids = jnp.arange(seq_length)[None, :].astype(jnp.int32)
         position_embeds = jnp.take(self.position_embedding.embeddings, position_ids, axis=0)
 
