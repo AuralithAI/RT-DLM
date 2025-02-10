@@ -1,7 +1,7 @@
 import haiku as hk
 import jax
 import jax.numpy as jnp
-from model import TransformerBlock, SelfAttention, EmbeddingLayer, MixtureOfExperts, to_device
+from model import TransformerBlock, EmbeddingLayer, MixtureOfExperts, to_device
 from train_config import TrainConfig
 
 class RTDLMModel(hk.Module):
