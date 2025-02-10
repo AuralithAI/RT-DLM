@@ -7,7 +7,6 @@ import optax
 import pickle
 from datasets import load_dataset
 import matplotlib
-matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from data_utils import DataProcessor
@@ -17,6 +16,10 @@ import warnings
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pytz")
 
 jax.config.update("jax_platform_name", "gpu")
+
+if not sys.stdout.isatty():
+    print("Running in headless mode: Switching Matplotlib backend to 'Agg'")
+    matplotlib.use("Agg")
 
 # Training Configuration
 class TrainConfig:
@@ -52,15 +55,18 @@ opt_state = optimizer.init(params)
 loss_history = []
 sample_loss_history = []
 
-plt.ion()
-fig, ax = plt.subplots(figsize=(8, 5))
-ax.set_xlabel("Training Steps")
-ax.set_ylabel("Loss")
-ax.set_title("Real-Time Training Loss")
-ax.grid()
-line, = ax.plot([], [], marker="o", linestyle="-", color="b", label="Loss per Sample")
-plt.legend()
-plt.show(block=False)
+if matplotlib.get_backend() == "TkAgg":
+    plt.ion()
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.set_xlabel("Training Steps")
+    ax.set_ylabel("Loss")
+    ax.set_title("Real-Time Training Loss")
+    ax.grid()
+    line, = ax.plot([], [], marker="o", linestyle="-", color="b", label="Loss per Sample")
+    plt.legend()
+    plt.show(block=False)
+else:
+    print("Matplotlib is in headless mode: No interactive plots will be shown.")
 
 # Training loop
 for epoch in range(TrainConfig.num_epochs):
@@ -94,7 +100,7 @@ for epoch in range(TrainConfig.num_epochs):
 
         print(f"[Epoch {epoch+1}, Sample {sample_count}] Loss: {loss:.4f}")
 
-        if(len(sample_loss_history) > 1):
+        if(len(sample_loss_history) > 1) and matplotlib.get_backend() == "TkAgg":
             x_data = np.arange(1, len(sample_loss_history) + 1)
             y_data = np.array(sample_loss_history)
 
@@ -121,4 +127,9 @@ plt.ylabel("Loss")
 plt.title("Training Loss Over Epochs")
 plt.legend()
 plt.grid()
-plt.show()
+
+if matplotlib.get_backend() == "TkAgg":
+    plt.show()
+else:
+    print("Saving training loss plot as 'training_loss.png' (headless mode).")
+    plt.savefig("training_loss.png")
