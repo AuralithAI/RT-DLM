@@ -26,7 +26,6 @@ class RTDLMModel(hk.Module):
         for block, subkey in zip(self.transformer_blocks, subkeys[:-1]):
             x = block(x)
 
-        # Apply Mixture of Experts (MoE)
         x, load_balancing_loss = self.moe_layer(x, rng=subkeys[-1], is_training=True)
 
         logits = self.final_layer(x)
