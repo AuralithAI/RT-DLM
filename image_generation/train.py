@@ -53,7 +53,7 @@ def train():
 
     loss_history = []
 
-    for epoch in range(10):
+    for epoch in range(config.epochs):
         epoch_loss = 0
         for batch in dataset:
             images, _ = batch 
