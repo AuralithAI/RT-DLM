@@ -61,13 +61,13 @@ def train():
             images = jnp.array(images)  
             images = jnp.expand_dims(images, axis=-1) if images.ndim == 3 else images 
 
-            images = jax.image.resize(images, (images.shape[0], 64, 64, 3), method="bilinear")
+            images = jax.image.resize(images, (images.shape[0], config.image_size, config.image_size, 3), method="bilinear")
 
             z = jax.random.normal(rng, (images.shape[0], config.latent_dim))
 
             generated_imgs, _ = model.apply(params, state, rng, z)
 
-            print(f"[DEBUG] generated_imgs.shape: {generated_imgs.shape}, images.shape: {images.shape}")
+            #print(f"[DEBUG] generated_imgs.shape: {generated_imgs.shape}, images.shape: {images.shape}")
 
             generated_imgs = jax.image.resize(generated_imgs, images.shape, method="bilinear")  
 
