@@ -1,6 +1,7 @@
 import os,re
 import jax.numpy as jnp
 from typing import List, Dict, Tuple, Optional
+import requests
 
 """
 DataProcessor class for text preprocessing and tokenization.
@@ -72,6 +73,45 @@ def load_data(file_path: str) -> List[str]:
     return lines
 
 
+def fetch_wikipedia_data():
+    """Fetches Wikipedia data for training."""
+    print("[INFO] Fetching Wikipedia dataset...")
+    url = "https://raw.githubusercontent.com/attardi/wikiextractor/master/test/wiki_00"
+    
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception("Failed to fetch Wikipedia data")
+
+    raw_text = response.text
+    articles = raw_text.split("\n\n")[:500]  # Limit to 500 articles for now
+    return articles
+
+def fetch_commoncrawl_data():
+    """Fetches sample data from Common Crawl."""
+    print("[INFO] Fetching Common Crawl dataset...")
+    url = "https://data.commoncrawl.org/crawl-data/CC-MAIN-2023-10/wet.paths.gz"
+
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception("Failed to fetch Common Crawl data")
+
+    raw_text = response.text.split("\n")[:500]  # Limit to 500 samples
+    return raw_text
+
+def save_dataset(data, file_path="data/dataset.txt"):
+    """Saves dataset to file."""
+    with open(file_path, "w", encoding="utf-8") as f:
+        for line in data:
+            f.write(line + "\n")
+    print(f"[INFO] Dataset saved to {file_path}")
+
+def load_data(file_path: str) -> List[str]:
+    """Loads text data from file."""
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"{file_path} not found.")
+    with open(file_path, 'r', encoding='utf-8') as f:
+        return [line.strip() for line in f if line.strip()]
+
 def preprocess_batch(batch, processor, max_seq_length):
     """
     Preprocess a batch of text data into tokenized and padded input and target tensors.
@@ -99,7 +139,6 @@ def preprocess_batch(batch, processor, max_seq_length):
         targets = targets.reshape(1, -1)
 
     if inputs.shape[1] != max_seq_length or targets.shape[1] != max_seq_length:
-        #print(f"[DEBUG] Fixing incorrect shape: inputs.shape={inputs.shape}, targets.shape={targets.shape}")
         pad_width = max_seq_length - inputs.shape[1]
         inputs = jnp.pad(inputs, ((0, 0), (0, pad_width)), constant_values=0)
         targets = jnp.pad(targets, ((0, 0), (0, pad_width)), constant_values=0)
