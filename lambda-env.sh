@@ -47,8 +47,9 @@ install_requirements() {
 #Degrade numpy and pandas to match lambda instance
 downgrade_numpy() {
     echo "Degrade numpy to less than version 2.xx"
-    pip3 uninstall -y numpy pandas datasets
-    pip3 install --force-reinstall -y numpy pandas datasets
+    pip3 install --upgrade "numpy<2" --force-reinstall
+    pip3 uninstall numpy pandas datasets
+    pip3 install --force-reinstall numpy pandas datasets
 
 }
 
