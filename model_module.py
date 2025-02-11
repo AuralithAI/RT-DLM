@@ -34,9 +34,7 @@ class RTDLMModel(hk.Module):
         return to_device(logits), load_balancing_loss
 
 def forward_fn(inputs, rng):
-    if rng.shape != (2,):  
-        rng = jax.random.PRNGKey(42)
-    subkeys = jax.random.split(rng, num=2)
+    subkeys = jax.random.split(rng, num=2) if rng.shape == (2,) else jax.random.split(jax.random.PRNGKey(42), num=2)
     model = RTDLMModel(TrainConfig())
     return model(inputs, rng=subkeys[0])
 
