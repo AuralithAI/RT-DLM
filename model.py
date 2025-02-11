@@ -171,12 +171,27 @@ class MixtureOfExperts(hk.Module):
         top_k_scores, top_k_indices = lax.top_k(gate_scores, self.top_k)
 
         def compute_expert_output(index, x_slice):
-            return hk.switch(index, [lambda x_slice=x_slice: expert(x_slice) for expert in self.experts])
+            output = hk.switch(index, [lambda x_slice=x_slice: expert(x_slice) for expert in self.experts])
+            if output.ndim == 1:
+                return jnp.expand_dims(output, axis=0)
+            elif output.ndim == 2:
+                return output
+            else:
+                raise ValueError(f"Unexpected output shape from expert: {output.shape}")
 
         def process_single_position(x_slice, scores_pos, indices_pos):
             x_repeated = jnp.repeat(x_slice[None, :], self.top_k, axis=0)
             indices_pos = indices_pos.squeeze()
-            expert_outputs = jax.vmap(compute_expert_output, in_axes=(0, 0))(indices_pos, x_repeated)
+            if x_repeated.shape[0] != indices_pos.shape[0]:  
+                x_repeated = jnp.broadcast_to(x_repeated, (indices_pos.shape[0],) + x_repeated.shape[1:])
+
+            expert_outputs = hk.vmap(compute_expert_output, 
+                                    in_axes=(0, 0), 
+                                    out_axes=(0, None),
+                                    split_rng=(not hk.running_init())
+                                    )(indices_pos, x_repeated)
+            print(f"[DEBUG] Expert Outputs Shape: {expert_outputs.shape}")
+            print(f"[DEBUG] Scores Pos Shape: {scores_pos.shape}")
             return jnp.sum(expert_outputs * scores_pos[:, None], axis=0)
 
         combined_outputs = lax.scan(
