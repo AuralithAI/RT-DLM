@@ -16,21 +16,30 @@ MAX_GRAD_NORM = 1.0
 def update(params, state, opt_state, rng, inputs, targets):
     def loss_fn(params, state, rng, targets):
         rng, subkey = jax.random.split(rng)
-        predictions, new_state, load_balancing_loss = model.apply(params, state, subkey, inputs)
+        predictions, load_balancing_loss = model.apply(params, state, subkey, inputs)
+
+        print(f"[DEBUG] Predictions Type: {type(predictions)}, Shape: {getattr(predictions, 'shape', 'Unknown')}")
+        print(f"[DEBUG] Load Balancing Loss Type: {type(load_balancing_loss)}, Value: {load_balancing_loss}")
+
+        if isinstance(predictions, tuple): 
+            predictions = predictions[0]
+
+        if isinstance(load_balancing_loss, dict): 
+            load_balancing_loss = jnp.array(0.0)
 
         targets_one_hot = jax.nn.one_hot(targets, config.vocab_size)
         log_probs = jax.nn.log_softmax(predictions, axis=-1)
+        
         task_loss = -jnp.mean(jnp.sum(targets_one_hot * log_probs, axis=-1))
-
         total_loss = task_loss + 0.01 * load_balancing_loss
 
-        return total_loss, (new_state, load_balancing_loss)
+        return total_loss, load_balancing_loss
 
-    (loss, (new_state, load_balancing_loss)), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng, targets)
+    (loss, load_balancing_loss), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng, targets)
     updates, opt_state = optimizer.update(grads, opt_state, params)
     new_params = optax.apply_updates(params, updates)
 
-    return loss, load_balancing_loss, new_params, new_state, opt_state
+    return loss, load_balancing_loss, new_params, opt_state
 
 def train():
     data = load_data(file_path=file_path)
@@ -52,7 +61,7 @@ def train():
 
         for step, (inputs, targets) in enumerate(data_generator(train_data, config.batch_size)):
             rng, step_rng = jax.random.split(rng)
-            loss, load_balancing_loss, params, state, opt_state = update(params, state, opt_state, step_rng, inputs, targets)
+            loss, load_balancing_loss, params, opt_state = update(params, state, opt_state, step_rng, inputs, targets)
             loss_history.append(loss)
             print(f"[Step {step}] Loss: {loss:.4f}, MoE Load Balancing Loss: {load_balancing_loss:.4f}")
 
