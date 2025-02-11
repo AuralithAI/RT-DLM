@@ -11,3 +11,4 @@ class TrainConfig:
         self.learning_rate = 3e-4
         self.num_epochs = 3
         self.eval_interval = 50
+        self.temperature = 0.5

@@ -37,7 +37,15 @@ def update(params, state, opt_state, rng, inputs, targets):
 
     (loss, load_balancing_loss), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng, targets)
     updates, opt_state = optimizer.update(grads, opt_state, params)
+    grad_norm = jnp.sqrt(sum(jnp.sum(jnp.square(g)) for g in jax.tree_leaves(grads)))
+    scaling_factor = jnp.minimum(1.0, MAX_GRAD_NORM / (grad_norm + 1e-6)) 
+    updates = jax.tree_map(lambda g: g * scaling_factor, updates)
+
     new_params = optax.apply_updates(params, updates)
+
+    nan_or_inf = jnp.logical_or(jnp.isnan(loss), jnp.isinf(loss))
+    loss = jnp.where(nan_or_inf, jnp.array(0.0), loss)  # Replace NaN/Inf with 0
+    load_balancing_loss = jnp.where(nan_or_inf, jnp.array(0.0), load_balancing_loss)
 
     return loss, load_balancing_loss, new_params, opt_state
 
@@ -56,10 +64,14 @@ def train():
 
     loss_history = []
 
+    assert len(train_data) > 0, "Training dataset is empty!"
+    print(f"[DEBUG] Sample Training Data: {train_data[:5]}")
+
     for epoch in range(config.num_epochs):
         print(f"[Training] Epoch {epoch + 1}")
 
         for step, (inputs, targets) in enumerate(data_generator(train_data, config.batch_size)):
+            print(f"[DEBUG] Inputs Type: {type(inputs)} for Step {step} ---> {inputs.shape}{targets.shape}")
             rng, step_rng = jax.random.split(rng)
             loss, load_balancing_loss, params, opt_state = update(params, state, opt_state, step_rng, inputs, targets)
             loss_history.append(loss)

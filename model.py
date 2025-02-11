@@ -163,7 +163,7 @@ class MixtureOfExperts(hk.Module):
     def __call__(self, x: jnp.ndarray, rng, is_training: bool = True):
         rng, gating_rng, dropout_rng = jax.random.split(rng, num=3)
 
-        gate_scores = jax.nn.softmax(self.gating(x) / self.temperature, axis=-1)
+        gate_scores = jax.nn.softmax(self.gating(x) / self.temperature, axis=-1) + 1e-5
         gate_scores = gate_scores.astype(jnp.float32)
 
         entropy_loss = -jnp.sum(gate_scores * jnp.log(gate_scores + 1e-8), axis=-1)
@@ -180,6 +180,7 @@ class MixtureOfExperts(hk.Module):
         gate_scores = jax.lax.cond(gate_var < 1e-6, add_noise, no_change, gate_scores)
 
         gate_scores /= jnp.sum(gate_scores, axis=-1, keepdims=True) + 1e-8
+        gate_scores = jnp.clip(gate_scores, 1e-6, 1.0)
         if is_training:
             gate_scores = hk.dropout(dropout_rng, self.dropout_rate, gate_scores)
 
