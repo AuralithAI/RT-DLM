@@ -164,44 +164,87 @@ class MixtureOfExperts(hk.Module):
         rng, gating_rng, dropout_rng = jax.random.split(rng, num=3)
 
         gate_scores = jax.nn.softmax(self.gating(x) / self.temperature, axis=-1)
+        gate_scores = gate_scores.astype(jnp.float32)
 
+        entropy_loss = -jnp.sum(gate_scores * jnp.log(gate_scores + 1e-8), axis=-1)
+        entropy_loss = jnp.where(jnp.isnan(entropy_loss), 0.0, entropy_loss)
+
+        gate_var = jnp.var(gate_scores)
+
+        def add_noise(scores):
+            return (scores + jax.random.normal(gating_rng, scores.shape) * 1e-2).astype(jnp.float32)
+
+        def no_change(scores):
+            return scores.astype(jnp.float32)
+
+        gate_scores = jax.lax.cond(gate_var < 1e-6, add_noise, no_change, gate_scores)
+
+        gate_scores /= jnp.sum(gate_scores, axis=-1, keepdims=True) + 1e-8
         if is_training:
             gate_scores = hk.dropout(dropout_rng, self.dropout_rate, gate_scores)
 
         top_k_scores, top_k_indices = lax.top_k(gate_scores, self.top_k)
 
-        def compute_expert_output(index, x_slice):
-            output = hk.switch(index, [lambda x_slice=x_slice: expert(x_slice) for expert in self.experts])
-            if output.ndim == 1:
-                return jnp.expand_dims(output, axis=0)
-            elif output.ndim == 2:
-                return output
-            else:
-                raise ValueError(f"Unexpected output shape from expert: {output.shape}")
+        print(f"[DEBUG] Selected Expert Indices: {top_k_indices}")
+        print(f"[DEBUG] Expert Scores: {top_k_scores}")
 
         def process_single_position(x_slice, scores_pos, indices_pos):
-            x_repeated = jnp.repeat(x_slice[None, :], self.top_k, axis=0)
-            indices_pos = indices_pos.squeeze()
+            """
+            - `x_slice`: Shape `(batch_size, d_model)`
+            - `scores_pos`: Shape `(batch_size, moe_top_k)`
+            - `indices_pos`: Shape `(batch_size, moe_top_k)`
+            """
+            indices_pos = jnp.expand_dims(indices_pos, axis=-1) if indices_pos.ndim == 1 else indices_pos
+            x_repeated = jnp.repeat(jnp.expand_dims(x_slice, axis=1), self.top_k, axis=1)
 
-            if x_repeated.shape[0] != indices_pos.shape[0]:  
-                x_repeated = jnp.broadcast_to(x_repeated, (indices_pos.shape[0],) + x_repeated.shape[1:])
+            print(f"[DEBUG] indices_pos shape: {indices_pos.shape}")
+            print(f"[DEBUG] x_repeated shape: {x_repeated.shape}")
 
-            expert_outputs = []
-            for i in range(self.top_k):
-                expert_outputs.append(compute_expert_output(indices_pos[i], x_repeated[i]))
+            def compute_expert_output_fixed(idx, x):
+                """Compute expert output while ensuring compatibility with Haiku transformations."""
+                print(f"[DEBUG] Raw idx before processing: {idx}")
+                idx = jnp.atleast_1d(idx).astype(jnp.int32)
+                if idx.ndim == 0:
+                    idx = jnp.expand_dims(idx, axis=0)
+                print(f"[DEBUG] idx shape after expand_dims: {idx.shape}")
+                expert_outputs = []
+                for i, expert in enumerate(self.experts):
+                    expert_outputs.append(expert(x))
+                expert_outputs = jnp.stack(expert_outputs, axis=0)  
+                output = expert_outputs[idx[0]]
+                print(f"[DEBUG] compute_expert_output({idx.shape}, {x.shape}) -> {output.shape}")
+                if output.ndim == 1:
+                    output = jnp.expand_dims(output, axis=0)
+                return output
 
-            expert_outputs = jnp.stack(expert_outputs, axis=0)
-            
-            print(f"[DEBUG] Expert Outputs Shape: {expert_outputs.shape}")
-            print(f"[DEBUG] Scores Pos Shape: {scores_pos.shape}")
+            expert_outputs = hk.vmap(
+                compute_expert_output_fixed,  
+                in_axes=(0, 0),  
+                out_axes=0, 
+                split_rng=False
+            )(
+                indices_pos.reshape(-1),  
+                x_repeated.reshape(-1, x_repeated.shape[-1])
+            )
 
-            return jnp.sum(expert_outputs * scores_pos[:, None], axis=0)
+            print(f"[DEBUG] Expert_outputs shape before reshaping: {expert_outputs.shape}")
+            expert_outputs = expert_outputs.reshape(indices_pos.shape[0], self.top_k, -1)
+            scores_pos = scores_pos / (jnp.sum(scores_pos, axis=-1, keepdims=True) + 1e-6)
+            print(f"[DEBUG] expert_outputs shape after vmap: {expert_outputs.shape}")
+            print(f"[DEBUG] indices_pos shape before vmap: {indices_pos.shape}")
+            print(f"[DEBUG] x_repeated shape before vmap: {x_repeated.shape}")
 
-        combined_outputs = hk.scan(
-            lambda carry, i: (carry, process_single_position(x[i], top_k_scores[i], top_k_indices[i])),
-            None, jnp.arange(x.shape[0])
-        )[1]
+            return jnp.sum(expert_outputs * scores_pos[:, :, None], axis=1)
 
-        load_balancing_loss = jnp.mean(jnp.sum(gate_scores, axis=0) ** 2)
+
+        def scan_fn(carry, i):
+            x_pos = x[i] if x.ndim == 3 else x[:, i, :]
+            return carry, process_single_position(x_pos, top_k_scores[i], top_k_indices[i])
+
+        combined_outputs = hk.scan(scan_fn, None, jnp.arange(x.shape[0]))[1]
+
+        print(f"[DEBUG] Gate Scores Mean: {gate_scores.mean()}, Variance: {gate_scores.var()}")
+        load_balancing_loss = jnp.mean(jnp.sum(gate_scores, axis=0) ** 2) + 0.1 * jnp.mean(entropy_loss)
+        load_balancing_loss = jnp.where(jnp.isnan(load_balancing_loss), 0.0, load_balancing_loss)
 
         return combined_outputs, load_balancing_loss

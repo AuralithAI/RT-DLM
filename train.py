@@ -18,8 +18,8 @@ def update(params, state, opt_state, rng, inputs, targets):
         rng, subkey = jax.random.split(rng)
         predictions, load_balancing_loss = model.apply(params, state, subkey, inputs)
 
+        print(f"[DEBUG] Load Balancing Loss: {load_balancing_loss}")
         print(f"[DEBUG] Predictions Type: {type(predictions)}, Shape: {getattr(predictions, 'shape', 'Unknown')}")
-        print(f"[DEBUG] Load Balancing Loss Type: {type(load_balancing_loss)}, Value: {load_balancing_loss}")
 
         if isinstance(predictions, tuple): 
             predictions = predictions[0]
@@ -29,7 +29,7 @@ def update(params, state, opt_state, rng, inputs, targets):
 
         targets_one_hot = jax.nn.one_hot(targets, config.vocab_size)
         log_probs = jax.nn.log_softmax(predictions, axis=-1)
-        
+
         task_loss = -jnp.mean(jnp.sum(targets_one_hot * log_probs, axis=-1))
         total_loss = task_loss + 0.01 * load_balancing_loss
 
