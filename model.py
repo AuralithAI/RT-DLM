@@ -197,7 +197,7 @@ class MixtureOfExperts(hk.Module):
 
             return jnp.sum(expert_outputs * scores_pos[:, None], axis=0)
 
-        combined_outputs = lax.scan(
+        combined_outputs = hk.scan(
             lambda carry, i: (carry, process_single_position(x[i], top_k_scores[i], top_k_indices[i])),
             None, jnp.arange(x.shape[0])
         )[1]
