@@ -1,7 +1,7 @@
 import haiku as hk
 import jax
 import jax.numpy as jnp
-from model import TransformerBlock, EmbeddingLayer, MixtureOfExperts, to_device
+from model import TransformerBlock, EmbeddingLayer, MixtureOfExperts
 from train_config import TrainConfig
 
 class RTDLMModel(hk.Module):
@@ -31,7 +31,7 @@ class RTDLMModel(hk.Module):
         logits = self.final_layer(x)
         logits = logits - jnp.max(logits, axis=-1, keepdims=True)
 
-        return to_device(logits), load_balancing_loss
+        return jnp.asarray(logits), jnp.asarray(load_balancing_loss)
 
 def forward_fn(inputs, rng):
     subkeys = jax.random.split(rng, num=2) if rng.shape == (2,) else jax.random.split(jax.random.PRNGKey(42), num=2)
