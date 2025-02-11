@@ -149,8 +149,9 @@ def fetch_commoncrawl_data(num_samples=500):
     print(f"[INFO] Successfully fetched {len(raw_texts)} text samples from Common Crawl.")
     return raw_texts
 
-def save_dataset(data, file_path="data/dataset.txt"):
+def save_dataset(data, file_path=os.path.join("data","dataset.txt")):
     """Saves dataset to file."""
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, "w", encoding="utf-8") as f:
         for line in data:
             f.write(line + "\n")
