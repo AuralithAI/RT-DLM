@@ -9,6 +9,7 @@ from train_config import TrainConfig
 from data_utils import DataProcessor, load_data, preprocess_batch, fetch_wikipedia_data, fetch_commoncrawl_data, save_dataset
 
 jax.config.update("jax_platform_name", "gpu")
+file_path = os.path.join(os.getcwd(), "data/dataset.txt")
 MAX_GRAD_NORM = 1.0
 
 @jax.jit
@@ -32,7 +33,7 @@ def update(params, state, opt_state, rng, inputs, targets):
     return loss, load_balancing_loss, new_params, new_state, opt_state
 
 def train():
-    data = load_data(os.path.join(os.getcwd(), "data/dataset.txt"))
+    data = load_data(file_path=file_path)
     processor.build_vocab(data)
 
     train_data, val_data = data[:int(0.9 * len(data))], data[int(0.9 * len(data)):]
@@ -97,9 +98,12 @@ if __name__ == "__main__":
     processor = DataProcessor()
     config = TrainConfig()
     optimizer = optax.adamw(config.learning_rate)
-    wiki_data = fetch_wikipedia_data(num_articles=1000)
-    #crawl_data = fetch_commoncrawl_data()
-    all_data = wiki_data #+ crawl_data
-    all_data = [processor.preprocess_text(text) for text in all_data]
-    save_dataset(all_data, "dataset.txt")
+    if not os.path.exists(file_path):
+        wiki_data = fetch_wikipedia_data(num_articles=1000)
+        #crawl_data = fetch_commoncrawl_data()
+        all_data = wiki_data #+ crawl_data
+        all_data = [processor.preprocess_text(text) for text in all_data]
+        save_dataset(all_data)
+    else:
+        print("[INFO] Dataset exists from sources.")
     train()
