@@ -182,16 +182,19 @@ class MixtureOfExperts(hk.Module):
         def process_single_position(x_slice, scores_pos, indices_pos):
             x_repeated = jnp.repeat(x_slice[None, :], self.top_k, axis=0)
             indices_pos = indices_pos.squeeze()
+
             if x_repeated.shape[0] != indices_pos.shape[0]:  
                 x_repeated = jnp.broadcast_to(x_repeated, (indices_pos.shape[0],) + x_repeated.shape[1:])
 
-            expert_outputs = hk.vmap(compute_expert_output, 
-                                    in_axes=(0, 0), 
-                                    out_axes=(0, None),
-                                    split_rng=(not hk.running_init())
-                                    )(indices_pos, x_repeated)
+            expert_outputs = []
+            for i in range(self.top_k):
+                expert_outputs.append(compute_expert_output(indices_pos[i], x_repeated[i]))
+
+            expert_outputs = jnp.stack(expert_outputs, axis=0)
+            
             print(f"[DEBUG] Expert Outputs Shape: {expert_outputs.shape}")
             print(f"[DEBUG] Scores Pos Shape: {scores_pos.shape}")
+
             return jnp.sum(expert_outputs * scores_pos[:, None], axis=0)
 
         combined_outputs = lax.scan(
