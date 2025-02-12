@@ -12,7 +12,6 @@ jax.config.update("jax_platform_name", "gpu")
 file_path = os.path.join(os.getcwd(), "data/dataset.txt")
 MAX_GRAD_NORM = 1.0
 
-@jax.jit
 def update(params, state, opt_state, rng, inputs, targets):
     def loss_fn(params, state, rng, targets):
         rng, subkey = jax.random.split(rng)
