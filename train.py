@@ -18,9 +18,6 @@ def update(params, state, opt_state, rng, inputs, targets):
         rng, subkey = jax.random.split(rng)
         predictions, load_balancing_loss = model.apply(params, state, subkey, inputs)
 
-        print(f"[DEBUG] Load Balancing Loss: {load_balancing_loss}")
-        print(f"[DEBUG] Predictions Type: {type(predictions)}, Shape: {getattr(predictions, 'shape', 'Unknown')}")
-
         if isinstance(predictions, tuple): 
             predictions = predictions[0]
 
@@ -31,23 +28,31 @@ def update(params, state, opt_state, rng, inputs, targets):
         log_probs = jax.nn.log_softmax(predictions, axis=-1)
 
         task_loss = -jnp.mean(jnp.sum(targets_one_hot * log_probs, axis=-1))
+        task_loss = jnp.where(jnp.isnan(task_loss) | jnp.isinf(task_loss), jnp.array(1e-6), task_loss)
+
         total_loss = task_loss + 0.01 * load_balancing_loss
+        total_loss = jnp.where(jnp.isnan(total_loss) | jnp.isinf(total_loss), jnp.array(1e-6), total_loss)
 
         return total_loss, load_balancing_loss
 
     (loss, load_balancing_loss), grads = jax.value_and_grad(loss_fn, has_aux=True)(params, state, rng, targets)
+
     updates, opt_state = optimizer.update(grads, opt_state, params)
+
     grad_norm = jnp.sqrt(sum(jnp.sum(jnp.square(g)) for g in jax.tree_leaves(grads)))
     scaling_factor = jnp.minimum(1.0, MAX_GRAD_NORM / (grad_norm + 1e-6)) 
     updates = jax.tree_map(lambda g: g * scaling_factor, updates)
 
     new_params = optax.apply_updates(params, updates)
 
-    nan_or_inf = jnp.logical_or(jnp.isnan(loss), jnp.isinf(loss))
-    loss = jnp.where(nan_or_inf, jnp.array(0.0), loss)  # Replace NaN/Inf with 0
-    load_balancing_loss = jnp.where(nan_or_inf, jnp.array(0.0), load_balancing_loss)
+    for param in jax.tree_leaves(new_params):
+        param += 1e-6 * jnp.sign(param)  
+
+    loss = jnp.where(jnp.isnan(loss) | jnp.isinf(loss), jnp.array(1e-6), loss)
+    load_balancing_loss = jnp.where(jnp.isnan(load_balancing_loss) | jnp.isinf(load_balancing_loss), jnp.array(1e-6), load_balancing_loss)
 
     return loss, load_balancing_loss, new_params, opt_state
+
 
 def train():
     data = load_data(file_path=file_path)
@@ -65,8 +70,7 @@ def train():
     loss_history = []
 
     assert len(train_data) > 0, "Training dataset is empty!"
-    print(f"[DEBUG] Sample Training Data: {train_data[:5]}")
-
+    
     for epoch in range(config.num_epochs):
         print(f"[Training] Epoch {epoch + 1}")
 

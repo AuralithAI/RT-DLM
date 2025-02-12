@@ -50,10 +50,6 @@ class EmbeddingLayer(hk.Module):
         token_embeds = jnp.take(self.token_embedding.embeddings, token_ids, axis=0)
         position_ids = jnp.arange(seq_length)[None, :].astype(jnp.int32)
         position_embeds = jnp.take(self.position_embedding.embeddings, position_ids, axis=0)
-
-        print(f"[EmbeddingLayer] token_ids.shape: {token_ids.shape}, position_ids.shape: {position_ids.shape}")
-        print(f"[EmbeddingLayer] token_embeds.shape: {token_embeds.shape}, position_embeds.shape: {position_embeds.shape}")
-
         return to_device(token_embeds + position_embeds) 
 
 """
@@ -87,9 +83,7 @@ class SelfAttention(hk.Module):
             jnp.ndarray: Output tensor
             Here, assumption is that query, key and value [Q,K,V] are same. (May change later..)
         """
-        print(f"[SelfAttention] Input shape: {x.shape}")
         output = self.attention(x, x, x)
-        print(f"[SelfAttention] Output shape: {output.shape}")
         return output
     
 
@@ -112,20 +106,10 @@ class TransformerBlock(hk.Module):
         """
         Forward pass for Transformer Block.
         """
-        print(f"[TransformerBlock] Input shape: {x.shape}")
-
         attention_output = self.attention(x)
-        print(f"[TransformerBlock] Attention output shape: {attention_output.shape}")
-
         x = self.addAndNormalize(x, attention_output, self.layer_norm_1)
-        print(f"[TransformerBlock] After LayerNorm 1: {x.shape}")
-
         feedforward_output = self.feedforward(x)
-        print(f"[TransformerBlock] Feedforward output shape: {feedforward_output.shape}")
-
         x = self.addAndNormalize(x, feedforward_output, self.layer_norm_2)
-        print(f"[TransformerBlock] After LayerNorm 2: {x.shape}")
-
         return to_device(x)
     
     def addAndNormalize(self, x: jnp.ndarray, output: jnp.ndarray, layer_norm: hk.LayerNorm) -> jnp.ndarray:
@@ -185,10 +169,6 @@ class MixtureOfExperts(hk.Module):
             gate_scores = hk.dropout(dropout_rng, self.dropout_rate, gate_scores)
 
         top_k_scores, top_k_indices = lax.top_k(gate_scores, self.top_k)
-
-        print(f"[DEBUG] Selected Expert Indices: {top_k_indices}")
-        print(f"[DEBUG] Expert Scores: {top_k_scores}")
-
         def process_single_position(x_slice, scores_pos, indices_pos):
             """
             - `x_slice`: Shape `(batch_size, d_model)`
@@ -197,23 +177,16 @@ class MixtureOfExperts(hk.Module):
             """
             indices_pos = jnp.expand_dims(indices_pos, axis=-1) if indices_pos.ndim == 1 else indices_pos
             x_repeated = jnp.repeat(jnp.expand_dims(x_slice, axis=1), self.top_k, axis=1)
-
-            print(f"[DEBUG] indices_pos shape: {indices_pos.shape}")
-            print(f"[DEBUG] x_repeated shape: {x_repeated.shape}")
-
             def compute_expert_output_fixed(idx, x):
                 """Compute expert output while ensuring compatibility with Haiku transformations."""
-                print(f"[DEBUG] Raw idx before processing: {idx}")
                 idx = jnp.atleast_1d(idx).astype(jnp.int32)
                 if idx.ndim == 0:
                     idx = jnp.expand_dims(idx, axis=0)
-                print(f"[DEBUG] idx shape after expand_dims: {idx.shape}")
                 expert_outputs = []
                 for i, expert in enumerate(self.experts):
                     expert_outputs.append(expert(x))
                 expert_outputs = jnp.stack(expert_outputs, axis=0)  
                 output = expert_outputs[idx[0]]
-                print(f"[DEBUG] compute_expert_output({idx.shape}, {x.shape}) -> {output.shape}")
                 if output.ndim == 1:
                     output = jnp.expand_dims(output, axis=0)
                 return output
@@ -228,13 +201,8 @@ class MixtureOfExperts(hk.Module):
                 x_repeated.reshape(-1, x_repeated.shape[-1])
             )
 
-            print(f"[DEBUG] Expert_outputs shape before reshaping: {expert_outputs.shape}")
             expert_outputs = expert_outputs.reshape(indices_pos.shape[0], self.top_k, -1)
             scores_pos = scores_pos / (jnp.sum(scores_pos, axis=-1, keepdims=True) + 1e-6)
-            print(f"[DEBUG] expert_outputs shape after vmap: {expert_outputs.shape}")
-            print(f"[DEBUG] indices_pos shape before vmap: {indices_pos.shape}")
-            print(f"[DEBUG] x_repeated shape before vmap: {x_repeated.shape}")
-
             return jnp.sum(expert_outputs * scores_pos[:, :, None], axis=1)
 
 
@@ -244,7 +212,6 @@ class MixtureOfExperts(hk.Module):
 
         combined_outputs = hk.scan(scan_fn, None, jnp.arange(x.shape[0]))[1]
 
-        print(f"[DEBUG] Gate Scores Mean: {gate_scores.mean()}, Variance: {gate_scores.var()}")
         load_balancing_loss = jnp.mean(jnp.sum(gate_scores, axis=0) ** 2) + 0.1 * jnp.mean(entropy_loss)
         load_balancing_loss = jnp.where(jnp.isnan(load_balancing_loss), 0.0, load_balancing_loss)
 
