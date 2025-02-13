@@ -4,10 +4,7 @@
 import haiku as hk
 import jax.numpy as jnp
 import jax
-import os
-from config import RTDLMConfig
-from jax.lib import xla_bridge
-from jax import core, lax
+from jax import lax
 
 """
     GPU or CPU device selection. (Based on CUDA availability.)
