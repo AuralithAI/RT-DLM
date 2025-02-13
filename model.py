@@ -77,15 +77,9 @@ class SelfAttention(hk.Module):
     def __call__(self, x: jnp.ndarray):
         """
         Apply self-attention mechanism.
-        Parameters:
-            x: jnp.ndarray - Input tensor
-        Returns:
-            jnp.ndarray: Output tensor
-            Here, assumption is that query, key and value [Q,K,V] are same. (May change later..)
         """
         output = self.attention(x, x, x)
         return output
-    
 
 """
     Create a Transformer model using EmbeddingLayer and SelfAttention.
@@ -142,16 +136,19 @@ class MixtureOfExperts(hk.Module):
         self.gating = hk.Linear(num_experts)
         self.top_k = top_k
         self.dropout_rate = dropout_rate
-        self.temperature = temperature
+        self.temperature = max(temperature, 1e-3)
+        self.num_experts = num_experts
 
     def __call__(self, x: jnp.ndarray, rng, is_training: bool = True):
         rng, gating_rng, dropout_rng = jax.random.split(rng, num=3)
 
-        gate_scores = jax.nn.softmax(self.gating(x) / self.temperature, axis=-1) + 1e-5
-        gate_scores = gate_scores.astype(jnp.float32)
+        gate_logits = self.gating(x)
+        gate_logits = gate_logits - jnp.max(gate_logits, axis=-1, keepdims=True) 
+        gate_scores = jax.nn.softmax(gate_logits / self.temperature, axis=-1)
+        gate_scores = jnp.clip(gate_scores, 1e-6, 1.0)
 
-        entropy_loss = -jnp.sum(gate_scores * jnp.log(gate_scores + 1e-8), axis=-1)
-        entropy_loss = jnp.where(jnp.isnan(entropy_loss), 0.0, entropy_loss)
+        safe_gate_scores = jnp.clip(gate_scores, 1e-8, 1.0)
+        entropy_loss = -jnp.sum(safe_gate_scores * jnp.log(safe_gate_scores), axis=-1)
 
         gate_var = jnp.var(gate_scores)
 
@@ -163,12 +160,16 @@ class MixtureOfExperts(hk.Module):
 
         gate_scores = jax.lax.cond(gate_var < 1e-6, add_noise, no_change, gate_scores)
 
+        gate_scores = jnp.clip(gate_scores, 1e-8, 1.0)  
         gate_scores /= jnp.sum(gate_scores, axis=-1, keepdims=True) + 1e-8
-        gate_scores = jnp.clip(gate_scores, 1e-6, 1.0)
+        
         if is_training:
             gate_scores = hk.dropout(dropout_rng, self.dropout_rate, gate_scores)
 
+        random_noise = jax.random.uniform(jax.random.PRNGKey(42), gate_scores.shape) * 1e-2  
+        gate_scores = gate_scores + random_noise
         top_k_scores, top_k_indices = lax.top_k(gate_scores, self.top_k)
+
         def process_single_position(x_slice, scores_pos, indices_pos):
             """
             - `x_slice`: Shape `(batch_size, d_model)`
@@ -212,7 +213,6 @@ class MixtureOfExperts(hk.Module):
 
         combined_outputs = hk.scan(scan_fn, None, jnp.arange(x.shape[0]))[1]
 
-        load_balancing_loss = jnp.mean(jnp.sum(gate_scores, axis=0) ** 2) + 0.1 * jnp.mean(entropy_loss)
-        load_balancing_loss = jnp.where(jnp.isnan(load_balancing_loss), 0.0, load_balancing_loss)
-
+        load_balancing_loss = jnp.mean(jnp.sum(gate_scores, axis=0) ** 2) + 0.5 * jnp.mean(entropy_loss)
+        load_balancing_loss = jnp.maximum(load_balancing_loss, 1e-3)
         return combined_outputs, load_balancing_loss
