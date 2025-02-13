@@ -38,9 +38,9 @@ def update(params, state, opt_state, rng, inputs, targets):
 
     updates, opt_state = optimizer.update(grads, opt_state, params)
 
-    grad_norm = jnp.sqrt(sum(jnp.sum(jnp.square(g)) for g in jax.tree_leaves(grads)))
-    scaling_factor = jnp.minimum(1.0, MAX_GRAD_NORM / (grad_norm + 1e-6)) 
-    updates = jax.tree_map(lambda g: g * scaling_factor, updates)
+    grad_norm = jnp.sqrt(sum(jnp.sum(jnp.square(g)) for g in jax.tree_util.tree_leaves(grads)))
+    scaling_factor = MAX_GRAD_NORM / jnp.maximum(MAX_GRAD_NORM, grad_norm)
+    updates = jax.tree_util.tree_map(lambda g: g * scaling_factor, updates)
 
     new_params = optax.apply_updates(params, updates)
 
@@ -115,6 +115,8 @@ def data_generator(data, batch_size):
             batch.extend([""] * pad_count)
 
         inputs, targets = preprocess_batch(batch, processor, config.max_seq_length)
+        inputs = jnp.clip(inputs, 0, config.vocab_size - 1)
+        targets = jnp.clip(targets, 0, config.vocab_size - 1)
         
         yield inputs, targets
 
