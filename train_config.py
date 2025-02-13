@@ -1,6 +1,6 @@
 class TrainConfig:
     def __init__(self):
-        self.vocab_size = 4000
+        self.vocab_size = 6145
         self.d_model = 64
         self.num_heads = 2
         self.num_layers = 2
@@ -12,3 +12,4 @@ class TrainConfig:
         self.num_epochs = 3
         self.eval_interval = 50
         self.temperature = 2.5
+        self.pad_token_id = 0
