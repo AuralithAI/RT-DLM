@@ -21,14 +21,16 @@ class RTDLMModel(hk.Module):
             inputs = jnp.pad(inputs, ((0, 0), (0, pad_width)), constant_values=0)
 
         x = self.embed(inputs, seq_length=inputs.shape[1])
+        print(f"[DEBUG] Model -- After Embeddings: {x}")
         rng, *subkeys = jax.random.split(rng, num=len(self.transformer_blocks) + 2)
 
         for block, subkey in zip(self.transformer_blocks, subkeys[:-1]):
             x = block(x)
-
+        print(f"[DEBUG] Model -- After Transformer Block: {x}")
         x, load_balancing_loss = self.moe_layer(x, rng=subkeys[-1], is_training=True)
-
+        print(f"[DEBUG] Model -- After Mixture of Experts: {x}")
         logits = self.final_layer(x)
+        print(f"[DEBUG] Model -- After Final Layer: {logits}")
         logits = logits - jnp.max(logits, axis=-1, keepdims=True)
 
         return jnp.asarray(logits), jnp.asarray(load_balancing_loss)
