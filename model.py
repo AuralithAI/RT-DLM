@@ -36,18 +36,26 @@ class EmbeddingLayer(hk.Module):
 
     def __call__(self, token_ids: jnp.ndarray, seq_length: int):
         """
-        Combine token and positional embeddings.
-        Parameters:
-            token_ids: jnp.ndarray - Token IDs
-            seq_length: int - Sequence length
-        Returns:
-            jnp.ndarray: Combined embeddings
+        Validate token IDs before lookup.
         """
         token_ids = token_ids.astype(jnp.int32)
+
+        # **Strict Validation**
+        invalid_mask = (token_ids < 0) | (token_ids >= self.token_embedding.embeddings.shape[0])
+        if jnp.any(invalid_mask):
+            print(f"[ERROR] Invalid token IDs detected: {token_ids[invalid_mask]}")
+            raise ValueError("Invalid token IDs found before embedding lookup!")
+
         token_embeds = jnp.take(self.token_embedding.embeddings, token_ids, axis=0)
         position_ids = jnp.arange(seq_length)[None, :].astype(jnp.int32)
         position_embeds = jnp.take(self.position_embedding.embeddings, position_ids, axis=0)
-        return to_device(token_embeds + position_embeds) 
+
+        combined = token_embeds + position_embeds
+
+        if jnp.isnan(combined).any():
+            print("[ERROR] NaN detected in EmbeddingLayer!")
+
+        return combined 
 
 """
     SelfAttention class is used to create self-attention mechanism using hk.multihead_attention.
