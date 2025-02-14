@@ -39,7 +39,8 @@ class EmbeddingLayer(hk.Module):
         Validate token IDs before lookup.
         """
         token_ids = token_ids.astype(jnp.int32)
-
+        min_id, max_id = token_ids.min(), token_ids.max()
+        
         # **Strict Validation**
         invalid_mask = (token_ids < 0) | (token_ids >= self.token_embedding.embeddings.shape[0])
         if jnp.any(invalid_mask):
