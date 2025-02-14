@@ -13,25 +13,49 @@ class RTDLMModel(hk.Module):
         self.final_layer = hk.Linear(config.vocab_size, w_init=hk.initializers.VarianceScaling(1.0, "fan_avg", "uniform"))
 
     def __call__(self, inputs, rng):
+        print("Inside RTDLM Call...")
+        print(f"[DEBUG] Model Inputs: {inputs}")
+        print(f"[DEBUG] Model Inputs Shape: {inputs.shape}")
+        print(f"[DEBUG] Rng : {rng}")
         if len(inputs.shape) == 1:
             inputs = inputs.reshape(1, -1)
 
         if inputs.shape[1] != TrainConfig().max_seq_length:
             pad_width = TrainConfig().max_seq_length - inputs.shape[1]
-            inputs = jnp.pad(inputs, ((0, 0), (0, pad_width)), constant_values=0)
+            inputs = jnp.clip(jnp.pad(inputs, ((0, 0), (0, pad_width)), constant_values=0), 0, TrainConfig().vocab_size - 1)
+        
+        print(f"[After Clipping] Model Inputs Shape: {inputs.shape}")
+        print(f"[After Clipping] Model Inputs : {inputs}")
 
         x = self.embed(inputs, seq_length=inputs.shape[1])
-        print(f"[DEBUG] Model -- After Embeddings: {x}")
+        print(f"[EMBBED] Embedding Layer Output: {x}")
+
         rng, *subkeys = jax.random.split(rng, num=len(self.transformer_blocks) + 2)
+        print(f"[RANDOM SPLIT] Subkeys: {subkeys}")
 
         for block, subkey in zip(self.transformer_blocks, subkeys[:-1]):
             x = block(x)
-        print(f"[DEBUG] Model -- After Transformer Block: {x}")
+        
+        print(f"[TRANSFORMER] Transformer Blocks Output: {x}")
+
         x, load_balancing_loss = self.moe_layer(x, rng=subkeys[-1], is_training=True)
-        print(f"[DEBUG] Model -- After Mixture of Experts: {x}")
+        print(f"[MOE] MoE Layer Output: {x}")
+        print(f"[MOE] Load Balancing Loss: {load_balancing_loss}")
+
+        # Ensure `load_balancing_loss` is a valid tensor (handles cases where it might be a float or dictionary)
+        if isinstance(load_balancing_loss, float):
+            load_balancing_loss = jnp.array(load_balancing_loss)
+        elif isinstance(load_balancing_loss, dict):  # Some cases return a dictionary
+            load_balancing_loss = jnp.array(0.0)  # Default value to avoid errors
+
+        print(f"[MOE] Load Balancing Loss (After Check): {load_balancing_loss}")
+        print(f"[FINAL] Final Layer Input: {x}")
+
         logits = self.final_layer(x)
-        print(f"[DEBUG] Model -- After Final Layer: {logits}")
+        print(f"[LOGITS] Final Layer Output: {logits}")
         logits = logits - jnp.max(logits, axis=-1, keepdims=True)
+        logits = logits - jnp.max(logits, axis=-1, keepdims=True)
+        print(f"[LOGITS] Final Layer Output (After Max): {logits}")
 
         return jnp.asarray(logits), jnp.asarray(load_balancing_loss)
 

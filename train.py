@@ -6,16 +6,24 @@ import matplotlib.pyplot as plt
 import pickle
 from model_module import model  
 from train_config import TrainConfig
-from data_utils import DataProcessor, load_data, preprocess_batch, fetch_wikipedia_data, fetch_commoncrawl_data, save_dataset
+from data_utils import DataProcessor, load_data, preprocess_batch
+from data_collection import fetch_wikipedia_data, save_dataset
 
 jax.config.update("jax_platform_name", "gpu")
 file_path = os.path.join(os.getcwd(), "data/dataset.txt")
 MAX_GRAD_NORM = 1.0
 
 def update(params, state, opt_state, rng, inputs, targets):
+    print(f"[UPDATE] Inputs Shape: {inputs.shape}, Targets Shape: {targets.shape}")
+    print(f"[UPDATE] Inputs: {inputs}, Targets: {targets}")
+    #print(f"[UPDATE] Params: {params}, State: {state}")
+    #print(f"[UPDATE] Opt State: {opt_state}, Step Rng: {rng}")
     def loss_fn(params, state, rng, targets):
         rng, subkey = jax.random.split(rng)
-        predictions, load_balancing_loss = model.apply(params, state, subkey, inputs)
+        print(f"[PRE-APPLY] Inputs: {inputs}, Subkey: {subkey}")
+        #print(f"[PRE-APPLY] Params: {params}, State: {state}")
+        predictions, load_balancing_loss = model.apply(params, state, inputs, subkey)
+        print(f"[POST-APPLY] Predictions: {predictions}, Load Balancing Loss: {load_balancing_loss}")
 
         if isinstance(predictions, tuple): 
             predictions = predictions[0]
@@ -48,6 +56,7 @@ def update(params, state, opt_state, rng, inputs, targets):
         param += 1e-6 * jnp.sign(param)  
 
     loss = jnp.where(jnp.isnan(loss) | jnp.isinf(loss), jnp.array(1e-6), loss)
+    loss = jnp.clip(loss, 1e-6, 1e6)
     load_balancing_loss = jnp.where(jnp.isnan(load_balancing_loss) | jnp.isinf(load_balancing_loss), jnp.array(1e-6), load_balancing_loss)
 
     return loss, load_balancing_loss, new_params, opt_state
@@ -64,6 +73,9 @@ def train():
 
     dummy_inputs = jax.random.randint(init_rng, shape=(config.batch_size, config.max_seq_length), minval=0, maxval=config.vocab_size)
     params, state = model.init(init_rng, dummy_inputs, init_rng)
+    print("[INFO] Model initialized successfully.")
+    #print(f"[DEBUG] Model Parameters: {params}")
+    #print(f"[DEBUG] Model State: {state}")
     opt_state = optimizer.init(params)
 
     loss_history = []
@@ -76,6 +88,9 @@ def train():
         for step, (inputs, targets) in enumerate(data_generator(train_data, config.batch_size)):
             print(f"[DEBUG] Inputs Type: {type(inputs)} for Step {step} ---> {inputs.shape}{targets.shape}")
             rng, step_rng = jax.random.split(rng)
+            print(f"[DEBUG] Step {step} Inputs: {inputs}, Targets: {targets}")
+            #print(f"[DEBUG] Step {step} Params: {params}, State: {state}")
+            #print(f"[DEBUG] Step {step} Opt State: {opt_state}, Step Rng: {step_rng}")
             loss, load_balancing_loss, params, opt_state = update(params, state, opt_state, step_rng, inputs, targets)
             loss_history.append(loss)
             print(f"[Step {step}] Loss: {loss:.4f}, MoE Load Balancing Loss: {load_balancing_loss:.4f}")
