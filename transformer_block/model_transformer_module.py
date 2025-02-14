@@ -1,0 +1,45 @@
+import haiku as hk
+import jax
+import jax.numpy as jnp
+
+class TransformerBlock(hk.Module):
+    def __init__(self, d_model, num_heads, name=None):
+        super().__init__(name=name)
+        self.mha = hk.MultiHeadAttention(
+            num_heads=num_heads,
+            key_size=d_model // num_heads,
+            model_size=d_model,
+            w_init=hk.initializers.VarianceScaling(1.0)  
+        )
+        self.norm1 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+        self.norm2 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+        self.ffn = hk.Sequential([
+            hk.Linear(d_model * 2),
+            jax.nn.relu,
+            hk.Linear(d_model)
+        ])
+
+    def __call__(self, x, mask=None):
+        attn_out = self.mha(query=x, key=x, value=x, mask=mask)
+        x = self.norm1(x + attn_out)  
+        ffn_out = self.ffn(x)
+        return self.norm2(x + ffn_out)
+
+class TransformerModel(hk.Module):
+    def __init__(self, d_model: int, num_heads: int, num_layers: int, vocab_size: int, max_seq_length: int, name=None):
+        super().__init__(name=name)
+        self.embedding = hk.Embed(vocab_size, d_model)
+        self.position_enc = hk.Embed(max_seq_length, d_model)
+        self.layers = [TransformerBlock(d_model, num_heads) for _ in range(num_layers)]
+        self.norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+        self.proj = hk.Linear(vocab_size)
+
+    def __call__(self, inputs):
+        mask = (inputs != 0).astype(jnp.float32)[:, None, None, :]
+        seq_length = inputs.shape[1]
+        x = self.embedding(inputs) + self.position_enc(jnp.arange(seq_length))
+        for layer in self.layers:
+            x = layer(x, mask)
+        x = self.norm(x)
+        logits = self.proj(x)
+        return logits
