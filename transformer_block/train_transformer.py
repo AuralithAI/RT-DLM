@@ -100,6 +100,7 @@ for epoch in range(config.num_epochs):
 plt.plot(losses)
 plt.xlabel("Steps")
 plt.ylabel("Loss")
+plt.grid(True)
 plt.title("Transformer Training Loss")
 plt.show()
 plt.savefig("transformer_loss.png")
