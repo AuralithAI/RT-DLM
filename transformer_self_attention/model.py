@@ -89,7 +89,7 @@ class TransformerModel(hk.Module):
         
         pos_enc = self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))  
         pos_enc = jnp.expand_dims(pos_enc, axis=0)  
-        pos_enc = jnp.broadcast_to(pos_enc, embed_out.shape) 
+        pos_enc = jnp.tile(pos_enc, (embed_out.shape[0], 1, 1))
         x = embed_out + pos_enc
 
         attention_maps = []
