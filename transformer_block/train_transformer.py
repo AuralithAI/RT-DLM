@@ -73,15 +73,6 @@ def train_step(params, opt_state, rng, inputs, targets):
     params = optax.apply_updates(params, updates)
     return loss, attention_weights, params, opt_state
 
-def plot_attention_maps(attn_maps):
-    fig, axes = plt.subplots(1, min(4, len(attn_maps)), figsize=(15, 5))
-    for i in range(len(axes)):
-        attn_2d = attn_maps[i].mean(axis=-1) 
-        sns.heatmap(attn_2d, cmap="viridis", ax=axes[i])  
-        axes[i].set_title(f"Attention Map {i+1}")
-    plt.show()
-    plt.savefig("attention_maps.png")
-
 # Training loop
 losses = []
 attns_maps = []
@@ -109,7 +100,3 @@ plt.title("Transformer Training Loss")
 plt.show()
 plt.savefig("transformer_loss.png")
 print("[INFO] Loss plot saved as transformer_loss.png")
-
-# Plot attention maps
-plot_attention_maps(attns_maps)
-print("[INFO] Attention maps saved as attention_maps.png")
