@@ -30,9 +30,10 @@ class SelfAttentionModel(hk.Module):
         self.proj = hk.Linear(vocab_size)
 
     def __call__(self, inputs):
-        x = self.embedding(inputs)
+        mask = (inputs != 0).astype(jnp.float32)[:, None, None, :]
+        x = self.embedding(inputs) * jnp.sqrt(self.d_model)
         x = self.norm1(x)
-        attn_out = self.attention(query=x, key=x, value=x)
+        attn_out = self.attention(query=x, key=x, value=x, mask=mask)
         x = x + attn_out 
         x = self.norm2(x)
         ffn_out = self.ffn(x)

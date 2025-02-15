@@ -55,7 +55,8 @@ opt_state = optimizer.init(params)
 def compute_loss(params, inputs, targets):
     logits = model.apply(params, inputs)
     loss = optax.softmax_cross_entropy_with_integer_labels(logits, targets).mean()
-    return loss
+    smoothed_loss = loss * 0.9 + 0.1 * jnp.mean(loss)
+    return smoothed_loss.mean()
 
 # Training step
 def train_step(params, opt_state, inputs, targets):

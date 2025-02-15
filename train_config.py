@@ -9,7 +9,7 @@ class TrainConfig:
         self.max_seq_length = 64
         self.batch_size = 64
         self.learning_rate = 2e-4
-        self.num_epochs = 70
+        self.num_epochs = 100
         self.eval_interval = 50
         self.temperature = 2.5
         self.pad_token_id = 0
