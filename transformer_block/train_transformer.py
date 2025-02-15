@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from train_config import TrainConfig
+from trainConfig import TrainConfig
 from model_transformer_module import TransformerModel
 from data_utils import DataProcessor, load_data, preprocess_batch
 
@@ -42,7 +42,7 @@ def forward_fn(inputs, return_attention=False):
         vocab_size=config.vocab_size,
         max_seq_length=config.max_seq_length
     )
-    return model(inputs, return_attention=return_attention)
+    return jax.checkpoint(model)(inputs, return_attention=return_attention)
 
 model = hk.transform(forward_fn)
 params = model.init(rng, inputs[:config.batch_size])  
@@ -87,6 +87,7 @@ attns_maps = []
 for epoch in range(config.num_epochs):
     gc.collect()
     jax.clear_caches()
+    jax.config.update("jax_platform_name", "gpu")
     for step in range(len(inputs) // config.batch_size):
         batch_start = step * config.batch_size
         batch_end = batch_start + config.batch_size
