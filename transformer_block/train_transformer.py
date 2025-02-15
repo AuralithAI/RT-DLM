@@ -18,6 +18,10 @@ from data_utils import DataProcessor, load_data, preprocess_batch
 config = TrainConfig()
 rng = jax.random.PRNGKey(42)
 
+# Set Dyanamic allocation of memory as needed
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
 # Load dataset
 dataset_path = "data/dataset.txt"
 processor = DataProcessor(vocab_size=config.vocab_size)
@@ -47,14 +51,14 @@ params = model.init(rng, inputs[:config.batch_size])
 warmup_steps = 5000
 schedule = optax.warmup_cosine_decay_schedule(
     init_value=1e-8,
-    peak_value=3e-4, 
+    peak_value=1e-4, 
     warmup_steps=warmup_steps, 
-    decay_steps=20000, 
+    decay_steps=50000, 
     end_value=1e-8
 )
 optimizer = optax.chain(
     optax.clip_by_global_norm(1.0),
-    optax.adamw(schedule, weight_decay=1e-3)
+    optax.adamw(schedule, weight_decay=5e-3)
 )
 opt_state = optimizer.init(params)
 
