@@ -86,7 +86,8 @@ class TransformerModel(hk.Module):
     def __call__(self, inputs, rng=None, return_attention=False):
         inputs = jnp.asarray(inputs, dtype=jnp.int32) 
         embed_out = self.embedding(inputs) 
-        embed_out = jnp.reshape(embed_out, (inputs.shape[0], inputs.shape[1], self.d_model))
+        if embed_out.shape[-1] != self.d_model:
+            embed_out = embed_out[..., :self.d_model]
         pos_enc = self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))  
         pos_enc = jnp.expand_dims(pos_enc, axis=0)  
         pos_enc = jnp.broadcast_to(pos_enc, embed_out.shape) 
