@@ -85,10 +85,12 @@ class TransformerModel(hk.Module):
 
     def __call__(self, inputs, rng=None, return_attention=False):
         inputs = jnp.asarray(inputs, dtype=jnp.int32) 
+        embed_out = self.embedding(inputs) 
+        embed_out = jnp.reshape(embed_out, (inputs.shape[0], inputs.shape[1], self.d_model))
         pos_enc = self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))  
         pos_enc = jnp.expand_dims(pos_enc, axis=0)  
-        pos_enc = jnp.broadcast_to(pos_enc, (inputs.shape[0], inputs.shape[1], self.d_model))  
-        x = self.embedding(inputs) + pos_enc
+        pos_enc = jnp.broadcast_to(pos_enc, embed_out.shape) 
+        x = embed_out + pos_enc
 
         attention_maps = []
         for layer in self.layers:
