@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 
 class TransformerBlock(hk.Module):
-    def __init__(self, d_model, num_heads, name=None):
+    def __init__(self, d_model, num_heads, dropout_rate=0.1, name=None):
         super().__init__(name=name)
         self.mha = hk.MultiHeadAttention(
             num_heads=num_heads,
@@ -18,12 +18,21 @@ class TransformerBlock(hk.Module):
             jax.nn.relu,
             hk.Linear(d_model)
         ])
+        self.dropout_rate = dropout_rate
 
-    def __call__(self, x, mask=None):
+    def __call__(self, x, mask=None, rng=None, return_attention=False):
         attn_out = self.mha(query=x, key=x, value=x, mask=mask)
-        x = self.norm1(x + attn_out)  
+        x = self.norm1(x + attn_out)
+
         ffn_out = self.ffn(x)
-        return self.norm2(x + ffn_out)
+        if rng is not None:
+            ffn_out = hk.dropout(rng, self.dropout_rate, ffn_out)  
+        
+        x = self.norm2(x + ffn_out)
+
+        if return_attention:
+            return x, attn_out  
+        return x
 
 class TransformerModel(hk.Module):
     def __init__(self, d_model: int, num_heads: int, num_layers: int, vocab_size: int, max_seq_length: int, name=None):
@@ -34,12 +43,24 @@ class TransformerModel(hk.Module):
         self.norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         self.proj = hk.Linear(vocab_size)
 
-    def __call__(self, inputs):
+    def __call__(self, inputs, rng=None, return_attention=False):
         mask = (inputs != 0).astype(jnp.float32)[:, None, None, :]
         seq_length = inputs.shape[1]
+
         x = self.embedding(inputs) + self.position_enc(jnp.arange(seq_length))
+
+        attention_maps = []
         for layer in self.layers:
-            x = layer(x, mask)
+            layer_rng, rng = jax.random.split(rng) if rng is not None else (None, None)
+            if return_attention:
+                x, attn_weights = layer(x, mask, rng=layer_rng, return_attention=True)
+                attention_maps.append(attn_weights)
+            else:
+                x = layer(x, mask, rng=layer_rng)
+
         x = self.norm(x)
         logits = self.proj(x)
+
+        if return_attention:
+            return logits, jnp.array(attention_maps)
         return logits
