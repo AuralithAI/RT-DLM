@@ -11,16 +11,19 @@ import seaborn as sns
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from train_config import TrainConfig
-from transformer_self_attention.model_transformer_self_attention import TransformerSelfAttentionModel
+from transformer_self_attention.model import TransformerSelfAttentionModel
 from data_utils import DataProcessor, load_data, preprocess_batch
 
 # Load configuration
 config = TrainConfig()
 rng = jax.random.PRNGKey(42)
-
-# Set memory allocation strategy
+jax.config.update("jax_platform_name", "gpu")
+jax.config.update("jax_enable_x64", False)
+print("[INFO] JAX platform: ", jax.lib.xla_bridge.get_backend().platform)
+print("[INFO] JAX device: ", jax.devices())
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.6"
 
 # Load dataset
 dataset_path = "data/dataset.txt"
@@ -29,10 +32,11 @@ raw_texts = load_data(dataset_path)
 processor.build_vocab(raw_texts)
 inputs, targets = preprocess_batch(raw_texts, processor, config.max_seq_length)
 
+# Convert to JAX arrays
 inputs = jnp.array(inputs, dtype=jnp.int32)
 targets = jnp.array(targets, dtype=jnp.int32)
 
-# Initialize Transformer model
+# Initialize Transformer-SelfAttention Model
 def forward_fn(inputs, return_attention=False):
     model = TransformerSelfAttentionModel(
         d_model=config.d_model,
@@ -57,7 +61,7 @@ schedule = optax.warmup_cosine_decay_schedule(
 )
 optimizer = optax.chain(
     optax.clip_by_global_norm(1.0),
-    optax.adamw(schedule, weight_decay=1e-4)
+    optax.adamw(schedule, weight_decay=5e-3)
 )
 opt_state = optimizer.init(params)
 
@@ -93,11 +97,8 @@ for epoch in range(config.num_epochs):
 
         step_rng, rng = jax.random.split(rng)
         loss, attention_weights, params, opt_state = train_step(params, opt_state, step_rng, batch_inputs, batch_targets)
-        
-        if step % config.eval_interval == 0:
-            losses.append(loss)
-            attns_maps.append(attention_weights)
-
+        losses.append(loss)
+        attns_maps.append(attention_weights)
         print(f"[Epoch {epoch+1} | Step {step+1}] Loss: {loss:.4f}")
         del batch_inputs, batch_targets
         gc.collect()
@@ -107,7 +108,7 @@ plt.plot(losses)
 plt.xlabel("Steps")
 plt.ylabel("Loss")
 plt.grid(True)
-plt.title("Transformer with Self-Attention Training Loss")
+plt.title("Transformer-SelfAttention Training Loss")
 plt.show()
 plt.savefig("transformer_self_attention_loss.png")
 print("[INFO] Loss plot saved as transformer_self_attention_loss.png")
