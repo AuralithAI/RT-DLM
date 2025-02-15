@@ -3,7 +3,9 @@ import jax
 import jax.numpy as jnp
 import optax
 import os
+import gc
 import sys
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -79,6 +81,8 @@ def train_step(params, opt_state, rng, inputs, targets):
 losses = []
 attns_maps = []
 for epoch in range(config.num_epochs):
+    gc.collect()
+    jax.clear_caches()
     for step in range(len(inputs) // config.batch_size):
         batch_start = step * config.batch_size
         batch_end = batch_start + config.batch_size
@@ -90,6 +94,7 @@ for epoch in range(config.num_epochs):
         attns_maps.append(attention_weights)
         print(f"[Epoch {epoch+1} | Step {step+1}] Loss: {loss:.4f}")
         del batch_inputs, batch_targets
+        gc.collect()
 
 # Plot loss curve
 plt.plot(losses)
