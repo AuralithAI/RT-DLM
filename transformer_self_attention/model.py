@@ -83,8 +83,10 @@ class TransformerModel(hk.Module):
         self.proj = hk.Linear(vocab_size)
 
     def __call__(self, inputs, rng=None, return_attention=False):
-        inputs = jnp.asarray(inputs, dtype=jnp.int32)  # Ensure integer inputs
-        x = self.embedding(inputs) + self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))
+        inputs = jnp.asarray(inputs, dtype=jnp.int32) 
+        pos_enc = self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))  
+        pos_enc = jnp.expand_dims(pos_enc, axis=0)  
+        x = self.embedding(inputs) + pos_enc
 
         attention_maps = []
         for layer in self.layers:
