@@ -76,6 +76,7 @@ class TransformerBlock(hk.Module):
 class TransformerModel(hk.Module):
     def __init__(self, d_model: int, num_heads: int, num_layers: int, vocab_size: int, max_seq_length: int, name=None):
         super().__init__(name=name)
+        self.d_model = d_model
         self.embedding = hk.Embed(vocab_size, d_model)
         self.position_enc = hk.Embed(max_seq_length, d_model)
         self.layers = [TransformerBlock(d_model, num_heads) for _ in range(num_layers)]
