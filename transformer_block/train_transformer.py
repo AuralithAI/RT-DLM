@@ -53,7 +53,7 @@ schedule = optax.warmup_cosine_decay_schedule(
     end_value=1e-8
 )
 optimizer = optax.chain(
-    optax.clip_by_global_norm(5.0),
+    optax.clip_by_global_norm(1.0),
     optax.adamw(schedule, weight_decay=1e-3)
 )
 opt_state = optimizer.init(params)
