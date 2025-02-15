@@ -7,7 +7,6 @@ import gc
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import seaborn as sns
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -83,25 +82,6 @@ def plot_attention_maps(attn_maps):
     plt.show()
     plt.savefig("attention_maps.png")
 
-def plot_3d_attention_maps(attn_maps):
-    """
-    Plots a 3D surface visualization of attention maps.
-    - attn_maps: List of attention weight tensors (shape: [seq_len, seq_len, num_heads])
-    """
-    fig = plt.figure(figsize=(12, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    attn_3d = np.mean(attn_maps[0], axis=-1) 
-    seq_len = attn_3d.shape[0]
-    x, y = np.meshgrid(np.arange(seq_len), np.arange(seq_len))
-    ax.plot_surface(x, y, attn_3d, cmap="viridis", edgecolor="none")
-    ax.set_xlabel("Query Position")
-    ax.set_ylabel("Key Position")
-    ax.set_zlabel("Attention Score")
-    ax.set_title("3D Attention Map Visualization")
-    plt.show()
-    fig.savefig("3d_attention_map.png")
-    print("[INFO] 3D Attention Map saved as 3d_attention_map.png")
-
 # Training loop
 losses = []
 attns_maps = []
@@ -133,7 +113,3 @@ print("[INFO] Loss plot saved as transformer_loss.png")
 # Plot attention maps
 plot_attention_maps(attns_maps)
 print("[INFO] Attention maps saved as attention_maps.png")
-
-# Plot 3D attention maps
-plot_3d_attention_maps(attns_maps)
-print("[INFO] 3D Attention maps saved as 3d_attention_map.png")
