@@ -42,7 +42,7 @@ def forward_fn(inputs, return_attention=False):
         vocab_size=config.vocab_size,
         max_seq_length=config.max_seq_length
     )
-    return jax.checkpoint(model, static_argnames=["return_attention"])(inputs, return_attention=return_attention)
+    return model(inputs, return_attention=return_attention)
 
 model = hk.transform(forward_fn)
 params = model.init(rng, inputs[:config.batch_size])  
