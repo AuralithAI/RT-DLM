@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 
 class TransformerBlock(hk.Module):
-    def __init__(self, d_model, num_heads, dropout_rate=0.1, name=None):
+    def __init__(self, d_model, num_heads, dropout_rate=0.2, name=None):
         super().__init__(name=name)
         self.mha = hk.MultiHeadAttention(
             num_heads=num_heads,

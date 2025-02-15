@@ -44,13 +44,17 @@ model = hk.transform(forward_fn)
 params = model.init(rng, inputs[:config.batch_size])  
 
 # Optimizer
-warmup_steps = 2000
+warmup_steps = 5000
 schedule = optax.warmup_cosine_decay_schedule(
-    init_value=1e-7, peak_value=3e-4, warmup_steps=warmup_steps, decay_steps=10000, end_value=1e-7
+    init_value=1e-8,
+    peak_value=3e-4, 
+    warmup_steps=warmup_steps, 
+    decay_steps=20000, 
+    end_value=1e-8
 )
 optimizer = optax.chain(
     optax.clip_by_global_norm(5.0),
-    optax.adamw(schedule)
+    optax.adamw(schedule, weight_decay=1e-3)
 )
 opt_state = optimizer.init(params)
 
@@ -58,7 +62,7 @@ opt_state = optimizer.init(params)
 def compute_loss(params, rng, inputs, targets):
     logits, attention_weights = model.apply(params, rng, inputs, return_attention=True)
     loss = optax.softmax_cross_entropy_with_integer_labels(logits, targets).mean()
-    smoothed_loss = loss * 0.9 + 0.1 * jnp.mean(loss)
+    smoothed_loss = loss * 0.85 + 0.15 * jnp.mean(loss)
     return smoothed_loss, attention_weights
 
 def loss_for_gradients(params, rng, inputs, targets):
