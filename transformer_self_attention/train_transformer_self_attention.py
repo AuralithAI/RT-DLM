@@ -19,7 +19,6 @@ config = TrainConfig()
 rng = jax.random.PRNGKey(42)
 jax.config.update("jax_platform_name", "gpu")
 jax.config.update("jax_enable_x64", False)
-print("[INFO] JAX platform: ", jax.lib.xla_bridge.get_backend().platform)
 print("[INFO] JAX device: ", jax.devices())
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
