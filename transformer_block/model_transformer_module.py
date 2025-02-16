@@ -15,7 +15,7 @@ class TransformerBlock(hk.Module):
         self.norm2 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         self.ffn = hk.Sequential([
             hk.Linear(d_model * 2),
-            jax.nn.relu,
+            jax.nn.silu,
             hk.Linear(d_model)
         ])
         self.dropout_rate = dropout_rate

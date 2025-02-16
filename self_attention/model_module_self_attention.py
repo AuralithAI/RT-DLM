@@ -24,7 +24,7 @@ class SelfAttentionModel(hk.Module):
         self.norm2 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         self.ffn = hk.Sequential([
             hk.Linear(d_model * 4),  
-            jax.nn.relu,
+            jax.nn.silu,
             hk.Linear(d_model),  
         ])
         self.proj = hk.Linear(vocab_size)
