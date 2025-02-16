@@ -50,7 +50,8 @@ downgrade_numpy() {
     pip3 install --upgrade "numpy<2" --force-reinstall
     pip3 uninstall numpy pandas datasets
     pip3 install --force-reinstall numpy pandas datasets
-
+    pip install "numpy<2" --force-reinstall
+    pip install --upgrade --force-reinstall numpy jax jaxlib dm-haiku ml_dtypes
 }
 
 # Run functions
