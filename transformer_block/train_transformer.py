@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from trainConfig import TrainConfig
+from train_config import TrainConfig
 from model_transformer_module import TransformerModel
 from data_utils import DataProcessor, load_data, preprocess_batch
 
