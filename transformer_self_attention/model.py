@@ -1,6 +1,11 @@
 import haiku as hk
 import jax
 import jax.numpy as jnp
+import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+#from self_attention.model_module_self_attention import SelfAttentionModel (use-it once verified.)
 
 # Self-Attention Model
 class SelfAttentionModel(hk.Module):
@@ -8,6 +13,7 @@ class SelfAttentionModel(hk.Module):
         super().__init__(name=name)
         self.d_model = d_model
         self.num_heads = num_heads
+        self.max_seq_length = max_seq_length
         self.embedding = hk.Embed(vocab_size=vocab_size, embed_dim=d_model)
         self.attention = hk.MultiHeadAttention(
             num_heads=num_heads,
@@ -18,23 +24,23 @@ class SelfAttentionModel(hk.Module):
         self.norm1 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         self.norm2 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         self.ffn = hk.Sequential([
-            hk.Linear(d_model * 4),
+            hk.Linear(d_model * 4),  
             jax.nn.relu,
-            hk.Linear(d_model),
+            hk.Linear(d_model),  
         ])
         self.proj = hk.Linear(vocab_size)
 
     def __call__(self, inputs, return_attention=False):
-        inputs = jnp.asarray(inputs, dtype=jnp.int32)  # Ensure integer inputs
+        mask = (inputs != 0).astype(jnp.float32)[:, None, None, :]
         x = self.embedding(inputs) * jnp.sqrt(self.d_model)
         x = self.norm1(x)
-        attn_out = self.attention(query=x, key=x, value=x)
+        attn_out = self.attention(query=x, key=x, value=x, mask=mask)
         attention_weights = jax.nn.softmax(attn_out, axis=-1)
-        x = x + attn_out
+        x = x + attn_out 
         x = self.norm2(x)
-        x = x + self.ffn(x)
+        ffn_out = self.ffn(x)
+        x = x + ffn_out  
         logits = self.proj(x)
-
         if return_attention:
             return logits, attention_weights
         return logits
