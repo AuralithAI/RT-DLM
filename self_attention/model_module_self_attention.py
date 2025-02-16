@@ -43,9 +43,3 @@ class SelfAttentionModel(hk.Module):
         if return_attention:
             return logits, attention_weights
         return logits
-
-def forward_fn(inputs):
-    model = SelfAttentionModel(d_model=config.d_model, num_heads=config.num_heads, vocab_size=config.vocab_size, max_seq_length=config.max_seq_length)
-    return model(inputs)
-
-model = hk.transform(forward_fn)
