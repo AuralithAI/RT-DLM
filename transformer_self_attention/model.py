@@ -91,14 +91,14 @@ class TransformerModel(hk.Module):
 
     def __call__(self, inputs, rng=None, return_attention=False):
         inputs = jnp.asarray(inputs, dtype=jnp.int32) 
-        print(f"[INFO] - Transformer Model ==> Inputs Shape: {inputs.shape}")
+        #print(f"[INFO] - Transformer Model ==> Inputs Shape: {inputs.shape}")
         embed_out = self.embedding(inputs) 
         
         pos_enc = self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))
         pos_enc = jnp.expand_dims(pos_enc, axis=0)  
         pos_enc = jnp.tile(pos_enc, (inputs.shape[0], 1, 1))
         embed_out = embed_out[:, :, 0, :]
-        print(f"[INFO] - Transformer Model ==> Embedding Shape: {embed_out.shape} | Positional Encoding Shape: {pos_enc.shape}")
+        #print(f"[INFO] - Transformer Model ==> Embedding Shape: {embed_out.shape} | Positional Encoding Shape: {pos_enc.shape}")
         x = embed_out + pos_enc
 
         attention_maps = []
@@ -143,11 +143,11 @@ class TransformerSelfAttentionModel(hk.Module):
         # Apply Self-Attention
         x, attn_weights_self = self.self_attention(inputs, return_attention=True)
         attn_weights_self = jnp.expand_dims(attn_weights_self, axis=0)
-        print(f"[INFO] - Transformer Module ==> X Shape: {x.shape} | Self Attn Weights Shape: {attn_weights_self.shape}")
+        #print(f"[INFO] - Transformer Module ==> X Shape: {x.shape} | Self Attn Weights Shape: {attn_weights_self.shape}")
 
         # Apply Transformer Model
         logits, attn_weights_transformer = self.transformer(x, rng, return_attention=True)
-        print(f"[INFO] - Transformer Module ==> Logits Shape: {logits.shape} | Transformer Attn Weights Shape: {attn_weights_transformer.shape}")
+        #print(f"[INFO] - Transformer Module ==> Logits Shape: {logits.shape} | Transformer Attn Weights Shape: {attn_weights_transformer.shape}")
 
         if return_attention:
             return logits, jnp.concatenate([attn_weights_self, attn_weights_transformer])
