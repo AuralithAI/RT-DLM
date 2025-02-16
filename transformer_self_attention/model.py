@@ -77,7 +77,7 @@ class TransformerModel(hk.Module):
     def __init__(self, d_model: int, num_heads: int, num_layers: int, vocab_size: int, max_seq_length: int, name=None):
         super().__init__(name=name)
         self.d_model = d_model
-        self.embedding = hk.Embed(vocab_size, d_model)
+        self.embedding = hk.Embed(vocab_size, d_model, lookup_style="index")
         self.position_enc = hk.Embed(max_seq_length, d_model)
         self.layers = [TransformerBlock(d_model, num_heads) for _ in range(num_layers)]
         self.norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
@@ -87,9 +87,10 @@ class TransformerModel(hk.Module):
         inputs = jnp.asarray(inputs, dtype=jnp.int32) 
         embed_out = self.embedding(inputs) 
         
-        pos_enc = self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))  
+        pos_enc = self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))
         pos_enc = jnp.expand_dims(pos_enc, axis=0)  
-        pos_enc = jnp.tile(pos_enc, (embed_out.shape[0], 1, 1))
+        pos_enc = jnp.broadcast_to(pos_enc, (inputs.shape[0], inputs.shape[1], self.d_model))  
+        print(f"[INFO] - Transformer Model ==> Embedding Shape: {embed_out.shape} | Positional Encoding Shape: {pos_enc.shape}")
         x = embed_out + pos_enc
 
         attention_maps = []
