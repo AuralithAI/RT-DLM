@@ -54,6 +54,12 @@ class TMSModel(hk.Module):
         x = self.norm(x)
         logits = self.proj(x)
 
+        print(f"[INFO] - TMS Model ==> Logits Shape: {logits.shape}")
+        print(f"[INFO] - TMS Model ==> Attention Weights (Self) Shape: {attn_weights_self.shape}")
+        print(f"[INFO] - TMS Model ==> Attention Weights (Transformer) Shape: {attn_weights_transformer.shape}")
+        print(f"[INFO] - TMS Model ==> Top K Expert Indices Shape: {top_k_expert_indices.shape}")
+        print(f"[INFO] - TMS Model ==> Auxiliary Loss Shape: {aux_loss.shape}")
+
         if return_attention:
             return logits, jnp.concatenate([attn_weights_self, attn_weights_transformer]), top_k_expert_indices, aux_loss
         return logits
