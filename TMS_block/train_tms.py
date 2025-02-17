@@ -108,7 +108,6 @@ for epoch in range(config.num_epochs):
 
         step_rng, rng = jax.random.split(rng)
         loss, attn_weights, expert_indices, params, opt_state = train_step(params, opt_state, step_rng, batch_inputs, batch_targets)
-        print(f"Attentions Weights type: {type(attn_weights)}")
         losses.append(loss)
         if type(attn_weights) == tuple:
             attn_weights_self, attn_weights_transformer = attn_weights
