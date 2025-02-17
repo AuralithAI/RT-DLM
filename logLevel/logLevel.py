@@ -1,12 +1,12 @@
 import logging
-import os
+import getpass
 from datetime import datetime
 
 class Logging:
     """Custom logging utility class for standardized logging across the project."""
 
     _logger = logging.getLogger(__name__)  
-    _username = os.getlogin()  
+    _username = getpass.getuser()  
 
     @classmethod
     def configure(cls, level=logging.INFO, log_file=None):
