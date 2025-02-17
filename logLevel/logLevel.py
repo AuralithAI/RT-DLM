@@ -2,34 +2,40 @@ import logging
 
 class Logging:
     """Custom logging utility class for standardized logging across the project."""
+    
+    _logger = logging.getLogger(__name__)
+    
+    @classmethod
+    def configure(cls, level=logging.DEBUG, log_format='[%(levelname)s] -- %(message)s'):
+        """Configures the logger with a specific level and format."""
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(log_format)
+        handler.setFormatter(formatter)
+        cls._logger.setLevel(level)
+        cls._logger.handlers.clear()
+        cls._logger.addHandler(handler)
 
-    # Configure logging format
-    logging.basicConfig(
-        format='[%(levelname)s] -- %(message)s',
-        level=logging.DEBUG
-    )
-
-    @staticmethod
-    def debug(message: str):
+    @classmethod
+    def debug(cls, message: str):
         """Logs a debug message."""
-        logging.debug(message)
+        cls._logger.debug(message)
 
-    @staticmethod
-    def info(message: str):
+    @classmethod
+    def info(cls, message: str):
         """Logs an info message."""
-        logging.info(message)
+        cls._logger.info(message)
 
-    @staticmethod
-    def warning(message: str):
+    @classmethod
+    def warning(cls, message: str):
         """Logs a warning message."""
-        logging.warning(message)
+        cls._logger.warning(message)
 
-    @staticmethod
-    def error(message: str):
+    @classmethod
+    def error(cls, message: str):
         """Logs an error message."""
-        logging.error(message)
+        cls._logger.error(message)
 
-    @staticmethod
-    def critical(message: str):
+    @classmethod
+    def critical(cls, message: str):
         """Logs a critical message."""
-        logging.critical(message)
+        cls._logger.critical(message)
