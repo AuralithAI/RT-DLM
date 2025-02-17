@@ -1,21 +1,26 @@
 import logging
+import os
+from datetime import datetime
 
 class Logging:
     """Custom logging utility class for standardized logging across the project."""
-    
-    _logger = logging.getLogger(__name__)  # Get module-level logger
-    
+
+    _logger = logging.getLogger(__name__)  
+    _username = os.getlogin()  
+
     @classmethod
-    def configure(cls, level=logging.INFO, log_format='[%(levelname)s] -- %(message)s', log_file=None):
+    def configure(cls, level=logging.INFO, log_file=None):
         """Configures the logger with a specific level, format, and optional file output."""
+        log_format = f"[%(asctime)s] [{cls._username}] [%(levelname)s] -- %(message)s"
+        formatter = logging.Formatter(log_format, datefmt="%Y-%m-%d %H:%M:%S")
+
         handler = logging.StreamHandler()
-        formatter = logging.Formatter(log_format)
         handler.setFormatter(formatter)
-        
+
         cls._logger.setLevel(level)
         cls._logger.handlers.clear()
         cls._logger.addHandler(handler)
-        
+
         # Optional: Add file handler
         if log_file:
             file_handler = logging.FileHandler(log_file)

@@ -10,21 +10,30 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from train_config import TrainConfig
 from model_module_self_attention import SelfAttentionModel
 from data_utils import DataProcessor, load_data, preprocess_batch
+from logLevel.logLevel import Logging
+from datetime import datetime
+
+# Set log file
+log_filename = f"logs/training_selfattention{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
 # Load configuration
 config = TrainConfig()
+Logging.info("Training configuration loaded.")
 rng = jax.random.PRNGKey(42)
+Logging.info("Random seed initialized.")
 
 # Load dataset
 dataset_path = "data/dataset.txt"
 processor = DataProcessor(vocab_size=config.vocab_size)
 raw_texts = load_data(dataset_path)
 processor.build_vocab(raw_texts)
+Logging.info(f"Loaded dataset from {dataset_path} and built vocabulary.")
 inputs, targets = preprocess_batch(raw_texts, processor, config.max_seq_length)
 
 # Convert to JAX arrays
 inputs = jnp.array(inputs, dtype=jnp.int32)
 targets = jnp.array(targets, dtype=jnp.int32)
+Logging.info("Converted dataset to JAX arrays.")
 
 # Initialize model directly
 def forward_fn(inputs, return_attention=False):
@@ -38,6 +47,7 @@ def forward_fn(inputs, return_attention=False):
 
 model = hk.without_apply_rng(hk.transform(forward_fn))
 params = model.init(rng, inputs[:config.batch_size])
+Logging.info("Model initialized successfully.")
 
 # Optimizer
 # Add learning rate decay schedule
@@ -51,6 +61,7 @@ optimizer = optax.chain(
 )
 
 opt_state = optimizer.init(params)
+Logging.info("Optimizer initialized.")
 
 # Compute loss
 def compute_loss(params, inputs, targets):
@@ -82,7 +93,9 @@ def plot_attention_maps(attn_maps):
 # Training loop
 losses = []
 attns_maps = []
+Logging.info("Starting training loop...")
 for epoch in range(config.num_epochs):
+    Logging.info(f"Epoch {epoch+1} started.")
     for step in range(len(inputs) // config.batch_size):
         batch_start = step * config.batch_size
         batch_end = batch_start + config.batch_size
@@ -92,8 +105,9 @@ for epoch in range(config.num_epochs):
         losses.append(loss)
         attns_maps.append(attention_weights)
 
-        print(f"[Epoch {epoch+1} | Step {step+1}] Loss: {loss:.4f}")
+        Logging.info(f"[Epoch {epoch+1} | Step {step+1}] Loss: {loss:.4f}")
 
+Logging.info("Training completed.")
 # Plot loss curve
 plt.plot(losses)
 plt.xlabel("Steps")
@@ -101,6 +115,6 @@ plt.ylabel("Loss")
 plt.title("Self-Attention Training Loss")
 plt.show()
 plt.savefig("self_attention_loss.png")
-print("[INFO] Loss plot saved as self_attention_loss.png")
+Logging.info("Loss plot saved as self_attention_loss.png")
 plot_attention_maps(attns_maps)
-print("[INFO] Attention maps saved as attention_maps.png")
+Logging.info("Attention maps saved as attention_maps.png")
