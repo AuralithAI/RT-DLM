@@ -61,5 +61,5 @@ class TMSModel(hk.Module):
         print(f"[INFO] - TMS Model ==> Auxiliary Loss Shape: {aux_loss.shape}")
 
         if return_attention:
-            return logits, jnp.concatenate([attn_weights_self, attn_weights_transformer]), top_k_expert_indices, aux_loss
+             return logits, (attn_weights_self, attn_weights_transformer), top_k_expert_indices, aux_loss
         return logits

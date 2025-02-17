@@ -94,7 +94,8 @@ def train_step(params, opt_state, rng, inputs, targets):
 
 # Training loop
 losses = []
-attns_maps = []
+attn_maps_self = []
+attn_maps_transformer = []
 expert_usage = []
 for epoch in range(config.num_epochs):
     gc.collect()
@@ -107,9 +108,13 @@ for epoch in range(config.num_epochs):
 
         step_rng, rng = jax.random.split(rng)
         loss, attn_weights, expert_indices, params, opt_state = train_step(params, opt_state, step_rng, batch_inputs, batch_targets)
-        
+        print(f"Attentions Weights type: {type(attn_weights)}")
         losses.append(loss)
-        attns_maps.append(attn_weights)
+        if type(attn_weights) == tuple:
+            attn_weights_self, attn_weights_transformer = attn_weights
+            attn_maps_self.append(attn_weights_self)
+            attn_maps_transformer.append(attn_weights_transformer)
+
         expert_usage.append(expert_indices)
         
         print(f"[Epoch {epoch+1} | Step {step+1}] Loss: {loss:.4f}")
