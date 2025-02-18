@@ -46,7 +46,7 @@ def forward_fn(inputs, return_attention=False):
 model = hk.transform(forward_fn)
 
 # Load trained parameters
-params_path = "tms_trained_params.pkl"
+params_path = "TMS_block/tms_params.pkl"
 with open(params_path, "rb") as f:
     params = pickle.load(f)
 print(f"[INFO] Loaded trained parameters from {params_path}")
@@ -61,7 +61,7 @@ def compute_loss(params, rng, inputs, targets):
     return total_loss
 
 # Validation loop
-def validate_model(params, inputs, targets):
+def validate_model(params, rng, inputs, targets):
     total_val_loss = []
 
     for step in range(len(inputs) // config.batch_size):
@@ -80,7 +80,7 @@ def validate_model(params, inputs, targets):
     return avg_val_loss
 
 # Run validation
-val_loss = validate_model(params, inputs_val, targets_val)
+val_loss = validate_model(params, rng, inputs_val, targets_val)
 
 # Plot validation loss
 plt.axhline(y=val_loss, linestyle="--", color="red", label="Validation Loss")
