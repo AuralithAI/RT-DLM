@@ -27,7 +27,7 @@ os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.6"
 
 # Load dataset
-dataset_path = "data/dataset.txt"
+dataset_path = "data/train_data.txt"
 processor = DataProcessor(vocab_size=config.vocab_size)
 raw_texts = load_data(dataset_path)
 processor.build_vocab(raw_texts)

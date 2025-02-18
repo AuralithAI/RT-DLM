@@ -1,11 +1,14 @@
 import os
 import requests
 import gzip
+import random
 from data_utils import DataProcessor
 
-DATA_PATH = os.path.join("data", "dataset.txt")
-WIKI_ARTICLES = 1000  # Number of Wikipedia articles to fetch
-CC_SAMPLES = 500  # Number of Common Crawl samples to fetch
+DATA_PATH_TRAIN = os.path.join("data", "train_data.txt")
+DATA_PATH_VALIDATION = os.path.join("data", "validation_data.txt")
+WIKI_ARTICLES = 1000  
+CC_SAMPLES = 500  
+VALIDATION_SPLIT = 0.2  
 
 def fetch_wikipedia_data(num_articles=500):
     """Fetches Wikipedia articles dynamically from Wikipedia API."""
@@ -78,13 +81,19 @@ def fetch_commoncrawl_data(num_samples=500):
     return raw_texts
 
 
-def save_dataset(data, file_path=DATA_PATH):
-    """Saves dataset to file."""
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    with open(file_path, "w", encoding="utf-8") as f:
-        for line in data:
+def save_datasets(train_data, val_data):
+    """Saves training and validation datasets to separate files."""
+    os.makedirs("data", exist_ok=True)
+
+    with open(DATA_PATH_TRAIN, "w", encoding="utf-8") as f:
+        for line in train_data:
             f.write(line + "\n")
-    print(f"[INFO] Dataset saved to {file_path}")
+    print(f"[INFO] Training dataset saved to {DATA_PATH_TRAIN}")
+
+    with open(DATA_PATH_VALIDATION, "w", encoding="utf-8") as f:
+        for line in val_data:
+            f.write(line + "\n")
+    print(f"[INFO] Validation dataset saved to {DATA_PATH_VALIDATION}")
 
 
 if __name__ == "__main__":
@@ -92,10 +101,19 @@ if __name__ == "__main__":
 
     print("[INFO] Collecting dataset...")
     wiki_data = fetch_wikipedia_data(num_articles=WIKI_ARTICLES)
-    cc_data = fetch_commoncrawl_data(num_samples=CC_SAMPLES)
+    #cc_data = fetch_commoncrawl_data(num_samples=CC_SAMPLES)
 
-    all_data = wiki_data + cc_data
+    all_data = wiki_data #+ cc_data
     all_data = [processor.preprocess_text(text) for text in all_data]
 
-    save_dataset(all_data)
-    print("[INFO] Data collection completed successfully.")
+    # Shuffle data
+    random.shuffle(all_data)
+
+    # Split into train and validation sets
+    split_idx = int(len(all_data) * (1 - VALIDATION_SPLIT))
+    train_data = all_data[:split_idx]
+    val_data = all_data[split_idx:]
+
+    # Save datasets
+    save_datasets(train_data, val_data)
+    print("[INFO] Data collection and validation dataset creation completed successfully.")
