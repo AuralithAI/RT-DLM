@@ -1,16 +1,15 @@
 import os
 import re
+import json
 import jax.numpy as jnp
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple
 
-"""
-    DataProcessor class is used to preprocess and tokenize the text data.
-"""
 class DataProcessor:
-    def __init__(self, vocab_size: int = 6145):
+    def __init__(self, vocab_size: int = 6145, vocab_file: str = "data/vocab.json"):
+        self.vocab_size = vocab_size
+        self.vocab_file = vocab_file
         self.vocab = {}
-        self.vocab_size = vocab_size  
-
+    
     def preprocess_text(self, text: str) -> str:
         text = text.lower()
         text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
@@ -21,6 +20,7 @@ class DataProcessor:
         return text.split()
 
     def build_vocab(self, texts: List[str]) -> None:
+        """Builds vocabulary from training dataset and saves it."""
         word_freq = {}
 
         for text in texts:
@@ -30,26 +30,35 @@ class DataProcessor:
 
         sorted_vocab = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
 
-        limited_vocab = sorted_vocab[: self.vocab_size - 2]
-        self.vocab = {word: idx + 2 for idx, (word, _) in enumerate(limited_vocab)}
+        # Ensure special tokens are added first
+        self.vocab = {
+            '<PAD>': 0,
+            '<UNK>': 1
+        }
 
-        self.vocab['<PAD>'] = 0
-        self.vocab['<UNK>'] = 1
+        # Add top frequent words while ensuring vocab size limit
+        for idx, (word, _) in enumerate(sorted_vocab[: self.vocab_size - len(self.vocab)]):
+            self.vocab[word] = idx + len(self.vocab)
 
-    def convert_text_to_tokens(self, text: str) -> List[int]:
-        tokens = self.tokenize(self.preprocess_text(text))
-        
-        token_ids = []
-        for word in tokens:
-            token_id = self.vocab.get(word, self.vocab['<UNK>'])
-            
-            if token_id < 0 or token_id >= self.vocab_size:
-                print(f"[ERROR] Invalid token detected: '{word}' -> {token_id}")
-                token_id = self.vocab['<UNK>']  # Fallback to <UNK>
+        # Save vocabulary to file
+        self.save_vocab()
+        print(f"[INFO] Vocabulary built and saved to {self.vocab_file}.")
 
-            token_ids.append(int(token_id))
+    def save_vocab(self):
+        """Saves vocabulary to a JSON file."""
+        os.makedirs(os.path.dirname(self.vocab_file), exist_ok=True)
+        with open(self.vocab_file, "w", encoding="utf-8") as f:
+            json.dump(self.vocab, f, indent=4)
+        print(f"[INFO] Vocabulary saved to {self.vocab_file}")
 
-        return token_ids
+    def load_vocab(self):
+        """Loads vocabulary from a JSON file."""
+        if not os.path.exists(self.vocab_file):
+            raise FileNotFoundError(f"[ERROR] Vocabulary file '{self.vocab_file}' not found! Train model first.")
+
+        with open(self.vocab_file, "r", encoding="utf-8") as f:
+            self.vocab = json.load(f)
+        print(f"[INFO] Loaded vocabulary from {self.vocab_file}")
 
 
     def pad_sequence(self, tokens: List[int], max_length: int) -> List[int]:
@@ -63,22 +72,20 @@ class DataProcessor:
 
 
 def load_data(file_path: str) -> List[str]:
+    """Loads dataset from file."""
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"{file_path} not found.")
     with open(file_path, 'r', encoding='utf-8') as f:
         return [line.strip() for line in f if line.strip()]
 
 def preprocess_batch(batch, processor, max_seq_length):
-    """
-    Converts a batch of text into tokenized, padded input-target tensors.
-    """
+    """Converts batch of text into tokenized, padded input-target tensors."""
     inputs, targets = [], []
 
     for text in batch:
         tokens = processor.convert_text_to_tokens(text)
-
         if len(tokens) == 0:
-            tokens = [processor.vocab['<UNK>']] 
+            tokens = [processor.vocab['<UNK>']]  
 
         padded_tokens = processor.pad_sequence(tokens, max_seq_length)
 

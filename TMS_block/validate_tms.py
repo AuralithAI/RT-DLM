@@ -22,6 +22,7 @@ rng = jax.random.PRNGKey(42)
 # Load validation dataset
 val_dataset_path = "data/validation_data.txt"
 processor = DataProcessor(vocab_size=config.vocab_size)
+processor.load_vocab()
 raw_texts_val = load_data(val_dataset_path)
 inputs_val, targets_val = preprocess_batch(raw_texts_val, processor, config.max_seq_length)
 
