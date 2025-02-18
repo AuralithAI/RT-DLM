@@ -9,6 +9,7 @@ class DataProcessor:
         self.vocab_size = vocab_size
         self.vocab_file = vocab_file
         self.vocab = {}
+        self.inverse_vocab = {}
     
     def preprocess_text(self, text: str) -> str:
         text = text.lower()
@@ -18,6 +19,11 @@ class DataProcessor:
 
     def tokenize(self, text: str) -> List[str]:
         return text.split()
+
+    def decode_tokens(self, token_ids: List[int]) -> str:
+        """ Converts a list of token IDs back into a string. """
+        words = [self.inverse_vocab.get(token_id, '<UNK>') for token_id in token_ids]
+        return ' '.join(words)
 
     def build_vocab(self, texts: List[str]) -> None:
         """Builds vocabulary from training dataset and saves it."""
@@ -58,6 +64,7 @@ class DataProcessor:
 
         with open(self.vocab_file, "r", encoding="utf-8") as f:
             self.vocab = json.load(f)
+        self.inverse_vocab = {int(idx): word for word, idx in self.vocab.items()}
         print(f"[INFO] Loaded vocabulary from {self.vocab_file}")
 
     def convert_text_to_tokens(self, text: str) -> List[int]:

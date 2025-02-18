@@ -6,7 +6,7 @@ from data_utils import DataProcessor
 
 DATA_PATH_TRAIN = os.path.join("data", "train_data.txt")
 DATA_PATH_VALIDATION = os.path.join("data", "validation_data.txt")
-WIKI_ARTICLES = 1000  
+WIKI_ARTICLES = 20000  
 CC_SAMPLES = 500  
 VALIDATION_SPLIT = 0.2  
 

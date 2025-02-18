@@ -1,24 +1,26 @@
 import jax
 import jax.numpy as jnp
 import haiku as hk
-import json
-from model_tms import TMSModel
+import pickle
+import numpy as np
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from train_config import TrainConfig
+from model_tms import TMSModel
 from data_utils import DataProcessor
 
-# Load config & vocab
+# Load config
 config = TrainConfig()
+
+# Load vocabulary & processor
 processor = DataProcessor(vocab_size=config.vocab_size)
 processor.load_vocab()
 
-# Load trained parameters
-params_path = "TMS_block/tms_params.pkl"
-with open(params_path, "rb") as f:
-    params = json.load(f)
-print(f"[INFO] Loaded trained parameters from {params_path}")
-
-# Initialize model
-def forward_fn(inputs):
+# Load trained model
+def forward_fn(inputs, return_attention=False):
     model = TMSModel(
         d_model=config.d_model,
         num_heads=config.num_heads,
@@ -28,17 +30,40 @@ def forward_fn(inputs):
         moe_experts=config.moe_experts,
         moe_top_k=config.moe_top_k
     )
-    return model(inputs)
+    return model(inputs, return_attention=return_attention)
 
 model = hk.transform(forward_fn)
 
-# Prediction function
-def predict(text):
-    tokens = processor.convert_text_to_tokens(text)
-    inputs = jnp.array([processor.pad_sequence(tokens, config.max_seq_length)], dtype=jnp.int32)
-    logits = model.apply(params, inputs)
-    predictions = jnp.argmax(logits, axis=-1)  # Get highest probability words
-    return processor.decode(predictions[0])  # Convert back to text
+# Load trained parameters
+params_path = "TMS_block/tms_params.pkl"
+with open(params_path, "rb") as f:
+    params = pickle.load(f)
+print(f"[INFO] Loaded trained parameters from {params_path}")
 
-# Example Test
-print("Generated Output:", predict("This is a test sentence."))
+# Function to generate text
+def generate_text(prompt, max_length=50):
+    tokens = processor.convert_text_to_tokens(prompt)
+    print(f"Tokenized Prompt: {tokens}")
+    
+    tokens = processor.pad_sequence(tokens, config.max_seq_length)
+    print(f"Tokenized Prompt PAD Seq: {tokens}")
+    
+    inputs = jnp.array([tokens], dtype=jnp.int32)
+    rng = jax.random.PRNGKey(42)
+
+    logits = model.apply(params, rng, inputs, return_attention=False)
+    generated_ids = jnp.argmax(logits, axis=-1)[0].tolist()
+
+    print(f"Generated Token IDs: {generated_ids}")  # Debugging step
+
+    # Convert to text
+    generated_text = [processor.inverse_vocab.get(t, "<UNK>") for t in generated_ids]
+    print("\nDecoded Tokens:", generated_text)  # Print decoded tokens before joining
+
+    return " ".join(generated_text)
+
+# Run inference
+if __name__ == "__main__":
+    prompt = "The future of AI is"
+    generated_text = generate_text(prompt)
+    print("\nGenerated Output:\n", generated_text)
