@@ -7,7 +7,7 @@ from train_config import TrainConfig
 
 config = TrainConfig()
 class DataProcessor:
-    def __init__(self, vocab_size: int = config.vocab_size, vocab_file: str = "data/vocab.json"):
+    def __init__(self, vocab_size: int = 6145, vocab_file: str = "data/vocab.json"):
         self.vocab_size = vocab_size
         self.vocab_file = vocab_file
         self.vocab = {}
