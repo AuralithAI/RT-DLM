@@ -2,7 +2,7 @@ import os
 import re
 import json
 import jax.numpy as jnp
-from typing import List, Dict, Tuple
+from typing import List
 from train_config import TrainConfig
 
 config = TrainConfig()
@@ -14,18 +14,20 @@ class DataProcessor:
         self.inverse_vocab = {}
     
     def preprocess_text(self, text: str) -> str:
+        """Cleans and normalizes text."""
         text = text.lower()
         text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
         text = re.sub(r'\s+', ' ', text).strip()
         return text
 
     def tokenize(self, text: str) -> List[str]:
+        """Splits text into tokens (whitespace-based)."""
         return text.split()
 
     def decode_tokens(self, token_ids: List[int]) -> str:
         """ Converts a list of token IDs back into a string. """
         words = [self.inverse_vocab.get(token_id, '<UNK>') for token_id in token_ids]
-        return ' '.join(words)
+        return ' '.join(words).replace(' <PAD>', '')
 
     def build_vocab(self, texts: List[str]) -> None:
         """Builds vocabulary from training dataset and saves it."""
@@ -36,19 +38,26 @@ class DataProcessor:
             for token in tokens:
                 word_freq[token] = word_freq.get(token, 0) + 1
 
+        # Sort vocabulary by frequency (descending)
         sorted_vocab = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
 
         # Ensure special tokens are added first
         self.vocab = {
-            '<PAD>': 0,
-            '<UNK>': 1
+            '<PAD>': 0,  # Padding Token
+            '<UNK>': 1,  # Unknown Token
+            '<BOS>': 2,  # Beginning of Sequence
+            '<EOS>': 3,  # End of Sequence
+            '<SEP>': 4,  # Separator (for sentence pairs)
+            '<CLS>': 5,  # Classifier token (useful for classification tasks)
+            '<MASK>': 6  # Masking Token (for MLM / masked language modeling)
         }
 
-        # Add top frequent words while ensuring vocab size limit
+
+        # Add top frequent words while keeping vocab within limit
         for idx, (word, _) in enumerate(sorted_vocab[: self.vocab_size - len(self.vocab)]):
             self.vocab[word] = idx + len(self.vocab)
 
-        # Save vocabulary to file
+        # Save vocabulary
         self.save_vocab()
         print(f"[INFO] Vocabulary built and saved to {self.vocab_file}.")
 
@@ -60,39 +69,33 @@ class DataProcessor:
         print(f"[INFO] Vocabulary saved to {self.vocab_file}")
 
     def load_vocab(self):
-        """Loads vocabulary from a JSON file."""
+        """Loads vocabulary from a JSON file and creates inverse mapping."""
         if not os.path.exists(self.vocab_file):
             raise FileNotFoundError(f"[ERROR] Vocabulary file '{self.vocab_file}' not found! Train model first.")
 
         with open(self.vocab_file, "r", encoding="utf-8") as f:
             self.vocab = json.load(f)
-        self.inverse_vocab = {int(idx): word for word, idx in self.vocab.items()}
-        print(f"[INFO] Loaded vocabulary from {self.vocab_file}")
+
+        # Create inverse mapping for decoding
+        self.inverse_vocab = {idx: word for word, idx in self.vocab.items()}
+        print(f"[INFO] Loaded vocabulary from {self.vocab_file} (size: {len(self.vocab)})")
 
     def convert_text_to_tokens(self, text: str) -> List[int]:
+        """Converts text into a list of token IDs, replacing OOV words with <UNK>."""
         tokens = self.tokenize(self.preprocess_text(text))
-        
-        token_ids = []
-        for word in tokens:
-            token_id = self.vocab.get(word, self.vocab['<UNK>'])
-            
-            if token_id < 0 or token_id >= self.vocab_size:
-                print(f"[WARNING] Token ID out of range: '{word}' -> {token_id}, replacing with <UNK>")
-                token_id = self.vocab['<UNK>']  # Fallback to <UNK>
+        token_ids = [self.vocab.get(word, self.vocab['<UNK>']) for word in tokens]
 
-            token_ids.append(int(token_id))
+        if max(token_ids, default=0) >= self.vocab_size:
+            print(f"[WARNING] Some token IDs exceed vocab size! Adjusting...")
+            token_ids = [tid if tid < self.vocab_size else self.vocab['<UNK>'] for tid in token_ids]
 
         return token_ids
     
     def pad_sequence(self, tokens: List[int], max_length: int) -> List[int]:
+        """Pads or truncates a sequence to max_length."""
         tokens = tokens[:max_length]  # Truncate if too long
         tokens += [self.vocab['<PAD>']] * (max_length - len(tokens))  # Pad if too short
-
-        if any(t < 0 or t >= self.vocab_size for t in tokens):
-            print(f"[ERROR] Corrupted padded sequence: {tokens}")
-
-        return [int(t) for t in tokens]  
-
+        return tokens  
 
 def load_data(file_path: str) -> List[str]:
     """Loads dataset from file."""
@@ -111,11 +114,6 @@ def preprocess_batch(batch, processor, max_seq_length):
             tokens = [processor.vocab['<UNK>']]  
 
         padded_tokens = processor.pad_sequence(tokens, max_seq_length)
-
-        if any(t < 0 or t >= processor.vocab_size for t in padded_tokens):
-            print(f"[ERROR] preprocess_batch(): Invalid token IDs detected -> {padded_tokens}")
-            raise ValueError("[FATAL ERROR] Token ID out of range in preprocess_batch!")
-
         inputs.append(padded_tokens)
         targets.append(padded_tokens)
 
