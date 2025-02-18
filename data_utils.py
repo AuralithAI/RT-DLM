@@ -68,7 +68,7 @@ class DataProcessor:
             token_id = self.vocab.get(word, self.vocab['<UNK>'])
             
             if token_id < 0 or token_id >= self.vocab_size:
-                print(f"[ERROR] Invalid token detected: '{word}' -> {token_id}")
+                print(f"[WARNING] Token ID out of range: '{word}' -> {token_id}, replacing with <UNK>")
                 token_id = self.vocab['<UNK>']  # Fallback to <UNK>
 
             token_ids.append(int(token_id))
