@@ -6,6 +6,7 @@ import os
 import gc
 import sys
 import numpy as np
+import pickle
 import matplotlib.pyplot as plt
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -42,7 +43,12 @@ def forward_fn(inputs, return_attention=False):
     return model(inputs, return_attention=return_attention)
 
 model = hk.transform(forward_fn)
-params = model.init(rng, inputs_val[:config.batch_size]) 
+
+# Load trained parameters
+params_path = "tms_trained_params.pkl"
+with open(params_path, "rb") as f:
+    params = pickle.load(f)
+print(f"[INFO] Loaded trained parameters from {params_path}")
 
 # Loss computation function
 def compute_loss(params, rng, inputs, targets):
@@ -51,43 +57,36 @@ def compute_loss(params, rng, inputs, targets):
     loss = optax.softmax_cross_entropy_with_integer_labels(logits, targets).mean()
     total_loss = loss + 0.01 * aux_loss  
     
-    return total_loss, attn_weights, expert_indices
+    return total_loss
 
 # Validation loop
 def validate_model(params, inputs, targets):
     total_val_loss = []
-    attn_maps = []
-    
+
     for step in range(len(inputs) // config.batch_size):
         batch_start = step * config.batch_size
         batch_end = batch_start + config.batch_size
         batch_inputs, batch_targets = inputs[batch_start:batch_end], targets[batch_start:batch_end]
 
         step_rng, rng = jax.random.split(rng)
-        val_loss, attn_weights, expert_indices = compute_loss(params, step_rng, batch_inputs, batch_targets)
+        val_loss = compute_loss(params, step_rng, batch_inputs, batch_targets)
         
         total_val_loss.append(val_loss)
-        
-        if isinstance(attn_weights, tuple):  
-            _, attn_transformer = attn_weights
-            attn_avg = jnp.mean(attn_transformer, axis=0)  
-            attn_maps.append(attn_avg)
-    
+
     avg_val_loss = np.mean(total_val_loss)
     print(f"[INFO] Validation Loss: {avg_val_loss:.4f}")
-    
-    return avg_val_loss, attn_maps
+
+    return avg_val_loss
 
 # Run validation
-val_loss, attention_maps = validate_model(params, inputs_val, targets_val)
+val_loss = validate_model(params, inputs_val, targets_val)
 
-# Plot loss comparison
-plt.plot(val_loss, label="Validation Loss", color='red')
-plt.axhline(y=config.eval_interval, linestyle="--", color="blue", label="Training Eval Interval")
-plt.xlabel("Steps")
+# Plot validation loss
+plt.axhline(y=val_loss, linestyle="--", color="red", label="Validation Loss")
+plt.xlabel("Epochs")
 plt.ylabel("Loss")
 plt.legend()
 plt.grid(True)
-plt.title("Validation Loss vs Training Evaluation Interval")
-plt.savefig("validation_loss.png")
-print("[INFO] Validation loss plot saved as validation_loss.png")
+plt.title("Validation Loss")
+plt.savefig("data/validation_loss.png")
+print("[INFO] Validation loss plot saved as data/validation_loss.png")

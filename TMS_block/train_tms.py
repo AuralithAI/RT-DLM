@@ -5,6 +5,7 @@ import optax
 import os
 import gc
 import sys
+import pickle
 import matplotlib.pyplot as plt
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -119,6 +120,11 @@ for epoch in range(config.num_epochs):
         print(f"[Epoch {epoch+1} | Step {step+1}] Loss: {loss:.4f}")
         del batch_inputs, batch_targets
         gc.collect()
+
+# Save model parameters
+with open("tms_params.pkl", "wb") as f:
+    pickle.dump(params, f)
+print("[INFO] Model parameters saved as tms_params.pkl")
 
 # Plot loss curve
 plt.plot(losses)
