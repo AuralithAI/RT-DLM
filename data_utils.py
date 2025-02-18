@@ -60,7 +60,21 @@ class DataProcessor:
             self.vocab = json.load(f)
         print(f"[INFO] Loaded vocabulary from {self.vocab_file}")
 
+    def convert_text_to_tokens(self, text: str) -> List[int]:
+        tokens = self.tokenize(self.preprocess_text(text))
+        
+        token_ids = []
+        for word in tokens:
+            token_id = self.vocab.get(word, self.vocab['<UNK>'])
+            
+            if token_id < 0 or token_id >= self.vocab_size:
+                print(f"[ERROR] Invalid token detected: '{word}' -> {token_id}")
+                token_id = self.vocab['<UNK>']  # Fallback to <UNK>
 
+            token_ids.append(int(token_id))
+
+        return token_ids
+    
     def pad_sequence(self, tokens: List[int], max_length: int) -> List[int]:
         tokens = tokens[:max_length]  # Truncate if too long
         tokens += [self.vocab['<PAD>']] * (max_length - len(tokens))  # Pad if too short
