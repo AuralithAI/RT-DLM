@@ -4,10 +4,10 @@ class TrainConfig:
         self.d_model = 384
         self.num_heads = 8
         self.num_layers = 12
-        self.moe_experts = 16
-        self.moe_top_k = 4
+        self.moe_experts = 8
+        self.moe_top_k = 2
         self.max_seq_length = 64
-        self.batch_size = 16
+        self.batch_size = 128
         self.learning_rate = 1e-4
         self.num_epochs = 200
         self.eval_interval = 25
