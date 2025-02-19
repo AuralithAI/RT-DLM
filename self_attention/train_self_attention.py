@@ -9,7 +9,7 @@ import seaborn as sns
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from train_config import TrainConfig
 from model_module_self_attention import SelfAttentionModel
-from data_utils import DataProcessor, load_data, preprocess_batch
+from data_utils import DataProcessor, load_data
 from logLevel.logLevel import Logging
 from datetime import datetime
 
@@ -26,13 +26,12 @@ Logging.info("Random seed initialized.")
 dataset_path = "data/dataset.txt"
 processor = DataProcessor(vocab_size=config.vocab_size)
 raw_texts = load_data(dataset_path)
-processor.build_vocab(raw_texts)
 Logging.info(f"Loaded dataset from {dataset_path} and built vocabulary.")
-inputs, targets = preprocess_batch(raw_texts, processor, config.max_seq_length)
+tokenized_texts = [processor.tokenize(text) for text in raw_texts]
 
-# Convert to JAX arrays
-inputs = jnp.array(inputs, dtype=jnp.int32)
-targets = jnp.array(targets, dtype=jnp.int32)
+# Pad sequences to `max_seq_length`
+inputs = jnp.array([processor.pad_sequence(tokens, config.max_seq_length) for tokens in tokenized_texts], dtype=jnp.int32)
+targets = jnp.array(inputs, dtype=jnp.int32)
 Logging.info("Converted dataset to JAX arrays.")
 
 # Initialize model directly

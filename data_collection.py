@@ -1,12 +1,15 @@
 import os
 import requests
-import gzip
+import time
 import random
 from data_utils import DataProcessor
 
 DATA_PATH_TRAIN = os.path.join("data", "train_data.txt")
 DATA_PATH_VALIDATION = os.path.join("data", "validation_data.txt")
-WIKI_ARTICLES = 20000  
+WIKI_ARTICLES = 500000  
+ARXIV_DATA = 500000
+GITHUB_READMES = 500000
+REDDIT_POSTS = 500000
 CC_SAMPLES = 500  
 VALIDATION_SPLIT = 0.2  
 
@@ -44,42 +47,105 @@ def fetch_wikipedia_data(num_articles=500):
     print(f"[INFO] Fetched {len(articles)} Wikipedia articles.")
     return articles
 
+import time
 
-def fetch_commoncrawl_data(num_samples=500):
-    """Fetches raw text data from Common Crawl."""
-    print("[INFO] Fetching Common Crawl dataset paths...")
+def fetch_arxiv_data(num_papers=500000, batch_size=2000):
+    """Fetch abstracts from arXiv in batches."""
+    print("[INFO] Fetching arXiv dataset in batches...")
+    
+    all_abstracts = []
+    base_url = "http://export.arxiv.org/api/query?search_query=cat:cs.AI"
 
-    url = "https://data.commoncrawl.org/crawl-data/CC-MAIN-2023-40/wet.paths.gz"
-    response = requests.get(url)
+    for start in range(0, num_papers, batch_size):
+        max_results = min(batch_size, num_papers - len(all_abstracts))
+        url = f"{base_url}&start={start}&max_results={max_results}"
+        
+        retries = 3  # Retry up to 3 times if fetching fails
+        while retries > 0:
+            response = requests.get(url)
+            if response.status_code == 200:
+                abstracts = []
+                for entry in response.text.split("<summary>")[1:]:
+                    abstract = entry.split("</summary>")[0].strip()
+                    abstracts.append(abstract)
 
+                if abstracts:
+                    all_abstracts.extend(abstracts)
+                    print(f"[INFO] Collected {len(all_abstracts)}/{num_papers} abstracts so far...")
+                    break  # Exit retry loop if successful
+                else:
+                    print("[ERROR] No <summary> tags found in response, retrying...")
+                    retries -= 1
+                    time.sleep(3)  # Wait before retrying
+            else:
+                print(f"[ERROR] HTTP {response.status_code}: {response.text}, retrying...")
+                retries -= 1
+                time.sleep(3)
+
+        if retries == 0:
+            print("[ERROR] Max retries reached. Stopping arXiv data collection.")
+            break
+
+    print(f"[INFO] Successfully fetched {len(all_abstracts)} abstracts from arXiv.")
+    return all_abstracts
+
+def fetch_github_readmes(num_repos=200):
+    """Fetches README.md files from trending AI/ML repositories on GitHub."""
+    print("[INFO] Fetching GitHub dataset...")
+    url = "https://api.github.com/search/repositories?q=machine+learning&sort=stars&order=desc&per_page=" + str(num_repos)
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    response = requests.get(url, headers=headers)
     if response.status_code != 200:
-        raise Exception("Failed to fetch Common Crawl dataset paths.")
+        raise Exception("Failed to fetch GitHub repositories")
+    
+    repos = response.json().get("items", [])
+    readmes = []
+    for repo in repos:
+        readme_url = repo.get("html_url") + "/blob/main/README.md"
+        readmes.append(readme_url)
+    
+    print(f"[INFO] Fetched {len(readmes)} GitHub README.md URLs.")
+    return readmes
 
-    wet_paths = response.text.strip().split("\n")
-    if not wet_paths or len(wet_paths[0]) < 10:
-        raise Exception("Invalid WET file paths received.")
 
-    wet_file_path = wet_paths[0].strip()  # First available WET file path
-    wet_file_url = f"https://data.commoncrawl.org/{wet_file_path}"
+def fetch_reddit_posts(subreddit="artificial", num_posts=500, batch_size=10):
+    """Fetches top posts from a subreddit in batches."""
+    print(f"[INFO] Fetching {num_posts} posts from r/{subreddit} in batches of {batch_size}...")
 
-    print(f"[INFO] Fetching Common Crawl text data from: {wet_file_url}")
+    all_posts = []
+    last_post_time = None  # For pagination
 
-    wet_response = requests.get(wet_file_url, stream=True)
-    if wet_response.status_code != 200:
-        raise Exception("Failed to fetch Common Crawl text data.")
+    while len(all_posts) < num_posts:
+        remaining = num_posts - len(all_posts)
+        fetch_count = min(batch_size, remaining)
 
-    raw_texts = []
-    with gzip.open(wet_response.raw, "rt", encoding="utf-8") as f:
-        for line in f:
-            if line.strip() and not line.startswith(("WARC", "Content-Length", "Content-Type", "WARC-Target-URI")):
-                raw_texts.append(line.strip())
+        url = f"https://api.pushshift.io/reddit/search/submission/?subreddit={subreddit}&size={fetch_count}"
+        if last_post_time:
+            url += f"&before={last_post_time}"
 
-            if len(raw_texts) >= num_samples:
-                break
+        response = requests.get(url)
 
-    print(f"[INFO] Successfully fetched {len(raw_texts)} text samples from Common Crawl.")
-    return raw_texts
+        if response.status_code != 200:
+            print(f"[ERROR] HTTP {response.status_code}: {response.text}")
+            raise Exception("Failed to fetch Reddit data")
 
+        data = response.json().get("data", [])
+        if not data:
+            print("[ERROR] No more posts found, stopping early.")
+            break
+
+        for post in data:
+            text = post.get("title", "") + " " + post.get("selftext", "")
+            if text.strip():
+                all_posts.append(text)
+
+        last_post_time = data[-1]["created_utc"]  # Get timestamp of the last post
+        print(f"[INFO] Collected {len(all_posts)}/{num_posts} posts so far...")
+
+        time.sleep(1)  # Avoid hitting rate limits
+
+    print(f"[INFO] Successfully fetched {len(all_posts)} Reddit posts from r/{subreddit}.")
+    return all_posts
 
 def save_datasets(train_data, val_data):
     """Saves training and validation datasets to separate files."""
@@ -98,22 +164,25 @@ def save_datasets(train_data, val_data):
 
 if __name__ == "__main__":
     processor = DataProcessor()
-
+    
     print("[INFO] Collecting dataset...")
     wiki_data = fetch_wikipedia_data(num_articles=WIKI_ARTICLES)
-    #cc_data = fetch_commoncrawl_data(num_samples=CC_SAMPLES)
-
-    all_data = wiki_data #+ cc_data
+    arxiv_data = fetch_arxiv_data(num_papers=ARXIV_DATA, batch_size=2000)
+    github_data = fetch_github_readmes(num_repos=GITHUB_READMES)
+    #reddit_data = fetch_reddit_posts(subreddit="machinelearning", num_posts=REDDIT_POSTS, batch_size=1000)
+    
+    # Combine all sources
+    all_data = wiki_data + arxiv_data + github_data #+ reddit_data
     all_data = [processor.preprocess_text(text) for text in all_data]
-
+    
     # Shuffle data
     random.shuffle(all_data)
-
+    
     # Split into train and validation sets
     split_idx = int(len(all_data) * (1 - VALIDATION_SPLIT))
     train_data = all_data[:split_idx]
     val_data = all_data[split_idx:]
-
+    
     # Save datasets
     save_datasets(train_data, val_data)
     print("[INFO] Data collection and validation dataset creation completed successfully.")

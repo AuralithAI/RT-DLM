@@ -6,7 +6,7 @@ class TrainConfig:
         self.num_layers = 12
         self.moe_experts = 16
         self.moe_top_k = 4
-        self.max_seq_length = 96
+        self.max_seq_length = 64
         self.batch_size = 16
         self.learning_rate = 1e-4
         self.num_epochs = 200
@@ -14,3 +14,7 @@ class TrainConfig:
         self.temperature = 1.2
         self.pad_token_id = 0
         self.label_smoothing = 0.1
+        self.max_sentence_length = 5192
+        self.input_sentence_size = 500000
+        self.character_coverage=0.9999
+        self.num_threads=16

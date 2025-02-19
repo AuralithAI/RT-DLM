@@ -12,7 +12,7 @@ import seaborn as sns
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from train_config import TrainConfig
 from transformer_self_attention.model import TransformerSelfAttentionModel
-from data_utils import DataProcessor, load_data, preprocess_batch
+from data_utils import DataProcessor, load_data
 
 # Load configuration
 config = TrainConfig()
@@ -28,12 +28,11 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.6"
 dataset_path = "data/dataset.txt"
 processor = DataProcessor(vocab_size=config.vocab_size)
 raw_texts = load_data(dataset_path)
-processor.build_vocab(raw_texts)
-inputs, targets = preprocess_batch(raw_texts, processor, config.max_seq_length)
+tokenized_texts = [processor.tokenize(text) for text in raw_texts]
 
-# Convert to JAX arrays
-inputs = jnp.array(inputs, dtype=jnp.int32)
-targets = jnp.array(targets, dtype=jnp.int32)
+# Pad sequences to `max_seq_length`
+inputs = jnp.array([processor.pad_sequence(tokens, config.max_seq_length) for tokens in tokenized_texts], dtype=jnp.int32)
+targets = jnp.array(inputs, dtype=jnp.int32)
 
 # Initialize Transformer-SelfAttention Model
 def forward_fn(inputs, return_attention=False):

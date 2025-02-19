@@ -17,7 +17,6 @@ config = TrainConfig()
 
 # Load vocabulary & processor
 processor = DataProcessor(vocab_size=config.vocab_size)
-processor.load_vocab()
 
 # Load trained model
 def forward_fn(inputs, return_attention=False):
@@ -42,7 +41,7 @@ print(f"[INFO] Loaded trained parameters from {params_path}")
 
 # Function to generate text
 def generate_text(prompt, max_length=50):
-    tokens = processor.convert_text_to_tokens(prompt)
+    tokens = processor.tokenize(prompt)
     print(f"Tokenized Prompt: {tokens}")
     
     tokens = processor.pad_sequence(tokens, config.max_seq_length)
@@ -57,10 +56,10 @@ def generate_text(prompt, max_length=50):
     print(f"Generated Token IDs: {generated_ids}")  # Debugging step
 
     # Convert to text
-    generated_text = [processor.inverse_vocab.get(t, "<UNK>") for t in generated_ids]
+    generated_text = processor.decode_tokens(generated_ids)
     print("\nDecoded Tokens:", generated_text)  # Print decoded tokens before joining
 
-    return " ".join(generated_text)
+    return generated_text
 
 # Run inference
 if __name__ == "__main__":

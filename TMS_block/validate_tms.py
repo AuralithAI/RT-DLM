@@ -13,7 +13,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from train_config import TrainConfig
 from model_tms import TMSModel
-from data_utils import DataProcessor, load_data, preprocess_batch
+from data_utils import DataProcessor, load_data
 
 # Load configuration
 config = TrainConfig()
@@ -22,13 +22,14 @@ rng = jax.random.PRNGKey(42)
 # Load validation dataset
 val_dataset_path = "data/validation_data.txt"
 processor = DataProcessor(vocab_size=config.vocab_size)
-processor.load_vocab()
 raw_texts_val = load_data(val_dataset_path)
-inputs_val, targets_val = preprocess_batch(raw_texts_val, processor, config.max_seq_length)
 
-# Convert to JAX arrays
-inputs_val = jnp.array(inputs_val, dtype=jnp.int32)
-targets_val = jnp.array(targets_val, dtype=jnp.int32)
+# Convert texts to token IDs using SentencePiece
+tokenized_texts_val = [processor.tokenize(text) for text in raw_texts_val]
+
+# Pad sequences
+inputs_val = jnp.array([processor.pad_sequence(tokens, config.max_seq_length) for tokens in tokenized_texts_val], dtype=jnp.int32)
+targets_val = jnp.array(inputs_val, dtype=jnp.int32)
 
 # Load trained model
 def forward_fn(inputs, return_attention=False):

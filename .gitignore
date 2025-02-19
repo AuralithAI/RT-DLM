@@ -36,6 +36,8 @@ MANIFEST
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
+data/train_data.txt
+data/validation_data.txt
 
 # Unit test / coverage reports
 htmlcov/
@@ -171,3 +173,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 *.pkl
+
+train_data.txt
+validation_data.txt
