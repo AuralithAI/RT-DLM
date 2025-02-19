@@ -36,8 +36,12 @@ MANIFEST
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
+
+# Avoid model and data set creation
 data/train_data.txt
 data/validation_data.txt
+data/rt_dlm_sp.model
+data/rt_dlm_sp.vocab
 
 # Unit test / coverage reports
 htmlcov/
