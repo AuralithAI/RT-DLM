@@ -9,8 +9,6 @@ import pickle
 import matplotlib.pyplot as plt
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from train_config import TrainConfig
 from model_tms import TMSModel
 from data_utils import DataProcessor, load_data
 
