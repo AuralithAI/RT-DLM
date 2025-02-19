@@ -26,6 +26,7 @@ print("[INFO] JAX device: ", jax.devices())
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.6"
+os.environ["XLA_FLAGS"] = "--xla_gpu_force_compilation_parallelism=1"
 
 # Load dataset
 dataset_path = "data/train_data.txt"
@@ -86,6 +87,8 @@ def loss_for_gradients(params, rng, inputs, targets):
 
 @jax.jit
 def train_step(params, opt_state, rng, inputs, targets):
+    inputs = jax.lax.convert_element_type(inputs, jnp.bfloat16)
+    targets = jax.lax.convert_element_type(targets, jnp.bfloat16)
     loss, attn_weights, expert_indices = compute_loss(params, rng, inputs, targets)
     grads = jax.grad(loss_for_gradients)(params, rng, inputs, targets)
     updates, opt_state = optimizer.update(grads, opt_state, params)
