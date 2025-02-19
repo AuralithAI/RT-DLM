@@ -5,8 +5,6 @@ import optax
 import os
 import gc
 import sys
-import pickle
-import matplotlib.pyplot as plt
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from model_tms import TMSModel
