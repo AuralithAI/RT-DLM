@@ -10,13 +10,12 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from model_tms import TMSModel
 from data_utils import DataProcessor, load_data
-from memory_bank import MemoryBank
+from memory_bank import MemoryBank, ShortTermMemory
 
 def train_and_evaluate(config, losses, similarity_scores):
-    """ Trains the model and returns the final validation loss. """
-    
     rng = jax.random.PRNGKey(42)
-    memory = MemoryBank(memory_size=config.memory_size, embedding_dim=config.d_model, retrieval_k=config.retrieval_k)
+    ltm = MemoryBank(memory_size=config.memory_size, embedding_dim=config.d_model, retrieval_k=config.retrieval_k)
+    stm = ShortTermMemory(buffer_size=config.buffer_size, embedding_dim=config.d_model)
 
     # Load dataset
     dataset_path = "data/train_data.txt"
@@ -24,13 +23,11 @@ def train_and_evaluate(config, losses, similarity_scores):
     raw_texts = load_data(dataset_path)
 
     tokenized_texts = [processor.tokenize(text) for text in raw_texts]
-    padded_sequences = jnp.array([processor.pad_sequence(tokens, config.max_seq_length) for tokens in tokenized_texts], dtype=jnp.int32)
-
-    inputs = jnp.array(padded_sequences, dtype=jnp.int32)
+    inputs = jnp.array([processor.pad_sequence(tokens, config.max_seq_length) for tokens in tokenized_texts], dtype=jnp.int32)
     targets = jnp.array(inputs, dtype=jnp.int32)
 
     # Initialize TMS Model
-    def forward_fn(inputs, return_attention=False, retrieved_memory=None):
+    def forward_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None):
         model = TMSModel(
             d_model=config.d_model,
             num_heads=config.num_heads,
@@ -40,9 +37,11 @@ def train_and_evaluate(config, losses, similarity_scores):
             moe_experts=config.moe_experts,
             moe_top_k=config.moe_top_k,
             memory_size=config.memory_size,
-            retrieval_k=config.retrieval_k
+            retrieval_k=config.retrieval_k,
+            ltm_weight=config.ltm_weight,
+            stm_weight=config.stm_weight
         )
-        return model(inputs, return_attention=return_attention, retrieved_memory=retrieved_memory)
+        return model(inputs, return_attention=return_attention, retrieved_memory_ltm=retrieved_memory_ltm, retrieved_memory_stm=retrieved_memory_stm)
 
     model = hk.transform_with_state(forward_fn)
     params, state = model.init(rng, inputs[:config.batch_size])
@@ -63,19 +62,22 @@ def train_and_evaluate(config, losses, similarity_scores):
     opt_state = optimizer.init(params)
 
     # Compute loss function
-    def compute_loss(params, state, rng, inputs, targets, retrieved_memory):
+    def compute_loss(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm):
         (logits, attn_weights, expert_indices, aux_loss), new_state = model.apply(
-            params, state, rng, inputs, return_attention=True, retrieved_memory=retrieved_memory
+            params, state, rng, inputs, return_attention=True, 
+            retrieved_memory_ltm=retrieved_memory_ltm, retrieved_memory_stm=retrieved_memory_stm
         )
+        ltm_norm = jnp.linalg.norm(retrieved_memory_ltm, axis=-1, keepdims=True) + config.EPSILON
+        stm_norm = jnp.linalg.norm(retrieved_memory_stm, axis=-1, keepdims=True) + config.EPSILON
+        retrieved_memory_ltm = retrieved_memory_ltm / ltm_norm
+        retrieved_memory_stm = retrieved_memory_stm / stm_norm
 
-        retrieved_memory = jnp.where(jnp.isnan(retrieved_memory), jnp.zeros_like(retrieved_memory), retrieved_memory)
-
-        embeddings = get_embeddings(params, state, rng, inputs, retrieved_memory)  
+        embeddings = get_embeddings(params, state, rng, inputs, retrieved_memory_ltm, retrieved_memory_stm)
         query_key = jnp.mean(embeddings, axis=1)
-        #query_key = jnp.expand_dims(query_key, axis=1)
         query_norm = jnp.linalg.norm(query_key, axis=-1, keepdims=True) + config.EPSILON
-        memory_norm = jnp.linalg.norm(retrieved_memory, axis=-1, keepdims=True) + config.EPSILON
-        similarity_score = jnp.sum(query_key * retrieved_memory, axis=-1) / (query_norm * memory_norm)
+        ltm_similarity = jnp.sum(query_key * retrieved_memory_ltm, axis=-1) / (query_norm * ltm_norm)
+        stm_similarity = jnp.sum(query_key * retrieved_memory_stm, axis=-1) / (query_norm * stm_norm)
+        similarity_score = jnp.stack([ltm_similarity, stm_similarity], axis=-1)  # [batch_size, 2]
         similarity_score = jax.lax.stop_gradient(similarity_score)
         similarity_score = jnp.nan_to_num(similarity_score, nan=0.0)
 
@@ -83,31 +85,31 @@ def train_and_evaluate(config, losses, similarity_scores):
         total_loss = loss + 0.01 * aux_loss
         return total_loss, attn_weights, expert_indices, similarity_score, new_state
 
-    def loss_for_gradients(params, state, rng, inputs, targets, retrieved_memory):
-        loss, _, _, _, _ = compute_loss(params, state, rng, inputs, targets, retrieved_memory)
+    def loss_for_gradients(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm):
+        loss, _, _, _, _ = compute_loss(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm)
         return loss
 
     def train_step(params, state, opt_state, rng, inputs, targets):
-        """ Non-JIT function to handle FAISS memory interaction. """
-        embeddings = jnp.mean(get_embeddings(params, state, rng, inputs), axis=1) 
+        embeddings = jnp.mean(get_embeddings(params, state, rng, inputs), axis=1)
         query_key_np = np.asarray(jax.device_get(embeddings), dtype=np.float32)
-        retrieved_memory_np = memory.retrieve(query_key_np, epsilon=config.EPSILON)
-        retrieved_memory = jnp.array(retrieved_memory_np, dtype=jnp.float32)
-        return _train_step_jit(params, state, opt_state, rng, inputs, targets, retrieved_memory)
+        ltm_memory_np = ltm.retrieve(query_key_np)
+        stm_memory_np = stm.retrieve(query_key_np)
+        ltm_memory = jnp.array(ltm_memory_np, dtype=jnp.float32)
+        stm_memory = jnp.array(stm_memory_np, dtype=jnp.float32)
+        return _train_step_jit(params, state, opt_state, rng, inputs, targets, ltm_memory, stm_memory)
 
     @jax.jit
-    def _train_step_jit(params, state, opt_state, rng, inputs, targets, retrieved_memory):
-        """ JIT-compiled training step. Memory is passed as JAX tensor. """
-        loss, attn_weights, expert_indices, similarity_score, new_state = compute_loss(params, state, rng, inputs, targets, retrieved_memory)
-        grads = jax.grad(loss_for_gradients)(params, state, rng, inputs, targets, retrieved_memory)
+    def _train_step_jit(params, state, opt_state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm):
+        loss, attn_weights, expert_indices, similarity_score, new_state = compute_loss(
+            params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm
+        )
+        grads = jax.grad(loss_for_gradients)(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm)
         updates, opt_state = optimizer.update(grads, opt_state, params)
         params = optax.apply_updates(params, updates)
         return loss, attn_weights, expert_indices, params, state, opt_state, similarity_score
-    
-    def get_embeddings(params, state, rng, inputs, retrieved_memory=None):
-        """Extracts intermediate embeddings before the final projection."""
-        # Apply the model up to the pre-projection stage
-        def forward_with_embeddings(inputs, return_attention=False, retrieved_memory=None):
+
+    def get_embeddings(params, state, rng, inputs, retrieved_memory_ltm=None, retrieved_memory_stm=None):
+        def forward_with_embeddings(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None):
             model = TMSModel(
                 d_model=config.d_model,
                 num_heads=config.num_heads,
@@ -117,22 +119,29 @@ def train_and_evaluate(config, losses, similarity_scores):
                 moe_experts=config.moe_experts,
                 moe_top_k=config.moe_top_k,
                 memory_size=config.memory_size,
-                retrieval_k=config.retrieval_k
+                retrieval_k=config.retrieval_k,
+                ltm_weight=config.ltm_weight,
+                stm_weight=config.stm_weight
             )
             x = model.embedding(inputs) + model.position_enc(jnp.arange(inputs.shape[1]))
-            if retrieved_memory is not None:
-                retrieved_memory = jnp.expand_dims(retrieved_memory, axis=1)
-                retrieved_memory = jnp.repeat(retrieved_memory, x.shape[1], axis=1)
-                retrieved_memory = model.memory_projection(retrieved_memory)
-                x += retrieved_memory
+            if retrieved_memory_ltm is not None:
+                retrieved_memory_ltm = jnp.expand_dims(retrieved_memory_ltm, axis=1)
+                retrieved_memory_ltm = jnp.repeat(retrieved_memory_ltm, x.shape[1], axis=1)
+                retrieved_memory_ltm = model.memory_projection_ltm(retrieved_memory_ltm)
+                x += model.ltm_weight * retrieved_memory_ltm
+            if retrieved_memory_stm is not None:
+                retrieved_memory_stm = jnp.expand_dims(retrieved_memory_stm, axis=1)
+                retrieved_memory_stm = jnp.repeat(retrieved_memory_stm, x.shape[1], axis=1)
+                retrieved_memory_stm = model.memory_projection_stm(retrieved_memory_stm)
+                x += model.stm_weight * retrieved_memory_stm
             x, _ = model.self_attention(inputs, return_attention=True)
             x, _ = model.transformer(x, rng, return_attention=True)
             x, _, _ = model.moe(x)
             x = model.norm(x)
-            return x  
+            return x
 
         transformed = hk.transform_with_state(forward_with_embeddings)
-        embeddings, _ = transformed.apply(params, state, rng, inputs, retrieved_memory=retrieved_memory)
+        embeddings, _ = transformed.apply(params, state, rng, inputs, retrieved_memory_ltm=retrieved_memory_ltm, retrieved_memory_stm=retrieved_memory_stm)
         return embeddings
 
     # Training loop
@@ -146,19 +155,19 @@ def train_and_evaluate(config, losses, similarity_scores):
             batch_inputs, batch_targets = inputs[batch_start:batch_end], targets[batch_start:batch_end]
 
             step_rng, rng = jax.random.split(rng)
-            loss, _, _, params, state, opt_state, similarity_score = train_step(params, state,opt_state, step_rng, batch_inputs, batch_targets)
+            loss, _, _, params, state, opt_state, similarity_score = train_step(params, state, opt_state, step_rng, batch_inputs, batch_targets)
             losses.append(loss)
 
             embeddings = jnp.mean(get_embeddings(params, state, step_rng, batch_inputs), axis=1)
-            memory.store(embeddings, embeddings)
+            ltm.store(embeddings, embeddings)
+            stm.store(embeddings, embeddings)
 
             similarity_score_numpy = np.array(similarity_score).astype(float)
             similarity_score_mean = np.mean(similarity_score_numpy)
             similarity_scores.append(similarity_score_mean)
 
-            #print(f"[Epoch {epoch+1}] - Similarity score : {similarity_score_numpy}")
             print(f"[Epoch {epoch+1} | Step {step+1}] Loss: {loss:.4f} | Similarity Score: {similarity_score_mean:.4f}")
             del batch_inputs, batch_targets
             gc.collect()
 
-    return losses, params, similarity_scores
+    return losses, params, similarity_scores, state, ltm
