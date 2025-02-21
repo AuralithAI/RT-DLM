@@ -25,8 +25,11 @@ class TrainConfig:
         self.num_threads = 16           # Number of threads for data processing
 
         # --- Memory Bank Parameters ---
-        self.memory_size = 5000         # Size of the memory bank
-        self.retrieval_k = 3            # Number of top-k items to retrieve from memory
+        self.memory_size = 5000         # Size of the long-term memory bank
+        self.retrieval_k = 3            # Number of top-k items to retrieve from LTM
+        self.buffer_size = self.batch_size  # Default STM buffer size (tunable)
+        self.ltm_weight = 0.5           # Weight for long-term memory contribution
+        self.stm_weight = 0.5           # Weight for short-term memory contribution
 
         # --- Numerical Stability ---
         self.EPSILON = 1e-8             # Small constant to avoid division by zero
