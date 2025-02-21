@@ -22,8 +22,12 @@ def set_jax_config(config):
 def objective(trial):
     # Tune Model Architecture Parameters
     d_model = trial.suggest_categorical("d_model", [256, 384, 512])
-    valid_heads = {256: [4, 8], 384: [4, 6, 8, 12], 512: [4, 8]}
-    num_heads = trial.suggest_categorical("num_heads", valid_heads[d_model])
+    # Static list of possible num_heads, validated against d_model
+    num_heads = trial.suggest_categorical("num_heads", [4, 6, 8, 12])
+    # Ensure compatibility: d_model % num_heads == 0
+    while d_model % num_heads != 0:
+        num_heads = trial.suggest_categorical("num_heads", [4, 6, 8, 12])
+    
     num_layers = trial.suggest_int("num_layers", 6, 12)
     moe_experts = trial.suggest_categorical("moe_experts", [4, 8, 16])
     moe_top_k = trial.suggest_categorical("moe_top_k", [1, 2, 3])
