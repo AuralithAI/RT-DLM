@@ -3,11 +3,15 @@ import sys
 import jax
 import optuna
 import pickle
+import numpy as np
 import matplotlib.pyplot as plt
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from train_config import TrainConfig
 from train_tms import train_and_evaluate
+
+# Load configuration globally.
+config = TrainConfig()
 
 # Set JAX configurations
 jax.config.update("jax_platform_name", "gpu")
@@ -15,21 +19,20 @@ jax.config.update("jax_enable_x64", False)
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.6"
-os.environ["XLA_FLAGS"] = "--xla_gpu_force_compilation_parallelism=1"
+os.environ["XLA_FLAGS"] = f"--xla_gpu_force_compilation_parallelism={config.xla_gpu_parallelism}"
 print("[INFO] JAX device: ", jax.devices())
 
 def objective(trial):
     # Tune parameters
-    d_model = trial.suggest_categorical("d_model", [128, 192, 256])
-    num_layers = trial.suggest_int("num_layers", 4, 12)
-    num_heads = trial.suggest_int("num_heads", 4, 8)
-    moe_experts = trial.suggest_categorical("moe_experts", [2, 4, 8])
-    moe_top_k = trial.suggest_categorical("moe_top_k", [1, 2])
-    batch_size = trial.suggest_categorical("batch_size", [2, 4, 8])
-    learning_rate = trial.suggest_loguniform("learning_rate", 1e-5, 5e-4)
+    d_model = trial.suggest_categorical("d_model", [256, 384, 512])
+    num_layers = trial.suggest_int("num_layers", 6, 12)
+    num_heads = trial.suggest_categorical("num_heads", [4, 8, 12])  
+    moe_experts = trial.suggest_categorical("moe_experts", [4, 8, 16])
+    moe_top_k = trial.suggest_categorical("moe_top_k", [1, 2, 3])
+    batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 64])
+    learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
 
     # Create model with these params
-    config = TrainConfig()
     config.d_model = d_model
     config.num_layers = num_layers
     config.num_heads = num_heads
@@ -40,24 +43,40 @@ def objective(trial):
 
     # Track losses for plotting
     losses = []
+    similiarity_scores = []
 
     # Train and evaluate
-    t_losses, params = train_and_evaluate(config, losses)  # Modify to return `params`
+    t_losses, params, t_memory_retrieval_scores, state, memory = train_and_evaluate(config, losses, similiarity_scores)
 
-    # Save model parameters after each trial
-    with open(f"tms_params_trial_{trial.number}.pkl", "wb") as f:
+    # Save model parameters, state, and memory after each trial
+    trial_number = trial.number
+    with open(f"TMS_block/tms_params_trial_{trial_number}.pkl", "wb") as f:
         pickle.dump(params, f)
-    print(f"[INFO] Model parameters saved for trial {trial.number}")
+    with open(f"TMS_block/tms_state_trial_{trial_number}.pkl", "wb") as f:
+        pickle.dump(state, f)
+    with open(f"TMS_block/memory_bank_trial_{trial_number}.pkl", "wb") as f:
+        pickle.dump(memory, f)
+    print(f"[INFO] Saved params, state, and memory for trial {trial_number}")
 
     # Save loss plot for each trial
-    plt.plot(t_losses, label=f"Trial {trial.number}")
+    plt.plot(t_losses, label=f"Trial {trial_number}")
     plt.xlabel("Steps")
     plt.ylabel("Loss")
     plt.grid(True)
-    plt.title(f"TMS Training Loss Trial - {trial.number}")
+    plt.title(f"TMS Training Loss Trial - {trial_number}")
     plt.legend()
-    plt.savefig(f"tms_loss_trial_{trial.number}.png")
-    print(f"[INFO] Loss plot saved for trial {trial.number}")
+    plt.savefig(f"TMS_block/tms_loss_trial_{trial_number}.png")
+    plt.close()
+    print(f"[INFO] Loss plot saved for trial {trial_number}")
+
+    plt.plot(t_memory_retrieval_scores, label=f"Memory Similarity {trial_number}")
+    plt.xlabel("Training Steps")
+    plt.ylabel("Memory Retrieval Score")
+    plt.title(f"Memory Retrieval Similarity Over Time Trial - {trial_number}")
+    plt.legend()
+    plt.savefig(f"TMS_block/memory_retrieval_similarity_{trial_number}.png")
+    plt.close()
+    print(f"[INFO] Memory retrieval similarity plot saved as memory_retrieval_similarity_{trial_number}.png")
 
     return min(t_losses)
 
@@ -72,9 +91,13 @@ if __name__ == "__main__":
     # Load best trial number
     best_trial_num = study.best_trial.number
 
-    # Rename best model and loss plot for easy access
-    os.rename(f"tms_params_trial_{best_trial_num}.pkl", "tms_best_params.pkl")
-    os.rename(f"tms_loss_trial_{best_trial_num}.png", "tms_best_loss.png")
+    # Rename best model, state, memory, and loss plot for easy access
+    os.rename(f"TMS_block/tms_params_trial_{best_trial_num}.pkl", "TMS_block/tms_best_params.pkl")
+    os.rename(f"TMS_block/tms_state_trial_{best_trial_num}.pkl", "TMS_block/tms_best_state.pkl")
+    os.rename(f"TMS_block/memory_bank_trial_{best_trial_num}.pkl", "TMS_block/memory_bank.pkl")
+    os.rename(f"TMS_block/tms_loss_trial_{best_trial_num}.png", "TMS_block/tms_best_loss.png")
 
-    print(f"[INFO] Best model parameters saved as tms_best_params.pkl")
-    print(f"[INFO] Best loss plot saved as tms_best_loss.png")
+    print(f"[INFO] Best model parameters saved as TMS_block/tms_best_params.pkl")
+    print(f"[INFO] Best state saved as TMS_block/tms_best_state.pkl")
+    print(f"[INFO] Best memory bank saved as TMS_block/memory_bank.pkl")
+    print(f"[INFO] Best loss plot saved as TMS_block/tms_best_loss.png")
