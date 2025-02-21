@@ -11,7 +11,7 @@ class MemoryBank:
         self.memory_size = memory_size
         self.embedding_dim = embedding_dim
         self.retrieval_k = retrieval_k
-        self.index = faiss.IndexFlatL2(embedding_dim)  # FAISS L2 Index
+        self.index = faiss.IndexFlatL2(embedding_dim)
         self.values = []
 
     def store(self, keys, values):
@@ -65,3 +65,39 @@ class MemoryBank:
         retrieved_values = retrieved_values / norms  
         retrieved_values = np.mean(retrieved_values, axis=1)  
         return retrieved_values
+    
+class ShortTermMemory:
+    def __init__(self, buffer_size: int, embedding_dim: int):
+        """Short-Term Memory as a per-batch buffer."""
+        self.buffer_size = buffer_size  
+        self.embedding_dim = embedding_dim
+        self.buffer = []  
+
+    def store(self, keys, values):
+        """Store embeddings for the current batch, resetting each call."""
+        keys = jax.block_until_ready(keys)
+        values = jax.block_until_ready(values)
+        keys_np = np.asarray(jax.device_get(keys), dtype=np.float32)
+        values_np = np.asarray(jax.device_get(values), dtype=np.float32)
+
+        if keys_np.ndim == 1:
+            keys_np = keys_np.reshape(1, -1)
+        if values_np.ndim == 1:
+            values_np = values_np.reshape(1, -1)
+
+        assert keys_np.shape[1] == self.embedding_dim
+        self.buffer = list(values_np[:self.buffer_size])  
+
+    def retrieve(self, queries_np, epsilon=1e-8):
+        """Retrieve all embeddings from the current batch buffer."""
+        if queries_np.ndim == 1:
+            queries_np = queries_np.reshape(1, -1)
+        assert queries_np.shape[1] == self.embedding_dim
+
+        if not self.buffer:
+            return np.zeros((queries_np.shape[0], self.embedding_dim), dtype=np.float32)
+
+        retrieved_values = np.mean(self.buffer, axis=0, keepdims=True)  
+        norms = np.linalg.norm(retrieved_values, axis=-1, keepdims=True) + epsilon  
+        retrieved_values = retrieved_values / norms  
+        return np.repeat(retrieved_values, queries_np.shape[0], axis=0)
