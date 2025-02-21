@@ -17,7 +17,7 @@ class TMSModel(hk.Module):
     Transformer + MoE + Self-Attention (TMS) Model
     """
     def __init__(self, d_model: int, num_heads: int, num_layers: int, vocab_size: int, max_seq_length: int, 
-                 moe_experts: int, moe_top_k: int, memory_size: int, retrieval_k: int, ltm_weight: float, stm_weight: float, name=None):
+                 moe_experts: int, moe_top_k: int, memory_size: int, retrieval_k: int, ltm_weight: float, stm_weight: float, mtm_weight: float, name=None):
         super().__init__(name=name)
         self.embedding = hk.Embed(vocab_size, d_model)
         self.position_enc = hk.Embed(max_seq_length, d_model)
@@ -28,35 +28,43 @@ class TMSModel(hk.Module):
         self.memory_to_logits = hk.Linear(vocab_size)
         self.memory_projection_ltm = hk.Linear(d_model)
         self.memory_projection_stm = hk.Linear(d_model)
+        self.memory_projection_mtm = hk.Linear(d_model)
         self.norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         self.proj = hk.Linear(vocab_size)
         self.ltm_weight = ltm_weight  
         self.stm_weight = stm_weight
+        self.mtm_weight = mtm_weight
 
-    def __call__(self, inputs, rng=None, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None):
+    def __call__(self, inputs, rng=None, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
         inputs = jnp.asarray(inputs, dtype=jnp.int32)
         x = self.embedding(inputs) + self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))
 
+        # ** dummy_memory is used to initialize the memory projection layers [Not to be used anywhere else] ** 
+        dummy_memory = jnp.zeros((inputs.shape[0], 1, self.embedding.embed_dim), dtype=jnp.float32)
+    
         # Handle LTM
-        if retrieved_memory_ltm is None:
-            dummy_memory = jnp.zeros((inputs.shape[0], 1, self.embedding.embed_dim), dtype=jnp.float32)
+        if retrieved_memory_ltm is not None:
+            retrieved_memory_ltm = self.memory_projection_ltm(jnp.repeat(jnp.expand_dims(retrieved_memory_ltm, axis=1), x.shape[1], axis=1))
+            x += self.ltm_weight * retrieved_memory_ltm
+            memory_logits = self.memory_to_logits(retrieved_memory_ltm)
+        else:
             _ = self.memory_projection_ltm(dummy_memory)
-            _ = self.memory_projection_stm(dummy_memory)
             _ = self.memory_to_logits(dummy_memory)
             memory_logits = None
-        else:
-            retrieved_memory_ltm = jnp.expand_dims(retrieved_memory_ltm, axis=1)
-            retrieved_memory_ltm = jnp.repeat(retrieved_memory_ltm, x.shape[1], axis=1)
-            retrieved_memory_ltm = self.memory_projection_ltm(retrieved_memory_ltm)
-            x += self.ltm_weight * retrieved_memory_ltm  
-            memory_logits = self.memory_to_logits(retrieved_memory_ltm)
 
         # Handle STM
         if retrieved_memory_stm is not None:
-            retrieved_memory_stm = jnp.expand_dims(retrieved_memory_stm, axis=1)
-            retrieved_memory_stm = jnp.repeat(retrieved_memory_stm, x.shape[1], axis=1)
-            retrieved_memory_stm = self.memory_projection_stm(retrieved_memory_stm)
-            x += self.stm_weight * retrieved_memory_stm  
+            retrieved_memory_stm = self.memory_projection_stm(jnp.repeat(jnp.expand_dims(retrieved_memory_stm, axis=1), x.shape[1], axis=1))
+            x += self.stm_weight * retrieved_memory_stm 
+        else:
+            _ = self.memory_projection_stm(dummy_memory)
+
+        # Handle MTM
+        if retrieved_memory_mtm is not None:
+            retrieved_memory_mtm = self.memory_projection_mtm(jnp.repeat(jnp.expand_dims(retrieved_memory_mtm, axis=1), x.shape[1], axis=1))
+            x += self.mtm_weight * retrieved_memory_mtm
+        else:
+            _ = self.memory_projection_mtm(dummy_memory)
 
         x, attn_weights_self = self.self_attention(inputs, return_attention=True)
         x, attn_weights_transformer = self.transformer(x, rng, return_attention=True)
