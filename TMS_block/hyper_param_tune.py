@@ -83,7 +83,7 @@ def objective(trial):
 if __name__ == "__main__":
     # Run optimization
     study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=30)  # Try 30 different sets of hyperparameters
+    study.optimize(objective, n_trials=30)
 
     # Print best parameters
     print("Best hyperparameters:", study.best_params)
