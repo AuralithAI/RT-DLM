@@ -14,7 +14,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from train_config import TrainConfig
 from model_tms import TMSModel
 from data_utils import DataProcessor, load_data
-from memory_bank import MemoryBank
 
 # Load configuration
 config = TrainConfig()
@@ -24,13 +23,12 @@ rng = jax.random.PRNGKey(42)
 val_dataset_path = "data/validation_data.txt"
 processor = DataProcessor(vocab_size=config.vocab_size)
 raw_texts_val = load_data(val_dataset_path)
-
 tokenized_texts_val = [processor.tokenize(text) for text in raw_texts_val]
 inputs_val = jnp.array([processor.pad_sequence(tokens, config.max_seq_length) for tokens in tokenized_texts_val], dtype=jnp.int32)
 targets_val = jnp.array(inputs_val, dtype=jnp.int32)
 
 # Load trained model
-def forward_fn(inputs, return_attention=False, retrieved_memory=None):
+def forward_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
     model = TMSModel(
         d_model=config.d_model,
         num_heads=config.num_heads,
@@ -40,33 +38,46 @@ def forward_fn(inputs, return_attention=False, retrieved_memory=None):
         moe_experts=config.moe_experts,
         moe_top_k=config.moe_top_k,
         memory_size=config.memory_size,
-        retrieval_k=config.retrieval_k
+        retrieval_k=config.retrieval_k,
+        ltm_weight=config.ltm_weight,
+        stm_weight=config.stm_weight,
+        mtm_weight=config.mtm_weight
     )
-    return model(inputs, return_attention=return_attention, retrieved_memory=retrieved_memory)
+    return model(inputs, return_attention=return_attention, retrieved_memory_ltm=retrieved_memory_ltm, 
+                 retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm)
 
 model = hk.transform_with_state(forward_fn)
 
-# Load trained parameters and state
+# Load trained parameters, state, and memory banks
 params_path = "TMS_block/tms_best_params.pkl"
 state_path = "TMS_block/tms_best_state.pkl"
-memory_path = "TMS_block/memory_bank.pkl"
+ltm_path = "TMS_block/ltm_bank.pkl"
+stm_path = "TMS_block/stm_bank.pkl"
+mtm_path = "TMS_block/mtm_bank.pkl"
+
 with open(params_path, "rb") as f:
     params = pickle.load(f)
 with open(state_path, "rb") as f:
     state = pickle.load(f)
-with open(memory_path, "rb") as f:
-    memory = pickle.load(f)
-print(f"[INFO] Loaded trained parameters from {params_path}, state from {state_path}, and memory from {memory_path}")
+with open(ltm_path, "rb") as f:
+    ltm = pickle.load(f)
+with open(stm_path, "rb") as f:
+    stm = pickle.load(f)
+with open(mtm_path, "rb") as f:
+    mtm = pickle.load(f)
+print(f"[INFO] Loaded trained parameters from {params_path}, state from {state_path}, and memory banks from {ltm_path}, {stm_path}, {mtm_path}")
 
-# Loss computation function with memory
+# Loss computation function with all memory banks
 def compute_loss(params, state, rng, inputs, targets):
-    # Get embeddings for retrieval
-    embeddings = jnp.mean(model.apply(params, state, rng, inputs, return_attention=False)[0], axis=1)  # [batch_size, vocab_size]
-    retrieved_memory_np = memory.retrieve(np.asarray(jax.device_get(embeddings), dtype=np.float32))
-    retrieved_memory = jnp.array(retrieved_memory_np, dtype=jnp.float32)
+    embeddings = jnp.mean(model.apply(params, state, rng, inputs, return_attention=False)[0], axis=1)
+    query_key_np = np.asarray(jax.device_get(embeddings), dtype=np.float32)
+    ltm_memory = jnp.array(ltm.retrieve(query_key_np), dtype=jnp.float32)
+    stm_memory = jnp.array(stm.retrieve(query_key_np), dtype=jnp.float32)
+    mtm_memory = jnp.array(mtm.retrieve(query_key_np), dtype=jnp.float32)
 
     (logits, attn_weights, expert_indices, aux_loss), new_state = model.apply(
-        params, state, rng, inputs, return_attention=True, retrieved_memory=retrieved_memory
+        params, state, rng, inputs, return_attention=True,
+        retrieved_memory_ltm=ltm_memory, retrieved_memory_stm=stm_memory, retrieved_memory_mtm=mtm_memory
     )
     loss = optax.softmax_cross_entropy_with_integer_labels(logits, targets).mean()
     total_loss = loss + 0.01 * aux_loss
@@ -83,8 +94,8 @@ def validate_model(params, state, rng, inputs, targets):
 
         step_rng, rng = jax.random.split(rng)
         val_loss, new_state = compute_loss(params, state, step_rng, batch_inputs, batch_targets)
-        total_val_loss.append(float(val_loss))  # Convert to float for plotting
-        state = new_state  # Update state
+        total_val_loss.append(float(val_loss))
+        state = new_state
 
     avg_val_loss = np.mean(total_val_loss)
     print(f"[INFO] Validation Loss: {avg_val_loss:.4f}")
