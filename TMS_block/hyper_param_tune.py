@@ -3,7 +3,6 @@ import sys
 import jax
 import optuna
 import pickle
-import numpy as np
 import matplotlib.pyplot as plt
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -32,13 +31,18 @@ def objective(trial):
     # Tune Training Hyperparameters
     batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 64])
     learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
+    warmup_steps = trial.suggest_int("warmup_steps", 1000, 10000, step=1000)
+    decay_steps = trial.suggest_int("decay_steps", 50000, 300000, step=50000)
 
     # Tune Memory Bank Parameters
     memory_size = trial.suggest_categorical("memory_size", [1000, 5000, 10000, 20000])
     retrieval_k = trial.suggest_categorical("retrieval_k", [1, 3, 5, 7])
-    buffer_size = trial.suggest_categorical("buffer_size", [batch_size, 64, 2 * batch_size])
+    stm_buffer_size = trial.suggest_categorical("stm_buffer_size", [batch_size, 64, 2 * batch_size])
+    mtm_buffer_size = trial.suggest_categorical("mtm_buffer_size", [500, 1000, 2000, 4000])
+    retention_steps = trial.suggest_int("retention_steps", 50, 200, step=50)
     ltm_weight = trial.suggest_float("ltm_weight", 0.0, 1.0)
     stm_weight = trial.suggest_float("stm_weight", 0.0, 1.0)
+    mtm_weight = trial.suggest_float("mtm_weight", 0.0, 1.0)
 
     # Create model with these params
     config = TrainConfig()
@@ -49,33 +53,42 @@ def objective(trial):
     config.moe_top_k = moe_top_k
     config.batch_size = batch_size
     config.learning_rate = learning_rate
+    config.warmup_steps = warmup_steps
+    config.decay_steps = decay_steps
     config.memory_size = memory_size
     config.retrieval_k = retrieval_k
-    config.buffer_size = buffer_size
+    config.stm_buffer_size = stm_buffer_size
+    config.mtm_buffer_size = mtm_buffer_size
+    config.retention_steps = retention_steps
     config.ltm_weight = ltm_weight
     config.stm_weight = stm_weight
+    config.mtm_weight = mtm_weight
 
     # Apply JAX/XLA config
     set_jax_config(config)
 
-    # Track losses for plotting
+    # Track losses and similarity scores
     losses = []
     similarity_scores = []
 
     # Train and evaluate
-    t_losses, params, t_memory_retrieval_scores, state, memory = train_and_evaluate(config, losses, similarity_scores)
+    t_losses, params, t_similarity_scores, state, ltm, stm, mtm = train_and_evaluate(config, losses, similarity_scores)
 
-    # Save model parameters, state, and memory after each trial
+    # Save model parameters, state, and all memory banks
     trial_number = trial.number
     with open(f"TMS_block/tms_params_trial_{trial_number}.pkl", "wb") as f:
         pickle.dump(params, f)
     with open(f"TMS_block/tms_state_trial_{trial_number}.pkl", "wb") as f:
         pickle.dump(state, f)
-    with open(f"TMS_block/memory_bank_trial_{trial_number}.pkl", "wb") as f:
-        pickle.dump(memory, f)
-    print(f"[INFO] Saved params, state, and memory for trial {trial_number}")
+    with open(f"TMS_block/ltm_bank_trial_{trial_number}.pkl", "wb") as f:
+        pickle.dump(ltm, f)
+    with open(f"TMS_block/stm_bank_trial_{trial_number}.pkl", "wb") as f:
+        pickle.dump(stm, f)
+    with open(f"TMS_block/mtm_bank_trial_{trial_number}.pkl", "wb") as f:
+        pickle.dump(mtm, f)
+    print(f"[INFO] Saved params, state, and all memory banks for trial {trial_number}")
 
-    # Save loss plot for each trial
+    # Save loss and similarity plots
     plt.plot(t_losses, label=f"Trial {trial_number}")
     plt.xlabel("Steps")
     plt.ylabel("Loss")
@@ -86,7 +99,7 @@ def objective(trial):
     plt.close()
     print(f"[INFO] Loss plot saved for trial {trial_number}")
 
-    plt.plot(t_memory_retrieval_scores, label=f"Memory Similarity {trial_number}")
+    plt.plot(t_similarity_scores, label=f"Memory Similarity {trial_number}")
     plt.xlabel("Training Steps")
     plt.ylabel("Memory Retrieval Score")
     plt.title(f"Memory Retrieval Similarity Over Time Trial - {trial_number}")
@@ -98,23 +111,22 @@ def objective(trial):
     return min(t_losses)
 
 if __name__ == "__main__":
-    # Run optimization
     study = optuna.create_study(direction="minimize")
     study.optimize(objective, n_trials=30)
 
-    # Print best parameters
     print("Best hyperparameters:", study.best_params)
-    
-    # Load best trial number
     best_trial_num = study.best_trial.number
 
-    # Rename best model, state, memory, and loss plot
     os.rename(f"TMS_block/tms_params_trial_{best_trial_num}.pkl", "TMS_block/tms_best_params.pkl")
     os.rename(f"TMS_block/tms_state_trial_{best_trial_num}.pkl", "TMS_block/tms_best_state.pkl")
-    os.rename(f"TMS_block/memory_bank_trial_{best_trial_num}.pkl", "TMS_block/memory_bank.pkl")
+    os.rename(f"TMS_block/ltm_bank_trial_{best_trial_num}.pkl", "TMS_block/ltm_bank.pkl")
+    os.rename(f"TMS_block/stm_bank_trial_{best_trial_num}.pkl", "TMS_block/stm_bank.pkl")
+    os.rename(f"TMS_block/mtm_bank_trial_{best_trial_num}.pkl", "TMS_block/mtm_bank.pkl")
     os.rename(f"TMS_block/tms_loss_trial_{best_trial_num}.png", "TMS_block/tms_best_loss.png")
 
     print(f"[INFO] Best model parameters saved as TMS_block/tms_best_params.pkl")
     print(f"[INFO] Best state saved as TMS_block/tms_best_state.pkl")
-    print(f"[INFO] Best memory bank saved as TMS_block/memory_bank.pkl")
+    print(f"[INFO] Best LTM bank saved as TMS_block/ltm_bank.pkl")
+    print(f"[INFO] Best STM bank saved as TMS_block/stm_bank.pkl")
+    print(f"[INFO] Best MTM bank saved as TMS_block/mtm_bank.pkl")
     print(f"[INFO] Best loss plot saved as TMS_block/tms_best_loss.png")
