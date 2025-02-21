@@ -10,32 +10,38 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from train_config import TrainConfig
 from train_tms import train_and_evaluate
 
-# Load configuration globally.
-config = TrainConfig()
-
 # Set JAX configurations
-jax.config.update("jax_platform_name", "gpu")
-jax.config.update("jax_enable_x64", False)
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.6"
-os.environ["XLA_FLAGS"] = f"--xla_gpu_force_compilation_parallelism={config.xla_gpu_parallelism}"
-print("[INFO] JAX device: ", jax.devices())
+def set_jax_config(config):
+    jax.config.update("jax_platform_name", "gpu")
+    jax.config.update("jax_enable_x64", False)
+    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.6"
+    os.environ["XLA_FLAGS"] = f"--xla_gpu_force_compilation_parallelism={config.xla_gpu_parallelism}"
+    print("[INFO] JAX device: ", jax.devices())
 
 def objective(trial):
-    # Tune parameters
+    # Tune Model Architecture Parameters
     d_model = trial.suggest_categorical("d_model", [256, 384, 512])
     valid_heads = {256: [4, 8], 384: [4, 6, 8, 12], 512: [4, 8]}
     num_heads = trial.suggest_categorical("num_heads", valid_heads[d_model])
     num_layers = trial.suggest_int("num_layers", 6, 12)
     moe_experts = trial.suggest_categorical("moe_experts", [4, 8, 16])
     moe_top_k = trial.suggest_categorical("moe_top_k", [1, 2, 3])
+
+    # Tune Training Hyperparameters
     batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 64])
     learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
+
+    # Tune Memory Bank Parameters
     memory_size = trial.suggest_categorical("memory_size", [1000, 5000, 10000, 20000])
     retrieval_k = trial.suggest_categorical("retrieval_k", [1, 3, 5, 7])
+    buffer_size = trial.suggest_categorical("buffer_size", [batch_size, 64, 2 * batch_size])  # Dynamic based on batch_size and max_seq_length=64
+    ltm_weight = trial.suggest_float("ltm_weight", 0.0, 1.0)
+    stm_weight = trial.suggest_float("stm_weight", 0.0, 1.0)
 
     # Create model with these params
+    config = TrainConfig()
     config.d_model = d_model
     config.num_layers = num_layers
     config.num_heads = num_heads
@@ -45,14 +51,19 @@ def objective(trial):
     config.learning_rate = learning_rate
     config.memory_size = memory_size
     config.retrieval_k = retrieval_k
+    config.buffer_size = buffer_size
+    config.ltm_weight = ltm_weight
+    config.stm_weight = stm_weight
 
+    # Apply JAX/XLA config
+    set_jax_config(config)
 
     # Track losses for plotting
     losses = []
-    similiarity_scores = []
+    similarity_scores = []
 
     # Train and evaluate
-    t_losses, params, t_memory_retrieval_scores, state, memory = train_and_evaluate(config, losses, similiarity_scores)
+    t_losses, params, t_memory_retrieval_scores, state, memory = train_and_evaluate(config, losses, similarity_scores)
 
     # Save model parameters, state, and memory after each trial
     trial_number = trial.number
@@ -97,7 +108,7 @@ if __name__ == "__main__":
     # Load best trial number
     best_trial_num = study.best_trial.number
 
-    # Rename best model, state, memory, and loss plot for easy access
+    # Rename best model, state, memory, and loss plot
     os.rename(f"TMS_block/tms_params_trial_{best_trial_num}.pkl", "TMS_block/tms_best_params.pkl")
     os.rename(f"TMS_block/tms_state_trial_{best_trial_num}.pkl", "TMS_block/tms_best_state.pkl")
     os.rename(f"TMS_block/memory_bank_trial_{best_trial_num}.pkl", "TMS_block/memory_bank.pkl")
