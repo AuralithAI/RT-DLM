@@ -17,67 +17,50 @@ class TMSModel(hk.Module):
     Transformer + MoE + Self-Attention (TMS) Model
     """
     def __init__(self, d_model: int, num_heads: int, num_layers: int, vocab_size: int, max_seq_length: int, 
-                 moe_experts: int, moe_top_k: int, memory_size: int, retrieval_k: int, name=None):
+                 moe_experts: int, moe_top_k: int, memory_size: int, retrieval_k: int, ltm_weight: float, stm_weight: float, name=None):
         super().__init__(name=name)
-
-        # Token embedding and positional encoding
         self.embedding = hk.Embed(vocab_size, d_model)
         self.position_enc = hk.Embed(max_seq_length, d_model)
-
-        # Self-Attention Model
         self.self_attention = SelfAttentionModel(d_model, num_heads, vocab_size, max_seq_length)
-
-        # Transformer Model
         self.transformer = TransformerModel(d_model, num_heads, num_layers, vocab_size, max_seq_length)
-
-        # Sparse Mixture of Experts (MoE)
         self.moe = SparseMoE(d_model, moe_experts, moe_top_k, expert_capacity=3)
-
-        # Memory Bank (FAISS-based)
         self.memory = MemoryBank(memory_size, d_model, retrieval_k)
-
-        # Projection Layer for Retrieved Memory
-        self.memory_projection = hk.Linear(d_model)
         self.memory_to_logits = hk.Linear(vocab_size)
-
-        # Final normalization and projection
+        self.memory_projection_ltm = hk.Linear(d_model)
+        self.memory_projection_stm = hk.Linear(d_model)
         self.norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         self.proj = hk.Linear(vocab_size)
+        self.ltm_weight = ltm_weight  
+        self.stm_weight = stm_weight
 
-    def memory_projection_forward(self, retrieved_memory):
-        """Applies the memory projection layer to retrieved memory embeddings."""
-        assert retrieved_memory.ndim == 3, f"Expected shape (batch, seq, d_model), got {retrieved_memory.shape}"
-        return self.memory_projection(retrieved_memory)
-
-    def __call__(self, inputs, rng=None, return_attention=False, retrieved_memory=None):
+    def __call__(self, inputs, rng=None, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None):
         inputs = jnp.asarray(inputs, dtype=jnp.int32)
-
-        # Embedding + Positional Encoding
         x = self.embedding(inputs) + self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))
 
-        # Apply retrieved memory embeddings to input
-        if retrieved_memory is None:
+        # Handle LTM
+        if retrieved_memory_ltm is None:
             dummy_memory = jnp.zeros((inputs.shape[0], 1, self.embedding.embed_dim), dtype=jnp.float32)
-            _ = self.memory_projection(dummy_memory)
+            _ = self.memory_projection_ltm(dummy_memory)
+            _ = self.memory_projection_stm(dummy_memory)
             _ = self.memory_to_logits(dummy_memory)
-            memory_logits = None  
+            memory_logits = None
         else:
-            retrieved_memory = jnp.expand_dims(retrieved_memory, axis=1)  
-            retrieved_memory = jnp.repeat(retrieved_memory, x.shape[1], axis=1)  
-            retrieved_memory = self.memory_projection(retrieved_memory)  
-            x += retrieved_memory  
-            memory_logits = self.memory_to_logits(retrieved_memory)  
+            retrieved_memory_ltm = jnp.expand_dims(retrieved_memory_ltm, axis=1)
+            retrieved_memory_ltm = jnp.repeat(retrieved_memory_ltm, x.shape[1], axis=1)
+            retrieved_memory_ltm = self.memory_projection_ltm(retrieved_memory_ltm)
+            x += self.ltm_weight * retrieved_memory_ltm  
+            memory_logits = self.memory_to_logits(retrieved_memory_ltm)
 
-        # Apply Self-Attention
+        # Handle STM
+        if retrieved_memory_stm is not None:
+            retrieved_memory_stm = jnp.expand_dims(retrieved_memory_stm, axis=1)
+            retrieved_memory_stm = jnp.repeat(retrieved_memory_stm, x.shape[1], axis=1)
+            retrieved_memory_stm = self.memory_projection_stm(retrieved_memory_stm)
+            x += self.stm_weight * retrieved_memory_stm  
+
         x, attn_weights_self = self.self_attention(inputs, return_attention=True)
-
-        # Apply Transformer Model
         x, attn_weights_transformer = self.transformer(x, rng, return_attention=True)
-
-        # Apply Sparse MoE
         x, top_k_expert_indices, aux_loss = self.moe(x)
-
-        # Final Normalization and Projection
         x = self.norm(x)
         logits = self.proj(x)
 
@@ -85,5 +68,5 @@ class TMSModel(hk.Module):
             logits += memory_logits
 
         if return_attention:
-             return logits, (attn_weights_self, attn_weights_transformer), top_k_expert_indices, aux_loss
+            return logits, (attn_weights_self, attn_weights_transformer), top_k_expert_indices, aux_loss
         return logits
