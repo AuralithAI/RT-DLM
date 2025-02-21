@@ -25,12 +25,15 @@ print("[INFO] JAX device: ", jax.devices())
 def objective(trial):
     # Tune parameters
     d_model = trial.suggest_categorical("d_model", [256, 384, 512])
+    valid_heads = {256: [4, 8], 384: [4, 6, 8, 12], 512: [4, 8]}
+    num_heads = trial.suggest_categorical("num_heads", valid_heads[d_model])
     num_layers = trial.suggest_int("num_layers", 6, 12)
-    num_heads = trial.suggest_categorical("num_heads", [4, 8, 12])  
     moe_experts = trial.suggest_categorical("moe_experts", [4, 8, 16])
     moe_top_k = trial.suggest_categorical("moe_top_k", [1, 2, 3])
     batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 64])
     learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
+    memory_size = trial.suggest_categorical("memory_size", [1000, 5000, 10000, 20000])
+    retrieval_k = trial.suggest_categorical("retrieval_k", [1, 3, 5, 7])
 
     # Create model with these params
     config.d_model = d_model
@@ -40,6 +43,9 @@ def objective(trial):
     config.moe_top_k = moe_top_k
     config.batch_size = batch_size
     config.learning_rate = learning_rate
+    config.memory_size = memory_size
+    config.retrieval_k = retrieval_k
+
 
     # Track losses for plotting
     losses = []
