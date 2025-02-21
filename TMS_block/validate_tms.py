@@ -14,6 +14,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from train_config import TrainConfig
 from model_tms import TMSModel
 from data_utils import DataProcessor, load_data
+from memory_bank import MemoryBank
 
 # Load configuration
 config = TrainConfig()
@@ -24,15 +25,12 @@ val_dataset_path = "data/validation_data.txt"
 processor = DataProcessor(vocab_size=config.vocab_size)
 raw_texts_val = load_data(val_dataset_path)
 
-# Convert texts to token IDs using SentencePiece
 tokenized_texts_val = [processor.tokenize(text) for text in raw_texts_val]
-
-# Pad sequences
 inputs_val = jnp.array([processor.pad_sequence(tokens, config.max_seq_length) for tokens in tokenized_texts_val], dtype=jnp.int32)
 targets_val = jnp.array(inputs_val, dtype=jnp.int32)
 
 # Load trained model
-def forward_fn(inputs, return_attention=False):
+def forward_fn(inputs, return_attention=False, retrieved_memory=None):
     model = TMSModel(
         d_model=config.d_model,
         num_heads=config.num_heads,
@@ -40,29 +38,42 @@ def forward_fn(inputs, return_attention=False):
         vocab_size=config.vocab_size,
         max_seq_length=config.max_seq_length,
         moe_experts=config.moe_experts,
-        moe_top_k=config.moe_top_k
+        moe_top_k=config.moe_top_k,
+        memory_size=config.memory_size,
+        retrieval_k=config.retrieval_k
     )
-    return model(inputs, return_attention=return_attention)
+    return model(inputs, return_attention=return_attention, retrieved_memory=retrieved_memory)
 
-model = hk.transform(forward_fn)
+model = hk.transform_with_state(forward_fn)
 
-# Load trained parameters
-params_path = "TMS_block/tms_params.pkl"
+# Load trained parameters and state
+params_path = "TMS_block/tms_best_params.pkl"
+state_path = "TMS_block/tms_best_state.pkl"
+memory_path = "TMS_block/memory_bank.pkl"
 with open(params_path, "rb") as f:
     params = pickle.load(f)
-print(f"[INFO] Loaded trained parameters from {params_path}")
+with open(state_path, "rb") as f:
+    state = pickle.load(f)
+with open(memory_path, "rb") as f:
+    memory = pickle.load(f)
+print(f"[INFO] Loaded trained parameters from {params_path}, state from {state_path}, and memory from {memory_path}")
 
-# Loss computation function
-def compute_loss(params, rng, inputs, targets):
-    logits, attn_weights, expert_indices, aux_loss = model.apply(params, rng, inputs, return_attention=True)
-    
+# Loss computation function with memory
+def compute_loss(params, state, rng, inputs, targets):
+    # Get embeddings for retrieval
+    embeddings = jnp.mean(model.apply(params, state, rng, inputs, return_attention=False)[0], axis=1)  # [batch_size, vocab_size]
+    retrieved_memory_np = memory.retrieve(np.asarray(jax.device_get(embeddings), dtype=np.float32))
+    retrieved_memory = jnp.array(retrieved_memory_np, dtype=jnp.float32)
+
+    (logits, attn_weights, expert_indices, aux_loss), new_state = model.apply(
+        params, state, rng, inputs, return_attention=True, retrieved_memory=retrieved_memory
+    )
     loss = optax.softmax_cross_entropy_with_integer_labels(logits, targets).mean()
-    total_loss = loss + 0.01 * aux_loss  
-    
-    return total_loss
+    total_loss = loss + 0.01 * aux_loss
+    return total_loss, new_state
 
 # Validation loop
-def validate_model(params, rng, inputs, targets):
+def validate_model(params, state, rng, inputs, targets):
     total_val_loss = []
 
     for step in range(len(inputs) // config.batch_size):
@@ -71,24 +82,24 @@ def validate_model(params, rng, inputs, targets):
         batch_inputs, batch_targets = inputs[batch_start:batch_end], targets[batch_start:batch_end]
 
         step_rng, rng = jax.random.split(rng)
-        val_loss = compute_loss(params, step_rng, batch_inputs, batch_targets)
-        
-        total_val_loss.append(val_loss)
+        val_loss, new_state = compute_loss(params, state, step_rng, batch_inputs, batch_targets)
+        total_val_loss.append(float(val_loss))  # Convert to float for plotting
+        state = new_state  # Update state
 
     avg_val_loss = np.mean(total_val_loss)
     print(f"[INFO] Validation Loss: {avg_val_loss:.4f}")
-
-    return avg_val_loss
+    return avg_val_loss, total_val_loss
 
 # Run validation
-val_loss = validate_model(params, rng, inputs_val, targets_val)
+avg_val_loss, val_losses = validate_model(params, state, rng, inputs_val, targets_val)
 
 # Plot validation loss
-plt.axhline(y=val_loss, linestyle="--", color="red", label="Validation Loss")
-plt.xlabel("Epochs")
+plt.plot(val_losses, label="Validation Loss per Batch")
+plt.axhline(y=avg_val_loss, linestyle="--", color="red", label=f"Avg Validation Loss: {avg_val_loss:.4f}")
+plt.xlabel("Batch Step")
 plt.ylabel("Loss")
 plt.legend()
 plt.grid(True)
-plt.title("Validation Loss")
+plt.title("Validation Loss Across Batches")
 plt.savefig("data/validation_loss.png")
 print("[INFO] Validation loss plot saved as data/validation_loss.png")
