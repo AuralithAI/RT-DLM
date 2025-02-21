@@ -1,0 +1,67 @@
+import faiss
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+class MemoryBank:
+    def __init__(self, memory_size: int, embedding_dim: int, retrieval_k: int):
+        """
+        Memory Bank using FAISS for efficient retrieval.
+        """
+        self.memory_size = memory_size
+        self.embedding_dim = embedding_dim
+        self.retrieval_k = retrieval_k
+        self.index = faiss.IndexFlatL2(embedding_dim)  # FAISS L2 Index
+        self.values = []
+
+    def store(self, keys, values):
+        """
+        Stores key-value pairs in the memory bank.
+        :param keys: Batch of mean-pooled embeddings (shape: [batch_size, embedding_dim])
+        :param values: Corresponding transformer activations (shape: [batch_size, embedding_dim])
+        """
+        # **Ensure computation is complete before conversion**
+        keys = jax.block_until_ready(keys)
+        values = jax.block_until_ready(values)
+
+        # **Detach from JAX before passing to FAISS**
+        keys_np = np.asarray(jax.device_get(keys), dtype=np.float32)
+        values_np = np.asarray(jax.device_get(values), dtype=np.float32)
+
+        # **Ensure 2D shape**
+        if keys_np.ndim == 1:
+            keys_np = keys_np.reshape(1, -1)
+        if values_np.ndim == 1:
+            values_np = values_np.reshape(1, -1)
+
+        assert keys_np.shape[1] == self.embedding_dim, f"Expected dim {self.embedding_dim}, got {keys_np.shape[1]}"
+        if len(self.values) + len(keys_np) > self.memory_size:
+            remove_count = len(self.values) + len(keys_np) - self.memory_size
+            self.values = self.values[remove_count:]
+            self.index.reset()
+            self.index.add(np.asarray(self.values, dtype=np.float32))
+
+        self.values.extend(values_np)
+        self.index.add(keys_np)
+
+    def retrieve(self, queries_np, epsilon=1e-8):
+        """
+        Retrieves closest memory values.
+        :param queries: Query embeddings (shape: [batch_size, embedding_dim])
+        :return: Retrieved memory activations (shape: [batch_size, embedding_dim])
+        """
+        if queries_np.ndim == 1:
+            queries_np = queries_np.reshape(1, -1)
+        assert queries_np.shape[1] == self.embedding_dim, f"Expected dim {self.embedding_dim}, got {queries_np.shape[1]}"
+
+        if self.index.ntotal == 0:
+            return np.zeros((queries_np.shape[0], self.embedding_dim), dtype=np.float32)
+
+        distances, indices = self.index.search(queries_np, self.retrieval_k)  
+        retrieved_values = np.array([self.values[idx] for idx in indices.flatten()]).reshape(
+            indices.shape[0], indices.shape[1], self.embedding_dim
+        )
+        norms = np.linalg.norm(retrieved_values, axis=-1, keepdims=True) + epsilon 
+        retrieved_values = retrieved_values / norms  
+        retrieved_values = np.mean(retrieved_values, axis=1)  
+        return retrieved_values
