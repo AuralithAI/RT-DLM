@@ -16,6 +16,14 @@ class TrainConfig:
         self.temperature = 1.2          # Temperature for sampling (if applicable)
         self.label_smoothing = 0.1      # Label smoothing factor for loss
 
+        # Optimizer parameters
+        self.warmup_steps = 5000        # Warmup steps for learning rate schedule
+        self.decay_steps = 200000       # Decay steps for cosine decay
+        self.init_lr = 2e-6             # Initial learning rate for warmup
+        self.end_lr = 2e-6              # End learning rate after decay
+        self.weight_decay = 1e-3        # Weight decay for AdamW
+        self.clip_norm = 0.5            # Global norm clipping value
+
         # --- Data Processing Parameters ---
         self.max_seq_length = 64        # Maximum sequence length for input
         self.pad_token_id = 0           # Token ID used for padding
@@ -27,9 +35,12 @@ class TrainConfig:
         # --- Memory Bank Parameters ---
         self.memory_size = 5000         # Size of the long-term memory bank
         self.retrieval_k = 3            # Number of top-k items to retrieve from LTM
-        self.buffer_size = self.batch_size  # Default STM buffer size (tunable)
+        self.stm_buffer_size = self.batch_size  # Default STM buffer size (tunable)
         self.ltm_weight = 0.5           # Weight for long-term memory contribution
         self.stm_weight = 0.5           # Weight for short-term memory contribution
+        self.mtm_weight = 0.5           # Weight for mid-term memory contribution
+        self.mtm_buffer_size = 1000     # Size of the mid-term memory buffer
+        self.retention_steps = 100      # Number of steps to retain in mid-term memory
 
         # --- Numerical Stability ---
         self.EPSILON = 1e-8             # Small constant to avoid division by zero
