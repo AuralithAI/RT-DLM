@@ -37,7 +37,7 @@ def objective(trial):
     # Tune Memory Bank Parameters
     memory_size = trial.suggest_categorical("memory_size", [1000, 5000, 10000, 20000])
     retrieval_k = trial.suggest_categorical("retrieval_k", [1, 3, 5, 7])
-    stm_buffer_size = trial.suggest_categorical("stm_buffer_size", [batch_size, 64, 2 * batch_size])
+    stm_buffer_size = trial.suggest_categorical("stm_buffer_size", [8, 16, 32, 64, 128])
     mtm_buffer_size = trial.suggest_categorical("mtm_buffer_size", [500, 1000, 2000, 4000])
     retention_steps = trial.suggest_int("retention_steps", 50, 200, step=50)
     ltm_weight = trial.suggest_float("ltm_weight", 0.0, 1.0)
