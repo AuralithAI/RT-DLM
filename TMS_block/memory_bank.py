@@ -52,19 +52,16 @@ class MemoryBank:
         """
         if queries_np.ndim == 1:
             queries_np = queries_np.reshape(1, -1)
-        assert queries_np.shape[1] == self.embedding_dim, f"Expected dim {self.embedding_dim}, got {queries_np.shape[1]}"
-
+        assert queries_np.shape[1] == self.embedding_dim
         if self.index.ntotal == 0:
             return np.zeros((queries_np.shape[0], self.embedding_dim), dtype=np.float32)
-
-        distances, indices = self.index.search(queries_np, self.retrieval_k)  
+        distances, indices = self.index.search(queries_np, self.retrieval_k)
         retrieved_values = np.array([self.values[idx] for idx in indices.flatten()]).reshape(
             indices.shape[0], indices.shape[1], self.embedding_dim
         )
-        norms = np.linalg.norm(retrieved_values, axis=-1, keepdims=True) + epsilon 
-        retrieved_values = retrieved_values / norms  
-        retrieved_values = np.mean(retrieved_values, axis=1)  
-        return retrieved_values
+        norms = np.linalg.norm(retrieved_values, axis=-1, keepdims=True) + epsilon
+        retrieved_values = retrieved_values / norms
+        return np.mean(retrieved_values, axis=1)
     
 class ShortTermMemory:
     def __init__(self, buffer_size: int, embedding_dim: int):
@@ -93,11 +90,44 @@ class ShortTermMemory:
         if queries_np.ndim == 1:
             queries_np = queries_np.reshape(1, -1)
         assert queries_np.shape[1] == self.embedding_dim
-
         if not self.buffer:
             return np.zeros((queries_np.shape[0], self.embedding_dim), dtype=np.float32)
+        retrieved_values = np.mean(self.buffer, axis=0, keepdims=True)
+        norms = np.linalg.norm(retrieved_values, axis=-1, keepdims=True) + epsilon
+        retrieved_values = retrieved_values / norms
+        return np.repeat(retrieved_values, queries_np.shape[0], axis=0)
+    
+class MidTermMemory:
+    def __init__(self, buffer_size: int, embedding_dim: int, retention_steps: int):
+        self.buffer_size = buffer_size  
+        self.embedding_dim = embedding_dim
+        self.buffer = []  
+        self.step_count = 0
+        self.retention_steps = retention_steps  
 
-        retrieved_values = np.mean(self.buffer, axis=0, keepdims=True)  
-        norms = np.linalg.norm(retrieved_values, axis=-1, keepdims=True) + epsilon  
-        retrieved_values = retrieved_values / norms  
+    def store(self, keys, values):
+        keys = jax.block_until_ready(keys)
+        values = jax.block_until_ready(values)
+        keys_np = np.asarray(jax.device_get(keys), dtype=np.float32)
+        values_np = np.asarray(jax.device_get(values), dtype=np.float32)
+        if keys_np.ndim == 1:
+            keys_np = keys_np.reshape(1, -1)
+        if values_np.ndim == 1:
+            values_np = values_np.reshape(1, -1)
+        assert keys_np.shape[1] == self.embedding_dim
+
+        self.buffer.extend(values_np)
+        self.buffer = self.buffer[-self.buffer_size:]
+        self.step_count += 1
+
+    def retrieve(self, queries_np, epsilon=1e-8):
+        if queries_np.ndim == 1:
+            queries_np = queries_np.reshape(1, -1)
+        assert queries_np.shape[1] == self.embedding_dim
+        if not self.buffer or self.step_count % self.retention_steps == 0:
+            self.buffer = []
+            return np.zeros((queries_np.shape[0], self.embedding_dim), dtype=np.float32)
+        retrieved_values = np.mean(self.buffer, axis=0, keepdims=True)
+        norms = np.linalg.norm(retrieved_values, axis=-1, keepdims=True) + epsilon
+        retrieved_values = retrieved_values / norms
         return np.repeat(retrieved_values, queries_np.shape[0], axis=0)
