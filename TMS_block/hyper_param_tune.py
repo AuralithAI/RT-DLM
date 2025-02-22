@@ -1,6 +1,7 @@
 import os
 import sys
 import jax
+import gc
 import optuna
 import pickle
 import matplotlib.pyplot as plt
@@ -15,9 +16,17 @@ def set_jax_config(config):
     jax.config.update("jax_enable_x64", False)
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.6"
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.8"
     os.environ["XLA_FLAGS"] = f"--xla_gpu_force_compilation_parallelism={config.xla_gpu_parallelism}"
     print("[INFO] JAX device: ", jax.devices())
+
+def clear_gpu_memory():
+    """Clear GPU memory after each trial."""
+    jax.clear_caches()  
+    for device in jax.devices():
+        jax.device_put(None, device=device)  
+    gc.collect()  
+    print("[INFO] GPU memory cleared")
 
 def objective(trial):
     # Tune Model Architecture Parameters
@@ -111,6 +120,9 @@ def objective(trial):
     plt.savefig(f"TMS_block/memory_retrieval_similarity_{trial_number}.png")
     plt.close()
     print(f"[INFO] Memory retrieval similarity plot saved as memory_retrieval_similarity_{trial_number}.png")
+
+    # Clear GPU memory after trial
+    clear_gpu_memory()
 
     return min(t_losses)
 

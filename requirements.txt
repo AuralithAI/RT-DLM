@@ -19,3 +19,4 @@ seaborn==0.13.2
 sentencepiece==0.2.0
 optuna==4.2.1
 faiss-cpu==1.10.0
+feedparser==6.0.11
