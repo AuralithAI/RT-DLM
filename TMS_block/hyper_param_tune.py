@@ -29,6 +29,9 @@ def clear_gpu_memory():
     print("[INFO] GPU memory cleared")
 
 def objective(trial):
+
+    print(f"[INFO] VRAM usage before trial {trial.number}: {jax.local_device_count()} devices")
+
     # Tune Model Architecture Parameters
     d_model = trial.suggest_categorical("d_model", [256, 384, 512])
     # Static list of possible num_heads, validated against d_model
@@ -128,7 +131,7 @@ def objective(trial):
 
 if __name__ == "__main__":
     study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=30)
+    study.optimize(objective, n_trials=50)
 
     print("Best hyperparameters:", study.best_params)
     best_trial_num = study.best_trial.number
