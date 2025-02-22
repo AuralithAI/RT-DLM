@@ -16,7 +16,7 @@ def set_jax_config(config):
     jax.config.update("jax_enable_x64", False)
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.5"
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.4"
     os.environ["XLA_FLAGS"] = f"--xla_gpu_force_compilation_parallelism={config.xla_gpu_parallelism}"
     print("[INFO] JAX device: ", jax.devices())
 
@@ -46,8 +46,8 @@ def objective(trial):
 
     # Tune Training Hyperparameters
     batch_size = trial.suggest_categorical("batch_size", [8, 16, 32])
-    learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
-    inner_learning_rate = trial.suggest_float("inner_learning_rate", 1e-3, 1e-1, log=True)
+    learning_rate = trial.suggest_float("learning_rate", 1e-4, 5e-3, log=True)  
+    inner_learning_rate = trial.suggest_float("inner_learning_rate", 1e-3, 5e-2, log=True)  
     warmup_steps = trial.suggest_int("warmup_steps", 1000, 10000, step=1000)
     decay_steps = trial.suggest_int("decay_steps", 50000, 300000, step=50000)
 

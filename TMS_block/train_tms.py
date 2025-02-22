@@ -130,14 +130,19 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     def meta_step(params, state, meta_opt_state, inner_opt_state, rng, support_inputs, support_targets, query_inputs, query_targets):
         #logger.info("Running meta_step")
         # Inner loop: Adapt to support set
-        loss, adapted_state, support_thoughts, new_inner_opt_state = train_step(
-            params, state, inner_opt_state, rng, support_inputs, support_targets, 0
-        )
-        adapted_params = params  # Inner loop updates params implicitly via optax
+        adapted_params = params
+        adapted_state = state
+        new_inner_opt_state = inner_opt_state
+        num_inner_steps = config.num_inner_steps 
+        
+        for _ in range(num_inner_steps):
+            loss, adapted_state, support_thoughts, new_inner_opt_state = train_step(
+                adapted_params, adapted_state, new_inner_opt_state, rng, support_inputs, support_targets, 0
+            )
+            adapted_params = jax.tree_map(lambda p: p, adapted_params)
 
-        # Outer loop: Evaluate on query set
         query_embeddings = jnp.mean(get_embeddings(config, adapted_params, adapted_state, rng, query_inputs), axis=1)
-        query_key_np = np.asarray(jax.device_get(query_embeddings), dtype=np.float32)  # Convert outside JIT
+        query_key_np = np.asarray(jax.device_get(query_embeddings), dtype=np.float32)
         ltm_memory_query = jnp.array(ltm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
         stm_memory_query = jnp.array(stm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
         mtm_memory_query = jnp.array(mtm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)

@@ -61,6 +61,8 @@ class MemoryBank:
         )
         norms = np.linalg.norm(retrieved_values, axis=-1, keepdims=True) + epsilon
         retrieved_values = retrieved_values / norms
+        noise = np.random.normal(0, 0.1, retrieved_values.shape).astype(np.float32)
+        retrieved_values = retrieved_values + noise
         return np.mean(retrieved_values, axis=1)
     
 class ShortTermMemory:

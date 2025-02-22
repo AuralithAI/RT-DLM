@@ -13,6 +13,7 @@ class TrainConfig:
         self.batch_size = 32           # Batch size for training
         self.learning_rate = 1e-4       # Initial learning rate
         self.inner_learning_rate = 0.01  # Inner loop learning rate for MAML (tunable)
+        self.num_inner_steps = 5        # Number of inner loop steps for MAML
         self.num_epochs = 3             # Number of training epochs
         self.eval_interval = 25         # Frequency of evaluation during training
         self.temperature = 1.2          # Temperature for sampling (if applicable)
