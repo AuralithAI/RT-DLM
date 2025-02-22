@@ -1,5 +1,6 @@
 import os
 import re
+import numpy as np
 import sentencepiece as spm
 import jax.numpy as jnp
 from typing import List
@@ -62,3 +63,13 @@ def load_data(file_path: str) -> List[str]:
         raise FileNotFoundError(f"{file_path} not found.")
     with open(file_path, 'r', encoding='utf-8') as f:
         return [line.strip() for line in f if line.strip()]
+    
+def create_batches(inputs: jnp.ndarray, targets: jnp.ndarray, batch_size: int, shuffle: bool = True):
+    """Yield batches of input and target data."""
+    n_samples = inputs.shape[0]
+    indices = np.arange(n_samples)
+    if shuffle:
+        np.random.shuffle(indices)
+    for start_idx in range(0, n_samples, batch_size):
+        batch_indices = indices[start_idx:start_idx + batch_size]
+        yield inputs[batch_indices], targets[batch_indices]

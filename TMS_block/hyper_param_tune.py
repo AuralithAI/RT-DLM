@@ -16,7 +16,7 @@ def set_jax_config(config):
     jax.config.update("jax_enable_x64", False)
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.8"
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.5"
     os.environ["XLA_FLAGS"] = f"--xla_gpu_force_compilation_parallelism={config.xla_gpu_parallelism}"
     print("[INFO] JAX device: ", jax.devices())
 
@@ -47,6 +47,7 @@ def objective(trial):
     # Tune Training Hyperparameters
     batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 64])
     learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
+    inner_learning_rate = trial.suggest_float("inner_learning_rate", 1e-3, 1e-1, log=True)
     warmup_steps = trial.suggest_int("warmup_steps", 1000, 10000, step=1000)
     decay_steps = trial.suggest_int("decay_steps", 50000, 300000, step=50000)
 
@@ -69,6 +70,7 @@ def objective(trial):
     config.moe_top_k = moe_top_k
     config.batch_size = batch_size
     config.learning_rate = learning_rate
+    config.inner_learning_rate = inner_learning_rate
     config.warmup_steps = warmup_steps
     config.decay_steps = decay_steps
     config.memory_size = memory_size
@@ -86,9 +88,10 @@ def objective(trial):
     # Track losses and similarity scores
     losses = []
     similarity_scores = []
+    thought_logs = []
 
     # Train and evaluate
-    t_losses, params, t_similarity_scores, state, ltm, stm, mtm = train_and_evaluate(config, losses, similarity_scores)
+    t_losses, params, t_similarity_scores, state, ltm, stm, mtm, t_thought_logs = train_and_evaluate(config, losses, similarity_scores, thought_logs)
 
     # Save model parameters, state, and all memory banks
     trial_number = trial.number
@@ -102,7 +105,9 @@ def objective(trial):
         pickle.dump(stm, f)
     with open(f"TMS_block/mtm_bank_trial_{trial_number}.pkl", "wb") as f:
         pickle.dump(mtm, f)
-    print(f"[INFO] Saved params, state, and all memory banks for trial {trial_number}")
+    with open(f"TMS_block/thought_log_trial_{trial_number}.pkl", "wb") as f:
+        pickle.dump(t_thought_logs, f)
+    print(f"[INFO] Saved params, state, all memory banks and thought_log for trial {trial_number}")
 
     # Save loss and similarity plots
     plt.plot(t_losses, label=f"Trial {trial_number}")
@@ -118,6 +123,7 @@ def objective(trial):
     plt.plot(t_similarity_scores, label=f"Memory Similarity {trial_number}")
     plt.xlabel("Training Steps")
     plt.ylabel("Memory Retrieval Score")
+    plt.grid(True)
     plt.title(f"Memory Retrieval Similarity Over Time Trial - {trial_number}")
     plt.legend()
     plt.savefig(f"TMS_block/memory_retrieval_similarity_{trial_number}.png")

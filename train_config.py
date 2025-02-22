@@ -7,10 +7,12 @@ class TrainConfig:
         self.num_layers = 12            # Number of transformer layers
         self.moe_experts = 8            # Number of experts in Mixture of Experts
         self.moe_top_k = 2              # Top-k experts to select in MoE
+        self.task_size = 150            # Task size for support and query sets (batches)
 
         # --- Training Hyperparameters ---
         self.batch_size = 128           # Batch size for training
         self.learning_rate = 1e-4       # Initial learning rate
+        self.inner_learning_rate = 0.01  # Inner loop learning rate for MAML (tunable)
         self.num_epochs = 3             # Number of training epochs
         self.eval_interval = 25         # Frequency of evaluation during training
         self.temperature = 1.2          # Temperature for sampling (if applicable)
