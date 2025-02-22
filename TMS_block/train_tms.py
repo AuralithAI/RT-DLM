@@ -14,19 +14,20 @@ from memory_bank import MemoryBank, ShortTermMemory, MidTermMemory
 
 def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     rng = jax.random.PRNGKey(42)
-    devices = jax.devices()  
+    devices = jax.devices()
     print(f"[INFO] Detected devices: {devices}")
 
     ltm = MemoryBank(memory_size=config.memory_size, embedding_dim=config.d_model, retrieval_k=config.retrieval_k)
     stm = ShortTermMemory(buffer_size=config.stm_buffer_size, embedding_dim=config.d_model)
     mtm = MidTermMemory(buffer_size=config.mtm_buffer_size, embedding_dim=config.d_model, retention_steps=config.retention_steps)
 
+    # Load dataset to RAM, convert to jnp only when needed
     dataset_path = "data/train_data.txt"
     processor = DataProcessor(vocab_size=config.vocab_size)
     raw_texts = load_data(dataset_path)
     tokenized_texts = [processor.tokenize(text) for text in raw_texts]
     inputs_np = np.array([processor.pad_sequence(tokens, config.max_seq_length) for tokens in tokenized_texts], dtype=np.int32)
-    targets_np = inputs_np  
+    targets_np = inputs_np
 
     # Model definition
     def forward_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
@@ -43,7 +44,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     model = hk.transform_with_state(forward_fn)
     init_batch_size = min(8, config.batch_size)  # Cap at 8 for safety
     inputs_init = jnp.array(inputs_np[:init_batch_size], dtype=jnp.int32)
-    params, state = model.init(rng, inputs_init) 
+    params, state = model.init(rng, inputs_init)
 
     # Meta-learning optimizers
     meta_optimizer = optax.adam(config.learning_rate)
@@ -88,10 +89,9 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     # Inner loop train step
     def train_step(params, state, opt_state, rng, inputs, targets, step, ltm_memory_support, stm_memory_support, mtm_memory_support):
         embeddings = jnp.mean(get_embeddings(config, params, state, rng, inputs, ltm_memory_support, stm_memory_support, mtm_memory_support), axis=1)
-        query_key_np = np.asarray(jax.device_get(embeddings), dtype=np.float32)
-        ltm_memory = jnp.array(ltm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
-        stm_memory = jnp.array(stm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
-        mtm_memory = jnp.array(mtm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
+        ltm_memory = ltm.retrieve(embeddings, config.EPSILON)  # Keep as jnp
+        stm_memory = stm.retrieve(embeddings, config.EPSILON)  # Keep as jnp
+        mtm_memory = mtm.retrieve(embeddings, config.EPSILON)  # Keep as jnp
         
         loss, attn_weights_self, attn_weights_transformer, expert_indices, similarity_score, new_state, thoughts = _train_step_jit(
             params, state, opt_state, rng, inputs, targets, ltm_memory, stm_memory, mtm_memory
@@ -113,10 +113,9 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     def meta_step(params, state, meta_opt_state, rng, support_inputs, support_targets, query_inputs, query_targets):
         # Inner loop: Adapt to support set with memory support
         support_embeddings = jnp.mean(get_embeddings(config, params, state, rng, support_inputs), axis=1)
-        query_key_np_support = np.asarray(jax.device_get(support_embeddings), dtype=np.float32)
-        ltm_memory_support = jnp.array(ltm.retrieve(query_key_np_support, config.EPSILON), dtype=jnp.float32)
-        stm_memory_support = jnp.array(stm.retrieve(query_key_np_support, config.EPSILON), dtype=jnp.float32)
-        mtm_memory_support = jnp.array(mtm.retrieve(query_key_np_support, config.EPSILON), dtype=jnp.float32)
+        ltm_memory_support = ltm.retrieve(support_embeddings, config.EPSILON)  # Keep as jnp
+        stm_memory_support = stm.retrieve(support_embeddings, config.EPSILON)  # Keep as jnp
+        mtm_memory_support = mtm.retrieve(support_embeddings, config.EPSILON)  # Keep as jnp
         
         loss, adapted_state, support_thoughts = train_step(params, state, None, rng, support_inputs, support_targets, 0, 
                                                           ltm_memory_support, stm_memory_support, mtm_memory_support)
@@ -124,10 +123,9 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
         # Outer loop: Evaluate on query set
         query_embeddings = jnp.mean(get_embeddings(config, adapted_params, adapted_state, rng, query_inputs), axis=1)
-        query_key_np_query = np.asarray(jax.device_get(query_embeddings), dtype=np.float32)
-        ltm_memory_query = jnp.array(ltm.retrieve(query_key_np_query, config.EPSILON), dtype=jnp.float32)
-        stm_memory_query = jnp.array(stm.retrieve(query_key_np_query, config.EPSILON), dtype=jnp.float32)
-        mtm_memory_query = jnp.array(mtm.retrieve(query_key_np_query, config.EPSILON), dtype=jnp.float32)
+        ltm_memory_query = ltm.retrieve(query_embeddings, config.EPSILON)  # Keep as jnp
+        stm_memory_query = stm.retrieve(query_embeddings, config.EPSILON)  # Keep as jnp
+        mtm_memory_query = mtm.retrieve(query_embeddings, config.EPSILON)  # Keep as jnp
         
         loss, _, _, _, similarity_score, new_state, query_thoughts = compute_loss(
             adapted_params, adapted_state, rng, query_inputs, query_targets, ltm_memory_query, stm_memory_query, mtm_memory_query
@@ -139,7 +137,6 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         
         return loss, params, new_state, meta_opt_state, support_thoughts, query_thoughts, similarity_score
 
-    # Use create_batches to generate task-sized batches
     task_size = config.task_size
     num_tasks = len(inputs_np) // task_size
     task_batches = create_batches(jnp.array(inputs_np, dtype=jnp.int32), jnp.array(targets_np, dtype=jnp.int32), task_size, shuffle=True)
@@ -163,13 +160,14 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         losses.append(float(loss))
 
         embeddings = jnp.mean(get_embeddings(config, params, state, step_rng, query_inputs), axis=1)
+        # Convert to NumPy only for storage/logging, outside JIT
         embeddings_np = np.asarray(jax.device_get(embeddings), dtype=np.float32)
         ltm.store(embeddings_np, embeddings_np)
         stm.store(embeddings_np, embeddings_np)
         mtm.store(embeddings_np, embeddings_np)
 
         thought_logs.append({"task_idx": task_idx, "support_thoughts": support_thoughts, "query_thoughts": query_thoughts})
-        similarity_score_mean = np.mean(np.array(similarity_score).astype(float))
+        similarity_score_mean = float(jnp.mean(similarity_score))  # Convert to float for logging
         similarity_scores.append(similarity_score_mean)
 
         print(f"[Task {task_idx+1}] Loss: {loss:.4f} | Similarity: {similarity_score_mean:.4f}")
