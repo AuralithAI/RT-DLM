@@ -41,8 +41,9 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
                      retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm)
 
     model = hk.transform_with_state(forward_fn)
-    inputs = jnp.array(inputs_np[:config.batch_size], dtype=jnp.int32)  
-    params, state = model.init(rng, inputs)  
+    init_batch_size = min(8, config.batch_size)  # Cap at 8 for safety
+    inputs_init = jnp.array(inputs_np[:init_batch_size], dtype=jnp.int32)
+    params, state = model.init(rng, inputs_init) 
 
     # Meta-learning optimizers
     meta_optimizer = optax.adam(config.learning_rate)

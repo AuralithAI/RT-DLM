@@ -45,7 +45,7 @@ def objective(trial):
     moe_top_k = trial.suggest_categorical("moe_top_k", [1, 2, 3])
 
     # Tune Training Hyperparameters
-    batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 64])
+    batch_size = trial.suggest_categorical("batch_size", [8, 16, 32])
     learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
     inner_learning_rate = trial.suggest_float("inner_learning_rate", 1e-3, 1e-1, log=True)
     warmup_steps = trial.suggest_int("warmup_steps", 1000, 10000, step=1000)
