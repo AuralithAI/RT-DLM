@@ -1,7 +1,11 @@
 import faiss
 import jax
+import logging
 import jax.numpy as jnp
 import numpy as np
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class MemoryBank:
     def __init__(self, memory_size: int, embedding_dim: int, retrieval_k: int):
@@ -63,6 +67,9 @@ class MemoryBank:
         retrieved_values = retrieved_values / norms
         noise = np.random.normal(0, 0.1, retrieved_values.shape).astype(np.float32)
         retrieved_values = retrieved_values + noise
+        final_norms = np.linalg.norm(retrieved_values, axis=-1, keepdims=True) + epsilon
+        retrieved_values = retrieved_values / final_norms
+        logger.info(f"[MemoryBank] Retrieved norm: {np.linalg.norm(retrieved_values.mean(axis=1)):.4f}")
         return np.mean(retrieved_values, axis=1)
     
 class ShortTermMemory:

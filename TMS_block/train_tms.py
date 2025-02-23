@@ -7,6 +7,7 @@ import os
 import gc
 import sys
 import logging
+from jax import checkpoint
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from model_tms import TMSModel
@@ -38,19 +39,27 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     targets = inputs  # Next-token prediction
     logger.info(f"Dataset loaded - {inputs.shape[0]} samples")
 
-    # Model definition
+    # Model definition without checkpointing for debugging
     def forward_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
         model = TMSModel(
-            d_model=config.d_model, num_heads=config.num_heads, num_layers=config.num_layers,
-            vocab_size=config.vocab_size, max_seq_length=config.max_seq_length,
-            moe_experts=config.moe_experts, moe_top_k=config.moe_top_k,
-            memory_size=config.memory_size, retrieval_k=config.retrieval_k,
-            ltm_weight=config.ltm_weight, stm_weight=config.stm_weight, mtm_weight=config.mtm_weight
+            d_model=config.d_model, 
+            num_heads=config.num_heads, 
+            num_layers=config.num_layers,
+            vocab_size=config.vocab_size, 
+            max_seq_length=config.max_seq_length,
+            moe_experts=config.moe_experts, 
+            moe_top_k=config.moe_top_k,
+            memory_size=config.memory_size, 
+            retrieval_k=config.retrieval_k,
+            ltm_weight=config.ltm_weight, 
+            stm_weight=config.stm_weight, 
+            mtm_weight=config.mtm_weight
         )
+        #logger.info("Skipping checkpointing for debugging")
         return model(inputs, return_attention=return_attention, retrieved_memory_ltm=retrieved_memory_ltm, 
                      retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm)
 
-    logger.info("Transforming model with Haiku")
+    logger.info("Transforming model with Haiku (no checkpointing)")
     model = hk.transform_with_state(forward_fn)
     init_batch_size = min(8, config.batch_size)
     logger.info(f"Initializing model with batch size {init_batch_size}")
@@ -60,15 +69,32 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
     # Meta-learning optimizers
     logger.info("Setting up optimizers")
-    meta_optimizer = optax.adam(config.learning_rate)
-    inner_optimizer = optax.sgd(config.inner_learning_rate)
+    meta_schedule = optax.warmup_cosine_decay_schedule(
+        init_value=0.0,                   
+        peak_value=config.learning_rate,  
+        warmup_steps=config.warmup_steps, 
+        decay_steps=config.decay_steps,   
+        end_value=config.learning_rate * 0.1  
+    )
+    meta_optimizer = optax.adam(learning_rate=meta_schedule)
+    
+    # Define warm-up cosine decay schedule for inner optimizer (SGD)
+    inner_schedule = optax.warmup_cosine_decay_schedule(
+        init_value=0.0,                        
+        peak_value=config.inner_learning_rate, 
+        warmup_steps=config.num_inner_steps * 10, 
+        decay_steps=config.num_inner_steps * 100, 
+        end_value=config.inner_learning_rate * 0.1  
+    )
+    inner_optimizer = optax.sgd(learning_rate=inner_schedule)
+    
+    # Initialize optimizer states
     meta_opt_state = meta_optimizer.init(params)
     inner_opt_state = inner_optimizer.init(params)
-    logger.info("Optimizers initialized")
+    logger.info("Optimizers initialized with warm-up cosine decay schedules")
 
     # Loss function with thought tracking
     def compute_loss(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm):
-        #logger.info("Computing loss")
         (logits, (attn_weights_self, attn_weights_transformer), expert_indices, aux_loss), new_state = model.apply(
             params, state, rng, inputs, return_attention=True,
             retrieved_memory_ltm=retrieved_memory_ltm, retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm
@@ -94,7 +120,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         }
 
         loss = optax.softmax_cross_entropy_with_integer_labels(logits, targets).mean()
-        total_loss = loss + 0.01 * aux_loss
+        total_loss = loss + 0.001 * aux_loss
         return total_loss, new_state, thoughts
 
     # Loss for gradients
@@ -102,42 +128,60 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         loss, _, _ = compute_loss(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
         return loss
 
-    # Inner loop train step (MAML adaptation)
-    def train_step(params, state, inner_opt_state, rng, inputs, targets, step):
-        #logger.info("Running train_step")
+    # Inner loop train step with gradient accumulation
+    @jax.jit
+    def _accumulate_gradients(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm):
+        loss, new_state, thoughts = compute_loss(
+            params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm
+        )
+        grads = jax.grad(loss_for_gradients)(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
+        return grads, loss, new_state, thoughts
+
+    def train_step(params, state, inner_opt_state, rng, inputs, targets, step, accum_steps=2):
+        #logger.info("Running train_step with gradient accumulation")
         embeddings = jnp.mean(get_embeddings(config, params, state, rng, inputs), axis=1)
         query_key_np = np.asarray(jax.device_get(embeddings), dtype=np.float32)
         ltm_memory = jnp.array(ltm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
         stm_memory = jnp.array(stm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
         mtm_memory = jnp.array(mtm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
-        
-        loss, new_state, thoughts, new_inner_opt_state = _train_step_jit(
-            params, state, inner_opt_state, rng, inputs, targets, ltm_memory, stm_memory, mtm_memory
-        )
-        return loss, new_state, thoughts, new_inner_opt_state
 
-    @jax.jit
-    def _train_step_jit(params, state, inner_opt_state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm):
-        loss, new_state, thoughts = compute_loss(
-            params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm
-        )
-        grads = jax.grad(loss_for_gradients)(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
-        updates, new_inner_opt_state = inner_optimizer.update(grads, inner_opt_state, params)
+        batch_size = inputs.shape[0]
+        mini_batch_size = batch_size // accum_steps
+        total_grads = jax.tree_map(lambda x: jnp.zeros_like(x), params)
+        total_loss = 0.0
+        new_state = state
+        thoughts = None
+
+        for i in range(accum_steps):
+            start_idx = i * mini_batch_size
+            end_idx = (i + 1) * mini_batch_size if i < accum_steps - 1 else batch_size
+            mini_inputs = inputs[start_idx:end_idx]
+            mini_targets = targets[start_idx:end_idx]
+
+            grads, loss, new_state, mini_thoughts = _accumulate_gradients(
+                params, new_state, rng, mini_inputs, mini_targets, ltm_memory[start_idx:end_idx],
+                stm_memory[start_idx:end_idx], mtm_memory[start_idx:end_idx]
+            )
+            total_grads = jax.tree_map(lambda x, y: x + y, total_grads, grads)
+            total_loss += loss * (mini_inputs.shape[0] / batch_size)
+            thoughts = mini_thoughts if thoughts is None else thoughts  # Keep last thoughts
+
+        total_grads = jax.tree_map(lambda x: x / accum_steps, total_grads)
+        updates, new_inner_opt_state = inner_optimizer.update(total_grads, inner_opt_state, params)
         params = optax.apply_updates(params, updates)
-        return loss, new_state, thoughts, new_inner_opt_state
+        return total_loss, new_state, thoughts, new_inner_opt_state
 
     # Meta-step: Outer loop (MAML update)
-    def meta_step(params, state, meta_opt_state, inner_opt_state, rng, support_inputs, support_targets, query_inputs, query_targets):
+    def meta_step(params, state, meta_opt_state, inner_opt_state, rng, support_inputs, support_targets, query_inputs, query_targets, accum_steps=2):
         #logger.info("Running meta_step")
-        # Inner loop: Adapt to support set
         adapted_params = params
         adapted_state = state
         new_inner_opt_state = inner_opt_state
         num_inner_steps = config.num_inner_steps 
-        
+
         for _ in range(num_inner_steps):
             loss, adapted_state, support_thoughts, new_inner_opt_state = train_step(
-                adapted_params, adapted_state, new_inner_opt_state, rng, support_inputs, support_targets, 0
+                adapted_params, adapted_state, new_inner_opt_state, rng, support_inputs, support_targets, 0, accum_steps=accum_steps
             )
             adapted_params = jax.tree_map(lambda p: p, adapted_params)
 
@@ -150,6 +194,8 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         loss, new_state, query_thoughts = compute_loss(
             adapted_params, adapted_state, rng, query_inputs, query_targets, ltm_memory_query, stm_memory_query, mtm_memory_query
         )
+
+        logger.info(f"Aux loss: {query_thoughts['expert_indices'].mean():.4f}, Total loss: {loss:.4f}")
         
         grads = jax.grad(loss_for_gradients)(params, state, rng, query_inputs, query_targets, ltm_memory_query, stm_memory_query, mtm_memory_query)
         updates, new_meta_opt_state = meta_optimizer.update(grads, meta_opt_state, params)
@@ -178,7 +224,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         logger.info(f"Processing task {task_idx+1}")
         step_rng, rng = jax.random.split(rng)
         loss, params, state, meta_opt_state, support_thoughts, query_thoughts, inner_opt_state = meta_step(
-            params, state, meta_opt_state, inner_opt_state, step_rng, support_inputs, support_targets, query_inputs, query_targets
+            params, state, meta_opt_state, inner_opt_state, step_rng, support_inputs, support_targets, query_inputs, query_targets, accum_steps=2
         )
         losses.append(float(loss))
 
@@ -192,7 +238,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         similarity_score_mean = float(jnp.mean(similarity_score))
         similarity_scores.append(similarity_score_mean)
 
-        logger.info(f"[Task {task_idx+1}] completed - Loss: {loss:.4f} | Similarity: {similarity_score_mean:.4f} | LR: {config.learning_rate:.6f}")
+        logger.info(f"[Task {task_idx+1}] completed - Loss: {loss:.4f} | Similarity: {similarity_score_mean:.4f} | LR: {config.learning_rate:.6f} | Inner LR: {config.inner_learning_rate:.6f}")
         gc.collect()
         jax.clear_caches()
 

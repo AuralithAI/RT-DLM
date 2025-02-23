@@ -4,11 +4,16 @@ import jax
 import gc
 import optuna
 import pickle
+import logging
 import matplotlib.pyplot as plt
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from train_config import TrainConfig
 from train_tms import train_and_evaluate
+from jax.extend import backend
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Set JAX configurations
 def set_jax_config(config):
@@ -16,21 +21,30 @@ def set_jax_config(config):
     jax.config.update("jax_enable_x64", False)
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.4"
-    os.environ["XLA_FLAGS"] = f"--xla_gpu_force_compilation_parallelism={config.xla_gpu_parallelism}"
+    #os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.6"
+    os.environ["XLA_FLAGS"] = (
+        f"--xla_gpu_force_compilation_parallelism={config.xla_gpu_parallelism}"
+        "--xla_gpu_enable_triton_gemm=true"  
+        "--xla_gpu_memory_efficient=true"     
+    )
     print("[INFO] JAX device: ", jax.devices())
 
 def clear_gpu_memory():
     """Clear GPU memory after each trial."""
-    jax.clear_caches()  
+    jax.clear_caches()  # Clear JAX computation caches
     for device in jax.devices():
-        jax.device_put(None, device=device)  
-    gc.collect()  
-    print("[INFO] GPU memory cleared")
+        jax.device_put(None, device=device)
+    gc.collect()
+    try:
+        backend.get_backend().defragment() 
+        logger.info("[INFO] GPU memory defragmented")
+    except AttributeError:
+        logger.warning("[WARNING] GPU memory defragmentation not supported in this JAX backend")
+    logger.info("[INFO] GPU memory cleared")
 
 def objective(trial):
 
-    print(f"[INFO] VRAM usage before trial {trial.number}: {jax.local_device_count()} devices")
+    logger.info(f"[INFO] VRAM usage before trial {trial.number}: {jax.local_device_count()} devices")
 
     # Tune Model Architecture Parameters
     d_model = trial.suggest_categorical("d_model", [256, 384, 512])
@@ -41,13 +55,13 @@ def objective(trial):
         num_heads = trial.suggest_categorical("num_heads", [4, 6, 8, 12])
     
     num_layers = trial.suggest_int("num_layers", 6, 12)
-    moe_experts = trial.suggest_categorical("moe_experts", [4, 8, 16])
-    moe_top_k = trial.suggest_categorical("moe_top_k", [1, 2, 3])
+    moe_experts = trial.suggest_categorical("moe_experts", [4, 8])
+    moe_top_k = trial.suggest_categorical("moe_top_k", [2, 3])
 
     # Tune Training Hyperparameters
-    batch_size = trial.suggest_categorical("batch_size", [8, 16, 32])
-    learning_rate = trial.suggest_float("learning_rate", 1e-4, 5e-3, log=True)  
-    inner_learning_rate = trial.suggest_float("inner_learning_rate", 1e-3, 5e-2, log=True)  
+    batch_size = trial.suggest_categorical("batch_size", [2, 4, 8])
+    learning_rate = trial.suggest_float("learning_rate", 1e-3, 5e-3, log=True) 
+    inner_learning_rate = trial.suggest_float("inner_learning_rate", 5e-4, 2e-3, log=True)
     warmup_steps = trial.suggest_int("warmup_steps", 1000, 10000, step=1000)
     decay_steps = trial.suggest_int("decay_steps", 50000, 300000, step=50000)
 
@@ -89,6 +103,8 @@ def objective(trial):
     losses = []
     similarity_scores = []
     thought_logs = []
+
+    logger.info(f"[Trial {trial.number}] d_model: {d_model}, num_layers: {num_layers}")
 
     # Train and evaluate
     t_losses, params, t_similarity_scores, state, ltm, stm, mtm, t_thought_logs = train_and_evaluate(config, losses, similarity_scores, thought_logs)
