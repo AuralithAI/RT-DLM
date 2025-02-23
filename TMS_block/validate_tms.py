@@ -22,7 +22,7 @@ class Trial0Config(TrainConfig):
         self.d_model = 384          # Confirmed from log
         self.num_layers = 7         # Confirmed from log
         self.num_heads = 8          # Suggest_categorical("num_heads", [4, 6, 8, 12])
-        self.moe_experts = 4        # Suggest_categorical("moe_experts", [4, 8])
+        self.moe_experts = 4        # Updated per your config
         self.moe_top_k = 2          # Suggest_categorical("moe_top_k", [2, 3])
         self.batch_size = 2         # Suggest_categorical("batch_size", [2, 4, 8])
         self.memory_size = 5000     # Suggest_categorical("memory_size", [1000, 5000, 10000, 20000])
@@ -46,8 +46,27 @@ inputs_val = jnp.array([processor.pad_sequence(tokens, config.max_seq_length) fo
 targets_val = inputs_val  # Next-token prediction
 print(f"[INFO] Loaded validation dataset with {len(inputs_val)} samples")
 
-# Load trained model with embeddings option
-def forward_fn(inputs, return_attention=False, return_embeddings=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
+# Define forward function for full pass
+def forward_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
+    model = TMSModel(
+        d_model=config.d_model,
+        num_heads=config.num_heads,
+        num_layers=config.num_layers,
+        vocab_size=config.vocab_size,
+        max_seq_length=config.max_seq_length,
+        moe_experts=config.moe_experts,
+        moe_top_k=config.moe_top_k,
+        memory_size=config.memory_size,
+        retrieval_k=config.retrieval_k,
+        ltm_weight=config.ltm_weight,
+        stm_weight=config.stm_weight,
+        mtm_weight=config.mtm_weight
+    )
+    return model(inputs, return_attention=return_attention, retrieved_memory_ltm=retrieved_memory_ltm, 
+                 retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm)
+
+# Define embeddings function (mirrors train_tms.py's get_embeddings)
+def embeddings_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
     model = TMSModel(
         d_model=config.d_model,
         num_heads=config.num_heads,
@@ -69,17 +88,14 @@ def forward_fn(inputs, return_attention=False, return_embeddings=False, retrieve
         x += model.stm_weight * model.memory_projection_stm(jnp.repeat(jnp.expand_dims(retrieved_memory_stm, axis=1), x.shape[1], axis=1))
     if retrieved_memory_mtm is not None:
         x += model.mtm_weight * model.memory_projection_mtm(jnp.repeat(jnp.expand_dims(retrieved_memory_mtm, axis=1), x.shape[1], axis=1))
-    x, attn_weights_self = model.self_attention(inputs, return_attention=True)
-    x, attn_weights_transformer = model.transformer(x, None, return_attention=True)
-    if return_embeddings:
-        return x  # Return transformer output directly: (batch_size, seq_len, d_model)
-    x, expert_weights, expert_indices = model.moe(x)
-    logits = model.norm(x)
-    if return_attention:
-        return logits, (attn_weights_self, attn_weights_transformer), expert_indices, model.aux_loss
-    return logits
+    x, _ = model.self_attention(inputs, return_attention=True)
+    x, _ = model.transformer(x, None, return_attention=True)
+    x, _, _ = model.moe(x)
+    x = model.norm(x)  # Pre-proj embeddings: (batch_size, seq_len, d_model)
+    return x
 
 model = hk.transform_with_state(forward_fn)
+embeddings_model = hk.transform_with_state(embeddings_fn)
 
 # Load trained parameters, state, and memory banks
 params_path = "TMS_block/tms_params_trial_0.pkl"
@@ -104,15 +120,15 @@ with open(thought_log_path, "rb") as f:
 print(f"[INFO] Loaded trained parameters, state, thought logs, and memory banks from Trial 0")
 print(f"[DEBUG] ltm.embedding_dim: {ltm.embedding_dim}")
 
-# Initialize model to ensure params align (dummy init)
+# Initialize models to ensure params align (dummy init)
 dummy_inputs = inputs_val[:config.batch_size]
 params_check, state_check = model.init(rng, dummy_inputs)
-print("[INFO] Model initialized with dummy inputs to align parameters")
+embeddings_params_check, embeddings_state_check = embeddings_model.init(rng, dummy_inputs)
+print("[INFO] Models initialized with dummy inputs to align parameters")
 
 # Loss and metrics computation function
 def compute_metrics(params, state, rng, inputs, targets):
-    # Unpack tuple and get embeddings
-    embeddings, _ = model.apply(params, state, rng, inputs, return_embeddings=True)
+    embeddings, _ = embeddings_model.apply(params, state, rng, inputs)
     print(f"[DEBUG] Raw embeddings.shape: {embeddings.shape}")  # Should be (2, 64, 384)
     embeddings = jnp.mean(embeddings, axis=1)  # Shape: (batch_size, d_model)
     print(f"[DEBUG] Mean embeddings.shape: {embeddings.shape}")  # Should be (2, 384)
@@ -122,6 +138,9 @@ def compute_metrics(params, state, rng, inputs, targets):
     ltm_memory = jnp.array(ltm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
     stm_memory = jnp.array(stm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
     mtm_memory = jnp.array(mtm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
+    print(f"[DEBUG] ltm_memory.shape: {ltm_memory.shape}")  # Should be (2, 384)
+    print(f"[DEBUG] stm_memory.shape: {stm_memory.shape}")
+    print(f"[DEBUG] mtm_memory.shape: {mtm_memory.shape}")
 
     (logits, (attn_weights_self, attn_weights_transformer), expert_indices, aux_loss), new_state = model.apply(
         params, state, rng, inputs, return_attention=True,
@@ -133,11 +152,14 @@ def compute_metrics(params, state, rng, inputs, targets):
     
     perplexity = jnp.exp(loss)
     
-    query_key = jnp.mean(embeddings, axis=1)
+    # Use embeddings directly as query_key (already averaged)
+    query_key = embeddings  # Shape: (2, 384)
     ltm_norm = jnp.linalg.norm(ltm_memory, axis=-1, keepdims=True) + config.EPSILON
     stm_norm = jnp.linalg.norm(stm_memory, axis=-1, keepdims=True) + config.EPSILON
     mtm_norm = jnp.linalg.norm(mtm_memory, axis=-1, keepdims=True) + config.EPSILON
     query_norm = jnp.linalg.norm(query_key, axis=-1, keepdims=True) + config.EPSILON
+    print(f"[DEBUG] query_key.shape: {query_key.shape}")
+    print(f"[DEBUG] ltm_norm.shape: {ltm_norm.shape}")
     ltm_similarity = jnp.sum(query_key * ltm_memory, axis=-1) / (query_norm * ltm_norm)
     stm_similarity = jnp.sum(query_key * stm_memory, axis=-1) / (query_norm * stm_norm)
     mtm_similarity = jnp.sum(query_key * mtm_memory, axis=-1) / (query_norm * mtm_norm)
