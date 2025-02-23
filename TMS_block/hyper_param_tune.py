@@ -123,7 +123,7 @@ def objective(trial):
         pickle.dump(mtm, f)
     with open(f"TMS_block/thought_log_trial_{trial_number}.pkl", "wb") as f:
         pickle.dump(t_thought_logs, f)
-    print(f"[INFO] Saved params, state, all memory banks and thought_log for trial {trial_number}")
+    logger.info(f"[INFO] Saved params, state, all memory banks and thought_log for trial {trial_number}")
 
     # Save loss and similarity plots
     plt.plot(t_losses, label=f"Trial {trial_number}")
@@ -134,7 +134,7 @@ def objective(trial):
     plt.legend()
     plt.savefig(f"TMS_block/tms_loss_trial_{trial_number}.png")
     plt.close()
-    print(f"[INFO] Loss plot saved for trial {trial_number}")
+    logger.info(f"[INFO] Loss plot saved for trial {trial_number}")
 
     plt.plot(t_similarity_scores, label=f"Memory Similarity {trial_number}")
     plt.xlabel("Training Steps")
@@ -144,7 +144,7 @@ def objective(trial):
     plt.legend()
     plt.savefig(f"TMS_block/memory_retrieval_similarity_{trial_number}.png")
     plt.close()
-    print(f"[INFO] Memory retrieval similarity plot saved as memory_retrieval_similarity_{trial_number}.png")
+    logger.info(f"[INFO] Memory retrieval similarity plot saved as memory_retrieval_similarity_{trial_number}.png")
 
     # Clear GPU memory after trial
     clear_gpu_memory()
@@ -155,7 +155,7 @@ if __name__ == "__main__":
     study = optuna.create_study(direction="minimize")
     study.optimize(objective, n_trials=50)
 
-    print("Best hyperparameters:", study.best_params)
+    logger.info("Best hyperparameters:", study.best_params)
     best_trial_num = study.best_trial.number
 
     os.rename(f"TMS_block/tms_params_trial_{best_trial_num}.pkl", "TMS_block/tms_best_params.pkl")
@@ -165,9 +165,9 @@ if __name__ == "__main__":
     os.rename(f"TMS_block/mtm_bank_trial_{best_trial_num}.pkl", "TMS_block/mtm_bank.pkl")
     os.rename(f"TMS_block/tms_loss_trial_{best_trial_num}.png", "TMS_block/tms_best_loss.png")
 
-    print(f"[INFO] Best model parameters saved as TMS_block/tms_best_params.pkl")
-    print(f"[INFO] Best state saved as TMS_block/tms_best_state.pkl")
-    print(f"[INFO] Best LTM bank saved as TMS_block/ltm_bank.pkl")
-    print(f"[INFO] Best STM bank saved as TMS_block/stm_bank.pkl")
-    print(f"[INFO] Best MTM bank saved as TMS_block/mtm_bank.pkl")
-    print(f"[INFO] Best loss plot saved as TMS_block/tms_best_loss.png")
+    logger.info(f"[INFO] Best model parameters saved as TMS_block/tms_best_params.pkl")
+    logger.info(f"[INFO] Best state saved as TMS_block/tms_best_state.pkl")
+    logger.info(f"[INFO] Best LTM bank saved as TMS_block/ltm_bank.pkl")
+    logger.info(f"[INFO] Best STM bank saved as TMS_block/stm_bank.pkl")
+    logger.info(f"[INFO] Best MTM bank saved as TMS_block/mtm_bank.pkl")
+    logger.info(f"[INFO] Best loss plot saved as TMS_block/tms_best_loss.png")
