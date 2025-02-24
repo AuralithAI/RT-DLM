@@ -5,6 +5,7 @@ import gc
 import optuna
 import pickle
 import logging
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
