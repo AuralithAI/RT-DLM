@@ -42,7 +42,7 @@ class TransformerModel(hk.Module):
         self.position_enc = hk.Embed(max_seq_length, d_model)
         self.layers = [TransformerBlock(d_model, num_heads) for _ in range(num_layers)]
         self.norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
-        self.proj = hk.Linear(vocab_size)
+        self.proj = hk.Linear(d_model)
 
     def __call__(self, inputs, rng=None, return_attention=False):
         inputs = jnp.asarray(inputs, dtype=jnp.int32) 
