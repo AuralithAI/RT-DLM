@@ -7,12 +7,12 @@ import os
 import gc
 import sys
 import logging
-from jax import checkpoint
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from model_tms import TMSModel
 from data_utils import DataProcessor, load_data, create_batches
 from memory_bank import MemoryBank, ShortTermMemory, MidTermMemory
+from hyper_param_tune import clear_gpu_memory
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     targets = inputs  # Next-token prediction
     logger.info(f"Dataset loaded - {inputs.shape[0]} samples")
 
-    # Model definition without checkpointing for debugging
+    # Model definition
     def forward_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
         model = TMSModel(
             d_model=config.d_model, 
@@ -55,11 +55,10 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
             stm_weight=config.stm_weight, 
             mtm_weight=config.mtm_weight
         )
-        #logger.info("Skipping checkpointing for debugging")
         return model(inputs, return_attention=return_attention, retrieved_memory_ltm=retrieved_memory_ltm, 
                      retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm)
 
-    logger.info("Transforming model with Haiku (no checkpointing)")
+    logger.info("Transforming model with Haiku")
     model = hk.transform_with_state(forward_fn)
     init_batch_size = min(8, config.batch_size)
     logger.info(f"Initializing model with batch size {init_batch_size}")
@@ -78,7 +77,6 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     )
     meta_optimizer = optax.adam(learning_rate=meta_schedule)
     
-    # Define warm-up cosine decay schedule for inner optimizer (SGD)
     inner_schedule = optax.warmup_cosine_decay_schedule(
         init_value=0.0,                        
         peak_value=config.inner_learning_rate, 
@@ -88,12 +86,11 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     )
     inner_optimizer = optax.sgd(learning_rate=inner_schedule)
     
-    # Initialize optimizer states
     meta_opt_state = meta_optimizer.init(params)
     inner_opt_state = inner_optimizer.init(params)
     logger.info("Optimizers initialized with warm-up cosine decay schedules")
 
-    # Loss function with thought tracking
+    # Loss functions
     def compute_loss(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm):
         inputs = jnp.asarray(inputs, dtype=jnp.int32, copy=True)
         targets = jnp.asarray(targets, dtype=jnp.int32, copy=True)
@@ -140,7 +137,6 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         return grads, loss, new_state, thoughts
 
     def train_step(params, state, inner_opt_state, rng, inputs, targets, step, accum_steps=2):
-        #logger.info("Running train_step with gradient accumulation")
         embeddings = jnp.mean(get_embeddings(config, params, state, rng, inputs), axis=1)
         query_key_np = np.asarray(jax.device_get(embeddings), dtype=np.float32)
         ltm_memory = jnp.array(ltm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
@@ -175,7 +171,6 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
     # Meta-step: Outer loop (MAML update)
     def meta_step(params, state, meta_opt_state, inner_opt_state, rng, support_inputs, support_targets, query_inputs, query_targets, accum_steps=2):
-        #logger.info("Running meta_step")
         adapted_params = params
         adapted_state = state
         new_inner_opt_state = inner_opt_state
@@ -207,13 +202,10 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
     task_size = config.task_size
     num_tasks = inputs.shape[0] // task_size
-    logger.info(f"Creating task batches with task_size={task_size}")
+    logger.info(f"Creating task batches with task_size={task_size} (Total tasks: {num_tasks})")
     task_batches = create_batches(inputs, targets, task_size, shuffle=True)
 
     for task_idx, (task_inputs, task_targets) in enumerate(task_batches):
-        if task_idx >= min(num_tasks, config.num_epochs * 100):
-            break
-        
         support_inputs = task_inputs[:5]
         support_targets = task_targets[:5]
         query_inputs = task_inputs[5:]
@@ -223,11 +215,16 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
             logger.info(f"Skipping task {task_idx+1} - insufficient support/query samples")
             continue
 
-        logger.info(f"Processing task {task_idx+1}")
+        logger.info(f"Processing task {task_idx+1}/{num_tasks} ({(task_idx + 1) / num_tasks * 100:.1f}% complete)")
         step_rng, rng = jax.random.split(rng)
-        loss, params, state, meta_opt_state, support_thoughts, query_thoughts, inner_opt_state = meta_step(
-            params, state, meta_opt_state, inner_opt_state, step_rng, support_inputs, support_targets, query_inputs, query_targets, accum_steps=2
-        )
+        try:
+            loss, params, state, meta_opt_state, support_thoughts, query_thoughts, inner_opt_state = meta_step(
+                params, state, meta_opt_state, inner_opt_state, step_rng, support_inputs, support_targets, query_inputs, query_targets, accum_steps=2
+            )
+        except Exception as e:
+            logger.error(f"[Task {task_idx+1}] Failed: {e}")
+            continue
+
         losses.append(float(loss))
 
         embeddings = jnp.mean(get_embeddings(config, params, state, step_rng, query_inputs), axis=1)
@@ -241,6 +238,8 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         similarity_scores.append(similarity_score_mean)
 
         logger.info(f"[Task {task_idx+1}] completed - Loss: {loss:.4f} | Similarity: {similarity_score_mean:.4f} | LR: {config.learning_rate:.6f} | Inner LR: {config.inner_learning_rate:.6f}")
+        if task_idx % 100 == 0:
+            clear_gpu_memory()
         gc.collect()
         jax.clear_caches()
 
