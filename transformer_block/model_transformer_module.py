@@ -45,7 +45,7 @@ class TransformerModel(hk.Module):
         self.proj = hk.Linear(d_model)
 
     def __call__(self, inputs, rng=None, return_attention=False):
-        inputs = jnp.asarray(inputs, dtype=jnp.int32) 
+        inputs = jnp.asarray(inputs, dtype=jnp.int32, copy=True) 
         #print(f"[INFO] - Transformer Model ==> Inputs Shape: {inputs.shape}")
         embed_out = self.embedding(inputs) 
         

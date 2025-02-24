@@ -95,6 +95,8 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
     # Loss function with thought tracking
     def compute_loss(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm):
+        inputs = jnp.asarray(inputs, dtype=jnp.int32, copy=True)
+        targets = jnp.asarray(targets, dtype=jnp.int32, copy=True)
         (logits, (attn_weights_self, attn_weights_transformer), expert_indices, aux_loss), new_state = model.apply(
             params, state, rng, inputs, return_attention=True,
             retrieved_memory_ltm=retrieved_memory_ltm, retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm
@@ -247,6 +249,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
 def get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
     def forward_with_embeddings(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
+        inputs = jnp.asarray(inputs, dtype=jnp.int32, copy=True)
         model = TMSModel(
             d_model=config.d_model,
             num_heads=config.num_heads,

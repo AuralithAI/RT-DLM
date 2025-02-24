@@ -30,6 +30,7 @@ class SelfAttentionModel(hk.Module):
         self.proj = hk.Linear(vocab_size)
 
     def __call__(self, inputs, return_attention=False):
+        inputs = jnp.asarray(inputs, dtype=jnp.int32)
         mask = (inputs != 0).astype(jnp.float32)[:, None, None, :]
         x = self.embedding(inputs) * jnp.sqrt(self.d_model)
         x = self.norm1(x)

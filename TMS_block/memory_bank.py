@@ -45,7 +45,7 @@ class MemoryBank:
             self.index.reset()
             self.index.add(np.asarray(self.values, dtype=np.float32))
 
-        self.values.extend(values_np)
+        self.values.extend(values_np.tolist())
         self.index.add(keys_np)
 
     def retrieve(self, queries_np, epsilon=1e-8):
@@ -69,7 +69,7 @@ class MemoryBank:
         retrieved_values = retrieved_values + noise
         final_norms = np.linalg.norm(retrieved_values, axis=-1, keepdims=True) + epsilon
         retrieved_values = retrieved_values / final_norms
-        logger.info(f"[MemoryBank] Retrieved norm: {np.linalg.norm(retrieved_values.mean(axis=1)):.4f}")
+        #logger.info(f"[MemoryBank] Retrieved norm: {np.linalg.norm(retrieved_values.mean(axis=1)):.4f}")
         return np.mean(retrieved_values, axis=1)
     
 class ShortTermMemory:

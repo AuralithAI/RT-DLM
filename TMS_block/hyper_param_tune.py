@@ -31,9 +31,13 @@ def set_jax_config(config):
 
 def clear_gpu_memory():
     """Clear GPU memory after each trial."""
-    jax.clear_caches()  # Clear JAX computation caches
+    jax.clear_caches()  
     for device in jax.devices():
-        jax.device_put(None, device=device)
+        try:
+            jax.device_put(jnp.zeros((1,)), device=device) 
+            jax.device_put(None, device=device) 
+        except Exception as e:
+            logger.warning(f"[WARNING] Failed to clear device memory: {e}")
     gc.collect()
     try:
         backend.get_backend().defragment() 
@@ -76,25 +80,47 @@ def objective(trial):
     mtm_weight = trial.suggest_float("mtm_weight", 0.0, 1.0)
 
     # Create model with these params
-    config = TrainConfig()
-    config.d_model = d_model
-    config.num_layers = num_layers
-    config.num_heads = num_heads
-    config.moe_experts = moe_experts
-    config.moe_top_k = moe_top_k
-    config.batch_size = batch_size
-    config.learning_rate = learning_rate
-    config.inner_learning_rate = inner_learning_rate
-    config.warmup_steps = warmup_steps
-    config.decay_steps = decay_steps
-    config.memory_size = memory_size
-    config.retrieval_k = retrieval_k
-    config.stm_buffer_size = stm_buffer_size
-    config.mtm_buffer_size = mtm_buffer_size
-    config.retention_steps = retention_steps
-    config.ltm_weight = ltm_weight
-    config.stm_weight = stm_weight
-    config.mtm_weight = mtm_weight
+    trial_params = {
+        "d_model": d_model,
+        "num_heads": num_heads,
+        "num_layers": num_layers,
+        "moe_experts": moe_experts,
+        "moe_top_k": moe_top_k,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "inner_learning_rate": inner_learning_rate,
+        "warmup_steps": warmup_steps,
+        "decay_steps": decay_steps,
+        "memory_size": memory_size,
+        "retrieval_k": retrieval_k,
+        "stm_buffer_size": stm_buffer_size,
+        "mtm_buffer_size": mtm_buffer_size,
+        "retention_steps": retention_steps,
+        "ltm_weight": ltm_weight,
+        "stm_weight": stm_weight,
+        "mtm_weight": mtm_weight,
+        "vocab_size": 8000,  # Default from TrainConfig
+        "max_seq_length": 64,  # Default from TrainConfig
+        "task_size": 15,  # Default from TrainConfig
+        "num_inner_steps": 10,  # Default from TrainConfig
+        "num_epochs": 3,  # Default from TrainConfig
+        "eval_interval": 25,  # Default from TrainConfig
+        "temperature": 1.2,  # Default from TrainConfig
+        "label_smoothing": 0.1,  # Default from TrainConfig
+        "warmup_steps": warmup_steps,  # Overridden by trial
+        "decay_steps": decay_steps,  # Overridden by trial
+        "init_lr": 2e-6,  # Default from TrainConfig
+        "end_lr": 2e-6,  # Default from TrainConfig
+        "weight_decay": 1e-3,  # Default from TrainConfig
+        "clip_norm": 0.5,  # Default from TrainConfig
+        "max_sentence_length": 5192,  # Default from TrainConfig
+        "input_sentence_size": 500000,  # Default from TrainConfig
+        "character_coverage": 0.9999,  # Default from TrainConfig
+        "num_threads": 16,  # Default from TrainConfig
+        "xla_gpu_parallelism": 10,  # Default from TrainConfig
+        "EPSILON": 1e-8  # Default from TrainConfig
+    }
+    config = TrainConfig(**trial_params)
 
     # Apply JAX/XLA config
     set_jax_config(config)
