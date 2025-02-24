@@ -40,11 +40,6 @@ def clear_gpu_memory():
         except Exception as e:
             logger.warning(f"[WARNING] Failed to clear device memory: {e}")
     gc.collect()
-    try:
-        backend.get_backend().defragment() 
-        logger.info("[INFO] GPU memory defragmented")
-    except AttributeError:
-        logger.warning("[WARNING] GPU memory defragmentation not supported in this JAX backend")
     logger.info("[INFO] GPU memory cleared")
 
 def objective(trial):

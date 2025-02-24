@@ -12,7 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from model_tms import TMSModel
 from data_utils import DataProcessor, load_data, create_batches
 from memory_bank import MemoryBank, ShortTermMemory, MidTermMemory
-from hyper_param_tune import clear_gpu_memory
+from jax.extend import backend
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -245,6 +245,18 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
     logger.info("Training completed")
     return losses, params, similarity_scores, state, ltm, stm, mtm, thought_logs
+
+def clear_gpu_memory():
+    """Clear GPU memory after each trial."""
+    jax.clear_caches()  
+    for device in jax.devices():
+        try:
+            jax.device_put(jnp.zeros((1,)), device=device) 
+            jax.device_put(None, device=device) 
+        except Exception as e:
+            logger.warning(f"[WARNING] Failed to clear device memory: {e}")
+    gc.collect()
+    logger.info("[INFO] GPU memory cleared")
 
 def get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
     def forward_with_embeddings(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
