@@ -14,7 +14,14 @@ from data_utils import DataProcessor, load_data, create_batches
 from memory_bank import MemoryBank, ShortTermMemory, MidTermMemory
 from jax.extend import backend
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('train.log', mode='a')
+    ]
+)
 logger = logging.getLogger(__name__)
 
 def train_and_evaluate(config, losses, similarity_scores, thought_logs):
@@ -40,7 +47,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     logger.info(f"Dataset loaded - {inputs.shape[0]} samples")
 
     # Model definition
-    def forward_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
+    def forward_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold=None, epsilon=None):
         model = TMSModel(
             d_model=config.d_model, 
             num_heads=config.num_heads, 
@@ -56,14 +63,15 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
             mtm_weight=config.mtm_weight
         )
         return model(inputs, return_attention=return_attention, retrieved_memory_ltm=retrieved_memory_ltm, 
-                     retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm)
+                     retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm,
+                     spike_threshold=spike_threshold, epsilon=epsilon)
 
     logger.info("Transforming model with Haiku")
     model = hk.transform_with_state(forward_fn)
     init_batch_size = min(8, config.batch_size)
     logger.info(f"Initializing model with batch size {init_batch_size}")
     inputs_init = inputs[:init_batch_size]
-    params, state = model.init(rng, inputs_init)
+    params, state = model.init(rng, inputs_init, spike_threshold=config.spike_threshold, epsilon=config.EPSILON)
     logger.info("Model initialized")
 
     # Meta-learning optimizers
@@ -96,9 +104,10 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         targets = jnp.asarray(targets, dtype=jnp.int32, copy=True)
         (logits, (attn_weights_self, attn_weights_transformer), expert_indices, aux_loss), new_state = model.apply(
             params, state, rng, inputs, return_attention=True,
-            retrieved_memory_ltm=retrieved_memory_ltm, retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm
+            retrieved_memory_ltm=retrieved_memory_ltm, retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm,
+            spike_threshold=config.spike_threshold, epsilon=config.epsilon
         )
-        embeddings = get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
+        embeddings = get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm, config.spike_threshold, config.epsilon)
         query_key = jnp.mean(embeddings, axis=1)
         ltm_norm = jnp.linalg.norm(retrieved_memory_ltm, axis=-1, keepdims=True) + config.EPSILON
         stm_norm = jnp.linalg.norm(retrieved_memory_stm, axis=-1, keepdims=True) + config.EPSILON
@@ -129,19 +138,19 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
     # Inner loop train step with gradient accumulation
     @jax.jit
-    def _accumulate_gradients(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm):
+    def _accumulate_gradients(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm, spike_threshold, epsilon):
         loss, new_state, thoughts = compute_loss(
-            params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm
+            params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm, spike_threshold, epsilon
         )
-        grads = jax.grad(loss_for_gradients)(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
+        grads = jax.grad(loss_for_gradients)(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm, spike_threshold, epsilon)
         return grads, loss, new_state, thoughts
 
     def train_step(params, state, inner_opt_state, rng, inputs, targets, step, accum_steps=2):
-        embeddings = jnp.mean(get_embeddings(config, params, state, rng, inputs), axis=1)
+        embeddings = jnp.mean(get_embeddings(config, params, state, rng, inputs, spike_threshold=config.spike_threshold, epsilon=config.EPSILON), axis=1)
         query_key_np = np.asarray(jax.device_get(embeddings), dtype=np.float32)
-        ltm_memory = jnp.array(ltm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
-        stm_memory = jnp.array(stm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
-        mtm_memory = jnp.array(mtm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
+        ltm_memory = jnp.array(ltm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
+        stm_memory = jnp.array(stm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
+        mtm_memory = jnp.array(mtm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
 
         batch_size = inputs.shape[0]
         mini_batch_size = batch_size // accum_steps
@@ -182,11 +191,11 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
             )
             adapted_params = jax.tree_map(lambda p: p, adapted_params)
 
-        query_embeddings = jnp.mean(get_embeddings(config, adapted_params, adapted_state, rng, query_inputs), axis=1)
-        query_key_np = np.asarray(jax.device_get(query_embeddings), dtype=np.float32)
-        ltm_memory_query = jnp.array(ltm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
-        stm_memory_query = jnp.array(stm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
-        mtm_memory_query = jnp.array(mtm.retrieve(query_key_np, config.EPSILON), dtype=jnp.float32)
+        query_embeddings = jnp.mean(get_embeddings(params, adapted_state, rng, query_inputs, spike_threshold=config.spike_threshold, epsilon=config.EPSILON), axis=1)
+        query_key_np = np.asarray(jax.device_get(query_embeddings), dtype=config.embedding_dtype)
+        ltm_memory_query = jnp.array(ltm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
+        stm_memory_query = jnp.array(stm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
+        mtm_memory_query = jnp.array(mtm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
         
         loss, new_state, query_thoughts = compute_loss(
             adapted_params, adapted_state, rng, query_inputs, query_targets, ltm_memory_query, stm_memory_query, mtm_memory_query
@@ -227,10 +236,10 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
         losses.append(float(loss))
 
-        embeddings = jnp.mean(get_embeddings(config, params, state, step_rng, query_inputs), axis=1)
-        ltm.store(embeddings, embeddings)
-        stm.store(embeddings, embeddings)
-        mtm.store(embeddings, embeddings)
+        embeddings = jnp.mean(get_embeddings(params, state, step_rng, query_inputs, spike_threshold=config.spike_threshold, epsilon=config.EPSILON), axis=1)
+        ltm.store(embeddings, embeddings, config.spike_threshold, config.EPSILON)
+        stm.store(embeddings, embeddings, config.spike_threshold, config.EPSILON)
+        mtm.store(embeddings, embeddings, config.spike_threshold, config.EPSILON)
 
         thought_logs.append({"task_idx": task_idx, "support_thoughts": support_thoughts, "query_thoughts": query_thoughts})
         similarity_score = thought_logs[-1]["query_thoughts"]["similarity_score"]
@@ -258,7 +267,7 @@ def clear_gpu_memory():
     gc.collect()
     logger.info("[INFO] GPU memory cleared")
 
-def get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
+def get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold=0.1, epsilon=1e-8):
     def forward_with_embeddings(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
         inputs = jnp.asarray(inputs, dtype=jnp.int32, copy=True)
         model = TMSModel(
@@ -285,9 +294,9 @@ def get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm=None
         if retrieved_memory_mtm is not None:
             retrieved_memory_mtm = model.memory_projection_mtm(jnp.repeat(jnp.expand_dims(retrieved_memory_mtm, axis=1), x.shape[1], axis=1))
             x += model.mtm_weight * retrieved_memory_mtm
-        x, _ = model.self_attention(inputs, return_attention=True)
-        x, _ = model.transformer(x, rng, return_attention=True)
-        x, _, _ = model.moe(x)
+        x, _ = model.self_attention(inputs, return_attention=True, spike_threshold=spike_threshold, epsilon=epsilon)
+        x, _ = model.transformer(x, rng, return_attention=True, spike_threshold=spike_threshold, epsilon=epsilon)
+        x, _, _ = model.moe(x, spike_threshold=spike_threshold, epsilon=epsilon)
         x = model.norm(x)
         return x
 
