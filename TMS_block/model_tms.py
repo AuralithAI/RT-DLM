@@ -23,7 +23,7 @@ class TMSModel(hk.Module):
         self.position_enc = hk.Embed(max_seq_length, d_model)
         self.self_attention = SelfAttentionModel(d_model, num_heads, vocab_size, max_seq_length)
         self.transformer = TransformerModel(d_model, num_heads, num_layers, vocab_size, max_seq_length)
-        self.moe = SparseMoE(d_model, moe_experts, moe_top_k, expert_capacity=3)
+        self.moe = SparseMoE(d_model, moe_experts, moe_top_k, expert_capacity=3, spike_threshold=0.1, epsilon=1e-8)
         self.memory = MemoryBank(memory_size, d_model, retrieval_k)
         self.memory_to_logits = hk.Linear(vocab_size)
         self.memory_projection_ltm = hk.Linear(d_model)
