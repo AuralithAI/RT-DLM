@@ -137,11 +137,9 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
     # Inner loop train step with gradient accumulation
     @jax.jit
-    def _accumulate_gradients(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm, spike_threshold, epsilon):
-        loss, new_state, thoughts = compute_loss(
-            params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm, spike_threshold, epsilon
-        )
-        grads = jax.grad(loss_for_gradients)(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm, spike_threshold, epsilon)
+    def _accumulate_gradients(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm):
+        loss, new_state, thoughts = compute_loss(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
+        grads = jax.grad(loss_for_gradients)(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
         return grads, loss, new_state, thoughts
 
     def train_step(params, state, inner_opt_state, rng, inputs, targets, step, accum_steps=2):
