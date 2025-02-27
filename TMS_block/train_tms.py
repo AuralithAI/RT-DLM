@@ -188,7 +188,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
             )
             adapted_params = jax.tree_map(lambda p: p, adapted_params)
 
-        query_embeddings = jnp.mean(get_embeddings(params, adapted_state, rng, query_inputs, spike_threshold=config.spike_threshold, epsilon=config.EPSILON), axis=1)
+        query_embeddings = jnp.mean(get_embeddings(config, params, adapted_state, rng, query_inputs, spike_threshold=config.spike_threshold, epsilon=config.EPSILON), axis=1)
         query_key_np = np.asarray(jax.device_get(query_embeddings), dtype=config.embedding_dtype)
         ltm_memory_query = jnp.array(ltm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
         stm_memory_query = jnp.array(stm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
@@ -233,7 +233,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
         losses.append(float(loss))
 
-        embeddings = jnp.mean(get_embeddings(params, state, step_rng, query_inputs, spike_threshold=config.spike_threshold, epsilon=config.EPSILON), axis=1)
+        embeddings = jnp.mean(get_embeddings(config, params, state, step_rng, query_inputs, spike_threshold=config.spike_threshold, epsilon=config.EPSILON), axis=1)
         ltm.store(embeddings, embeddings, config.spike_threshold, config.EPSILON)
         stm.store(embeddings, embeddings, config.spike_threshold, config.EPSILON)
         mtm.store(embeddings, embeddings, config.spike_threshold, config.EPSILON)
