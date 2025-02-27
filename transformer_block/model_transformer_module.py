@@ -24,6 +24,8 @@ class TransformerBlock(hk.Module):
         """
         Apply Spiking Attention by thresholding attention scores.
         """
+        if spike_threshold is None or epsilon is None:
+            return scores
         spiking_mask = scores > spike_threshold
         spiked_scores = jnp.where(spiking_mask, scores, 0.0)
         return spiked_scores / (jnp.sum(spiked_scores, axis=-1, keepdims=True) + epsilon)
