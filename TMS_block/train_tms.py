@@ -47,7 +47,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     logger.info(f"Dataset loaded - {inputs.shape[0]} samples")
 
     # Model definition
-    def forward_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
+    def forward_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, **kwargs):
         model = TMSModel(
             d_model=config.d_model, 
             num_heads=config.num_heads, 
@@ -63,7 +63,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
             mtm_weight=config.mtm_weight
         )
         return model(inputs, return_attention=return_attention, retrieved_memory_ltm=retrieved_memory_ltm, 
-                     retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm)
+                     retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm, **kwargs)
 
     logger.info("Transforming model with Haiku")
     model = hk.transform_with_state(forward_fn)
