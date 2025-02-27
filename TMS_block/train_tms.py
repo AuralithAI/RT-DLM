@@ -104,9 +104,9 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         (logits, (attn_weights_self, attn_weights_transformer), expert_indices, aux_loss), new_state = model.apply(
             params, state, rng, inputs, return_attention=True,
             retrieved_memory_ltm=retrieved_memory_ltm, retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm,
-            spike_threshold=config.spike_threshold, epsilon=config.epsilon
+            spike_threshold=config.spike_threshold, epsilon=config.EPSILON
         )
-        embeddings = get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm, config.spike_threshold, config.epsilon)
+        embeddings = get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm, config.spike_threshold, config.EPSILON)
         query_key = jnp.mean(embeddings, axis=1)
         ltm_norm = jnp.linalg.norm(retrieved_memory_ltm, axis=-1, keepdims=True) + config.EPSILON
         stm_norm = jnp.linalg.norm(retrieved_memory_stm, axis=-1, keepdims=True) + config.EPSILON
