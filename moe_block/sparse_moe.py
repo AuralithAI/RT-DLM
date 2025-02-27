@@ -45,7 +45,7 @@ class SparseMoE(hk.Module):
         Apply Spiking Attention to input tensor.
         """
         if spike_threshold is None or epsilon is None:
-            return scores
+            return x
         scores = jnp.mean(x, axis=-1, keepdims=True)
         spiking_mask = scores > spike_threshold
         spiked_x = jnp.where(spiking_mask, x, 0.0)
