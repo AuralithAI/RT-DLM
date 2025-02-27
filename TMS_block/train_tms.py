@@ -12,7 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from model_tms import TMSModel
 from data_utils import DataProcessor, load_data, create_batches
 from memory_bank import MemoryBank, ShortTermMemory, MidTermMemory
-from jax.extend import backend
+from train_config import TrainConfig
 
 logging.basicConfig(
     level=logging.INFO, 
@@ -301,3 +301,29 @@ def get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm=None
     embeddings, _ = transformed.apply(params, state, rng, inputs, retrieved_memory_ltm=retrieved_memory_ltm, 
                                      retrieved_memory_stm=retrieved_memory_stm, retrieved_memory_mtm=retrieved_memory_mtm)
     return embeddings
+
+if __name__ == "__main__":
+    config = TrainConfig(
+        d_model=512,
+        num_heads=8,
+        num_layers=10,
+        moe_experts=8,
+        moe_top_k=2,
+        batch_size=32,
+        learning_rate=0.002,
+        inner_learning_rate=0.0007,
+        warmup_steps=15000,
+        decay_steps=200000,
+        memory_size=20000,
+        retrieval_k=5,
+        stm_buffer_size=64,
+        mtm_buffer_size=2000,
+        retention_steps=100,
+        ltm_weight=0.33,
+        stm_weight=0.33,
+        mtm_weight=0.33,
+        spike_threshold=0.03,
+        epsilon=1e-6
+    )
+    losses, params, similarity_scores, state, ltm, stm, mtm, thought_logs = train_and_evaluate(config, [], [], [])
+    logger.info(f"Training completed - Final Loss: {losses[-1]:.4f}, Final Similarity: {similarity_scores[-1]:.4f}")
