@@ -265,7 +265,7 @@ def clear_gpu_memory():
     logger.info("[INFO] GPU memory cleared")
 
 def get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold=0.1, epsilon=1e-8):
-    def forward_with_embeddings(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
+    def forward_with_embeddings(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold = spike_threshold, epsilon = epsilon):
         inputs = jnp.asarray(inputs, dtype=jnp.int32, copy=True)
         model = TMSModel(
             d_model=config.d_model,
