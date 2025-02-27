@@ -27,13 +27,12 @@ class SparseMoE(hk.Module):
     Sparse Mixture of Experts (MoE) with Top-K Gating and Load Balancing.
     """
 
-    def __init__(self, d_model: int, num_experts: int, top_k: int, expert_capacity: int, threshold: float, name=None):
+    def __init__(self, d_model: int, num_experts: int, top_k: int, expert_capacity: int, name=None):
         super().__init__(name=name)
         self.d_model = d_model
         self.num_experts = num_experts
         self.top_k = top_k
         self.expert_capacity = expert_capacity
-        self.threshold = threshold
         self.experts = [hk.Sequential([
             hk.Linear(d_model * 2),  
             jax.nn.silu,
