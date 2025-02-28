@@ -322,7 +322,7 @@ if __name__ == "__main__":
         ltm_weight=0.6277,
         stm_weight=0.000377,
         mtm_weight=0.3988,
-        spike_threshold=None,
+        spike_threshold=0.05,
         epsilon=1e-6
     )
     losses, params, similarity_scores, state, ltm, stm, mtm, thought_logs = train_and_evaluate(config, [], [], [])
