@@ -44,7 +44,10 @@ class SelfAttentionModel(hk.Module):
         Update usage statistics for attention heads based on their weights.
         """
         head_usage_update = jnp.mean(attn_weights, axis=(0, 1))
-        return hk.get_state("head_usage", [], dtype=jnp.float32, init=lambda x: self.head_usage) + head_usage_update
+        current_usage = hk.get_state("head_usage", [], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape, dtype=jnp.float32))
+        new_usage = current_usage + head_usage_update
+        hk.set_state("head_usage", new_usage)
+        return new_usage
 
     def prune_heads(self, threshold=0.01):
         """
@@ -67,7 +70,7 @@ class SelfAttentionModel(hk.Module):
             max_seq_length=self.max_seq_length,
             name=self.name
         )
-        new_model.head_usage = hk.get_parameter("head_usage", [new_num_heads], dtype=jnp.float32, init=jnp.zeros)
+        new_model.head_usage = hk.get_state("head_usage", [new_num_heads], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape, dtype=jnp.float32))
 
         active_indices = jnp.where(active_heads)[0]
         new_model.attention = hk.MultiHeadAttention(
@@ -97,7 +100,8 @@ class SelfAttentionModel(hk.Module):
         attn_out = self.attention(query=x, key=x, value=x, mask=mask)
         attention_weights = jax.nn.softmax(attn_out, axis=-1) if return_attention else None
         spiked_attentions = self.apply_spiking_attention(attn_out, spike_threshold, epsilon)
-        self.head_usage = self.update_head_usage(attention_weights)
+        if return_attention:
+            self.update_head_usage(attention_weights)
         x = x + spiked_attentions  
         x = self.norm2(x)
         ffn_out = self.ffn(x)

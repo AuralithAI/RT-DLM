@@ -222,7 +222,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         # Prune SelfAttentionModel
         self_attention = new_state["self_attention"]
         if hasattr(self_attention, "prune_heads"):
-            new_self_attention = self_attention.prune_heads(threshold=0.01)
+            new_self_attention = self_attention.prune_heads(threshold=config.prune_threshold)
             new_self_attention_params, new_self_attention_state = hk.transform_with_state(
                 lambda x: new_self_attention(x, return_attention=True)
             ).init(rng, inputs[:1])
@@ -232,7 +232,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         # Prune SparseMoE
         moe = new_state["moe"]
         if hasattr(moe, "prune_experts"):
-            new_moe = moe.prune_experts(threshold=0.01)
+            new_moe = moe.prune_experts(threshold=config.prune_threshold)
             new_moe_params, new_moe_state = hk.transform_with_state(
                 lambda x: new_moe(x)
             ).init(rng, inputs[:1])
@@ -242,7 +242,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         # Prune TransformerModel
         transformer = new_state["transformer"]
         if hasattr(transformer, "prune_layers"):
-            new_transformer = transformer.prune_layers(threshold=0.01)
+            new_transformer = transformer.prune_layers(threshold=config.prune_threshold)
             new_transformer_params, new_transformer_state = hk.transform_with_state(
                 lambda x: new_transformer(x, return_attention=True)
             ).init(rng, inputs[:1])
