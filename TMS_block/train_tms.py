@@ -401,7 +401,8 @@ if __name__ == "__main__":
         stm_weight=0.3,
         mtm_weight=0.3,
         spike_threshold=0.3,
-        epsilon=1e-6
+        epsilon=1e-6,
+        prune_threshold=0.01
     )
     losses, params, similarity_scores, state, ltm, stm, mtm, thought_logs = train_and_evaluate(config, [], [], [])
     logger.info(f"Training completed - Final Loss: {losses[-1]:.4f}, Final Similarity: {similarity_scores[-1]:.4f}")
