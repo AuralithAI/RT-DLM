@@ -46,7 +46,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     targets = inputs  # Next-token prediction
     logger.info(f"Dataset loaded - {inputs.shape[0]} samples")
 
-    # Model definition
+    # Model definition with dynamic pruning
     def forward_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, **kwargs):
         model = TMSModel(
             d_model=config.d_model, 
@@ -117,7 +117,8 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         mtm_similarity = jnp.sum(query_key * retrieved_memory_mtm, axis=-1) / (query_norm * mtm_norm)
         similarity_score = jnp.stack([ltm_similarity, stm_similarity, mtm_similarity], axis=-1)
         similarity_score = jax.lax.stop_gradient(similarity_score)
-        similarity_score = jnp.nan_to_num(similarity_score, nan=0.0)
+        similarity_score = jnp.nan_to_num(similarity_score, nan=0.0, posinf=1.0, neginf=-1.0)
+        similarity_score = jnp.clip(similarity_score, -1.0, 1.0)
 
         thoughts = {
             "attn_weights_self": attn_weights_self,
@@ -127,6 +128,9 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         }
 
         loss = optax.softmax_cross_entropy_with_integer_labels(logits, targets).mean()
+        logger.info(f"Cross-entropy loss: {float(loss):.4f}, Aux loss: {float(aux_loss):.4f}, Total loss: {float(loss + 0.001 * aux_loss):.4f}")
+        logger.info(f"Logits norm: {jnp.linalg.norm(logits):.4f}, Targets norm: {jnp.linalg.norm(targets):.4f}")
+        logger.info(f"Similarity score: {jnp.mean(similarity_score):.4f}")
         total_loss = loss + 0.001 * aux_loss
         return total_loss, new_state, thoughts
 
@@ -135,19 +139,20 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         loss, _, _ = compute_loss(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
         return loss
 
-    # Inner loop train step with gradient accumulation
+    # Inner loop train step with gradient accumulation and pruning
     @jax.jit
     def _accumulate_gradients(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm):
         loss, new_state, thoughts = compute_loss(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
         grads = jax.grad(loss_for_gradients)(params, state, rng, inputs, targets, retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
         return grads, loss, new_state, thoughts
 
-    def train_step(params, state, inner_opt_state, rng, inputs, targets, step, accum_steps=2):
+    def train_step(params, state, inner_opt_state, rng, inputs, targets, step, accum_steps=2, prune_interval=50):
         embeddings = jnp.mean(get_embeddings(config, params, state, rng, inputs, spike_threshold=config.spike_threshold, epsilon=config.EPSILON), axis=1)
         query_key_np = np.asarray(jax.device_get(embeddings), dtype=np.float32)
         ltm_memory = jnp.array(ltm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
         stm_memory = jnp.array(stm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
         mtm_memory = jnp.array(mtm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
+        logger.info(f"LTM norm: {jnp.linalg.norm(ltm_memory):.4f}, STM norm: {jnp.linalg.norm(stm_memory):.4f}, MTM norm: {jnp.linalg.norm(mtm_memory):.4f}")
 
         batch_size = inputs.shape[0]
         mini_batch_size = batch_size // accum_steps
@@ -171,9 +176,80 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
             thoughts = mini_thoughts if thoughts is None else thoughts  # Keep last thoughts
 
         total_grads = jax.tree.map(lambda x: x / accum_steps, total_grads)
+        # Gradient clipping
+        total_grads = jax.tree.map(lambda x: jnp.clip_by_norm(x, 10.0), total_grads)
         updates, new_inner_opt_state = inner_optimizer.update(total_grads, inner_opt_state, params)
         params = optax.apply_updates(params, updates)
+
+        # Prune periodically (every prune_interval steps)
+        if step % prune_interval == 0 and step > 0:
+            logger.info(f"Pruning at step {step}...")
+            # Prune attention heads and experts
+            new_params, new_state = _prune_model(params, state, rng, inputs[:1])  # Use a small batch for pruning
+            params = new_params
+            state = new_state
+
         return total_loss, new_state, thoughts, new_inner_opt_state
+
+    def _prune_model(params, state, rng, inputs):
+        """
+        Prune underutilized attention heads, experts, and Transformer components from the model, with proper Haiku state management.
+        """
+        # Define forward pass for pruning (to update usage stats)
+        def forward_prune(inputs, return_attention=False, **kwargs):
+            model = TMSModel(
+                d_model=config.d_model, 
+                num_heads=config.num_heads, 
+                num_layers=config.num_layers,
+                vocab_size=config.vocab_size, 
+                max_seq_length=config.max_seq_length,
+                moe_experts=config.moe_experts, 
+                moe_top_k=config.moe_top_k,
+                memory_size=config.memory_size, 
+                retrieval_k=config.retrieval_k,
+                ltm_weight=config.ltm_weight, 
+                stm_weight=config.stm_weight, 
+                mtm_weight=config.mtm_weight
+            )
+            return model(inputs, return_attention=return_attention, **kwargs)
+
+        # Transform with state for pruning
+        prune_model = hk.transform_with_state(forward_prune)
+        _, new_state = prune_model.apply(params, state, rng, inputs, return_attention=True,
+                                        retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None,
+                                        spike_threshold=config.spike_threshold, epsilon=config.EPSILON)
+
+        # Prune SelfAttentionModel
+        self_attention = new_state["self_attention"]
+        if hasattr(self_attention, "prune_heads"):
+            new_self_attention = self_attention.prune_heads(threshold=0.01)
+            new_self_attention_params, new_self_attention_state = hk.transform_with_state(
+                lambda x: new_self_attention(x, return_attention=True)
+            ).init(rng, inputs[:1])
+            params["self_attention"] = new_self_attention_params
+            state["self_attention"] = new_self_attention_state
+
+        # Prune SparseMoE
+        moe = new_state["moe"]
+        if hasattr(moe, "prune_experts"):
+            new_moe = moe.prune_experts(threshold=0.01)
+            new_moe_params, new_moe_state = hk.transform_with_state(
+                lambda x: new_moe(x)
+            ).init(rng, inputs[:1])
+            params["moe"] = new_moe_params
+            state["moe"] = new_moe_state
+
+        # Prune TransformerModel
+        transformer = new_state["transformer"]
+        if hasattr(transformer, "prune_layers"):
+            new_transformer = transformer.prune_layers(threshold=0.01)
+            new_transformer_params, new_transformer_state = hk.transform_with_state(
+                lambda x: new_transformer(x, return_attention=True)
+            ).init(rng, inputs[:1])
+            params["transformer"] = new_transformer_params
+            state["transformer"] = new_transformer_state
+
+        return params, state
 
     # Meta-step: Outer loop (MAML update)
     def meta_step(params, state, meta_opt_state, inner_opt_state, rng, support_inputs, support_targets, query_inputs, query_targets, accum_steps=2):
@@ -184,9 +260,9 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
         for _ in range(num_inner_steps):
             loss, adapted_state, support_thoughts, new_inner_opt_state = train_step(
-                adapted_params, adapted_state, new_inner_opt_state, rng, support_inputs, support_targets, 0, accum_steps=accum_steps
+                adapted_params, adapted_state, new_inner_opt_state, rng, support_inputs, support_targets, 0, accum_steps=accum_steps, prune_interval=50
             )
-            adapted_params = jax.tree_map(lambda p: p, adapted_params)
+            adapted_params = jax.tree.map(lambda p: p, adapted_params)
 
         query_embeddings = jnp.mean(get_embeddings(config, params, adapted_state, rng, query_inputs, spike_threshold=config.spike_threshold, epsilon=config.EPSILON), axis=1)
         query_key_np = np.asarray(jax.device_get(query_embeddings), dtype=config.embedding_dtype)
@@ -265,7 +341,9 @@ def clear_gpu_memory():
     logger.info("[INFO] GPU memory cleared")
 
 def get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold=0.1, epsilon=1e-8):
-    def forward_with_embeddings(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold = spike_threshold, epsilon = epsilon):
+    def forward_with_embeddings(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold=spike_threshold, epsilon=epsilon):
+        if not 0 <= spike_threshold <= 1:
+            raise ValueError("spike_threshold must be between 0 and 1")
         inputs = jnp.asarray(inputs, dtype=jnp.int32, copy=True)
         model = TMSModel(
             d_model=config.d_model,

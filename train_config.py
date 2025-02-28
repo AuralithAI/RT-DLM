@@ -15,6 +15,7 @@ class TrainConfig:
         self.moe_experts = kwargs.get("moe_experts", 8)  # Number of experts in Mixture of Experts
         self.moe_top_k = kwargs.get("moe_top_k", 2)  # Top-k experts to select in MoE
         self.task_size = kwargs.get("task_size", 15)  # Task size for support and query sets (batches)
+        self.prune_threshold=kwargs.get("prune_threshold", 0.01) # Pruning threshold for MoE/Transformer/Self-Attention neurons.
 
         # Ensure d_model is divisible by num_heads for MultiHeadAttention compatibility
         if self.d_model % self.num_heads != 0:
