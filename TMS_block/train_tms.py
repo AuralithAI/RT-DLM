@@ -170,7 +170,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
             total_loss += loss * (mini_inputs.shape[0] / batch_size)
             thoughts = mini_thoughts if thoughts is None else thoughts  # Keep last thoughts
 
-        total_grads = jax.tree_map(lambda x: x / accum_steps, total_grads)
+        total_grads = jax.tree.map(lambda x: x / accum_steps, total_grads)
         updates, new_inner_opt_state = inner_optimizer.update(total_grads, inner_opt_state, params)
         params = optax.apply_updates(params, updates)
         return total_loss, new_state, thoughts, new_inner_opt_state
@@ -306,24 +306,24 @@ if __name__ == "__main__":
     config = TrainConfig(
         d_model=512,
         num_heads=8,
-        num_layers=10,
-        moe_experts=8,
+        num_layers=7,
+        moe_experts=4,
         moe_top_k=2,
-        batch_size=32,
-        learning_rate=0.002,
-        inner_learning_rate=0.0005,
-        warmup_steps=20000,
-        decay_steps=150000,
-        memory_size=20000,
+        batch_size=4,
+        learning_rate=0.001287,
+        inner_learning_rate=0.000873,
+        warmup_steps=3000,
+        decay_steps=300000,
+        memory_size=10000,
         retrieval_k=5,
-        stm_buffer_size=64,
-        mtm_buffer_size=2000,
+        stm_buffer_size=8,
+        mtm_buffer_size=500,
         retention_steps=100,
-        ltm_weight=0.5,
-        stm_weight=0.25,
-        mtm_weight=0.25,
-        spike_threshold=0.1,
-        epsilon=1e-4
+        ltm_weight=0.6277,
+        stm_weight=0.000377,
+        mtm_weight=0.3988,
+        spike_threshold=None,
+        epsilon=1e-6
     )
     losses, params, similarity_scores, state, ltm, stm, mtm, thought_logs = train_and_evaluate(config, [], [], [])
     logger.info(f"Training completed - Final Loss: {losses[-1]:.4f}, Final Similarity: {similarity_scores[-1]:.4f}")
