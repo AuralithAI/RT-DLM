@@ -151,7 +151,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
         batch_size = inputs.shape[0]
         mini_batch_size = batch_size // accum_steps
-        total_grads = jax.tree_map(lambda x: jnp.zeros_like(x), params)
+        total_grads = jax.tree.map(lambda x: jnp.zeros_like(x), params)
         total_loss = 0.0
         new_state = state
         thoughts = None
@@ -304,16 +304,16 @@ def get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm=None
 
 if __name__ == "__main__":
     config = TrainConfig(
-        d_model=512,
+        d_model=384,
         num_heads=8,
-        num_layers=10,
+        num_layers=8,
         moe_experts=8,
         moe_top_k=2,
         batch_size=32,
-        learning_rate=0.002,
-        inner_learning_rate=0.0007,
-        warmup_steps=15000,
-        decay_steps=200000,
+        learning_rate=0.001,
+        inner_learning_rate=0.0003,
+        warmup_steps=20000,
+        decay_steps=150000,
         memory_size=20000,
         retrieval_k=5,
         stm_buffer_size=64,
@@ -322,7 +322,7 @@ if __name__ == "__main__":
         ltm_weight=0.33,
         stm_weight=0.33,
         mtm_weight=0.33,
-        spike_threshold=0.03,
+        spike_threshold=0.01,
         epsilon=1e-6
     )
     losses, params, similarity_scores, state, ltm, stm, mtm, thought_logs = train_and_evaluate(config, [], [], [])
