@@ -166,7 +166,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
                 params, new_state, rng, mini_inputs, mini_targets, ltm_memory[start_idx:end_idx],
                 stm_memory[start_idx:end_idx], mtm_memory[start_idx:end_idx]
             )
-            total_grads = jax.tree_map(lambda x, y: x + y, total_grads, grads)
+            total_grads = jax.tree.map(lambda x, y: x + y, total_grads, grads)
             total_loss += loss * (mini_inputs.shape[0] / batch_size)
             thoughts = mini_thoughts if thoughts is None else thoughts  # Keep last thoughts
 
@@ -304,14 +304,14 @@ def get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm=None
 
 if __name__ == "__main__":
     config = TrainConfig(
-        d_model=384,
+        d_model=512,
         num_heads=8,
-        num_layers=8,
+        num_layers=10,
         moe_experts=8,
         moe_top_k=2,
         batch_size=32,
-        learning_rate=0.001,
-        inner_learning_rate=0.0003,
+        learning_rate=0.002,
+        inner_learning_rate=0.0005,
         warmup_steps=20000,
         decay_steps=150000,
         memory_size=20000,
@@ -319,11 +319,11 @@ if __name__ == "__main__":
         stm_buffer_size=64,
         mtm_buffer_size=2000,
         retention_steps=100,
-        ltm_weight=0.33,
-        stm_weight=0.33,
-        mtm_weight=0.33,
-        spike_threshold=0.01,
-        epsilon=1e-6
+        ltm_weight=0.5,
+        stm_weight=0.25,
+        mtm_weight=0.25,
+        spike_threshold=0.1,
+        epsilon=1e-4
     )
     losses, params, similarity_scores, state, ltm, stm, mtm, thought_logs = train_and_evaluate(config, [], [], [])
     logger.info(f"Training completed - Final Loss: {losses[-1]:.4f}, Final Similarity: {similarity_scores[-1]:.4f}")
