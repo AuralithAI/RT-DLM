@@ -304,14 +304,14 @@ def get_embeddings(config, params, state, rng, inputs, retrieved_memory_ltm=None
 
 if __name__ == "__main__":
     config = TrainConfig(
-        d_model=512,
-        num_heads=8,
-        num_layers=7,
+        d_model=768,
+        num_heads=12,
+        num_layers=10,
         moe_experts=4,
         moe_top_k=2,
         batch_size=4,
-        learning_rate=0.001287,
-        inner_learning_rate=0.000873,
+        learning_rate=0.0005,
+        inner_learning_rate=0.0001,
         warmup_steps=3000,
         decay_steps=300000,
         memory_size=10000,
@@ -319,10 +319,10 @@ if __name__ == "__main__":
         stm_buffer_size=8,
         mtm_buffer_size=500,
         retention_steps=100,
-        ltm_weight=0.6277,
-        stm_weight=0.000377,
-        mtm_weight=0.3988,
-        spike_threshold=0.05,
+        ltm_weight=0.4,
+        stm_weight=0.3,
+        mtm_weight=0.3,
+        spike_threshold=0.3,
         epsilon=1e-6
     )
     losses, params, similarity_scores, state, ltm, stm, mtm, thought_logs = train_and_evaluate(config, [], [], [])
