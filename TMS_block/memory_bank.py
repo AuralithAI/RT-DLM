@@ -18,7 +18,16 @@ class MemoryBank:
         self.index = faiss.IndexFlatL2(embedding_dim)
         self.values = []
 
-    def store(self, keys, values):
+    def apply_spiking_attention_jnp(self, x, spike_threshold, epsilon):
+        """
+        Apply Spiking Attention to JAX array.
+        """
+        scores = jnp.mean(x, axis=-1, keepdims=True)
+        spiking_mask = scores > spike_threshold
+        spiked_x = jnp.where(spiking_mask, x, 0.0)
+        return spiked_x / (jnp.sum(spiked_x, axis=-1, keepdims=True) + epsilon)
+
+    def store(self, keys, values, spike_threshold=0.1, epsilon=1e-8):
         """
         Stores key-value pairs in the memory bank.
         :param keys: Batch of mean-pooled embeddings (shape: [batch_size, embedding_dim])
@@ -28,7 +37,8 @@ class MemoryBank:
         keys = jax.block_until_ready(keys)
         values = jax.block_until_ready(values)
 
-        # **Detach from JAX before passing to FAISS**
+        # **Detach from JAX before passing to FAISS -- Apply Spiking Attention to keys before storage**
+        keys = self.apply_spiking_attention_jnp(keys, spike_threshold, epsilon)
         keys_np = np.asarray(jax.device_get(keys), dtype=np.float32)
         values_np = np.asarray(jax.device_get(values), dtype=np.float32)
 
@@ -48,12 +58,15 @@ class MemoryBank:
         self.values.extend(values_np.tolist())
         self.index.add(keys_np)
 
-    def retrieve(self, queries_np, epsilon=1e-8):
+    def retrieve(self, queries_np, spike_threshold=0.1, epsilon=1e-8):
         """
         Retrieves closest memory values.
         :param queries: Query embeddings (shape: [batch_size, embedding_dim])
         :return: Retrieved memory activations (shape: [batch_size, embedding_dim])
         """
+        queries_np = jax.block_until_ready(queries_np)
+        queries_np = self.apply_spiking_attention_jnp(queries_np, spike_threshold, epsilon)
+        queries_np = np.asarray(jax.device_get(queries_np), dtype=np.float32)
         if queries_np.ndim == 1:
             queries_np = queries_np.reshape(1, -1)
         assert queries_np.shape[1] == self.embedding_dim
@@ -79,10 +92,20 @@ class ShortTermMemory:
         self.embedding_dim = embedding_dim
         self.buffer = []  
 
-    def store(self, keys, values):
+    def apply_spiking_attention_jnp(self, x, spike_threshold, epsilon):
+        """
+        Apply Spiking Attention to JAX array.
+        """
+        scores = jnp.mean(x, axis=-1, keepdims=True)
+        spiking_mask = scores > spike_threshold
+        spiked_x = jnp.where(spiking_mask, x, 0.0)
+        return spiked_x / (jnp.sum(spiked_x, axis=-1, keepdims=True) + epsilon)
+    
+    def store(self, keys, values, spike_threshold=0.1, epsilon=1e-8):
         """Store embeddings for the current batch, resetting each call."""
         keys = jax.block_until_ready(keys)
         values = jax.block_until_ready(values)
+        keys = self.apply_spiking_attention_jnp(keys, spike_threshold, epsilon)
         keys_np = np.asarray(jax.device_get(keys), dtype=np.float32)
         values_np = np.asarray(jax.device_get(values), dtype=np.float32)
 
@@ -94,8 +117,11 @@ class ShortTermMemory:
         assert keys_np.shape[1] == self.embedding_dim
         self.buffer = list(values_np[:self.buffer_size])  
 
-    def retrieve(self, queries_np, epsilon=1e-8):
+    def retrieve(self, queries_np, spike_threshold=0.1, epsilon=1e-8):
         """Retrieve all embeddings from the current batch buffer."""
+        queries_np = jax.block_until_ready(queries_np)
+        queries_np = self.apply_spiking_attention_jnp(queries_np, spike_threshold, epsilon)
+        queries_np = np.asarray(jax.device_get(queries_np), dtype=np.float32)
         if queries_np.ndim == 1:
             queries_np = queries_np.reshape(1, -1)
         assert queries_np.shape[1] == self.embedding_dim
@@ -114,9 +140,19 @@ class MidTermMemory:
         self.step_count = 0
         self.retention_steps = retention_steps  
 
-    def store(self, keys, values):
+    def apply_spiking_attention_jnp(self, x, spike_threshold, epsilon):
+        """
+        Apply Spiking Attention to JAX array.
+        """
+        scores = jnp.mean(x, axis=-1, keepdims=True)
+        spiking_mask = scores > spike_threshold
+        spiked_x = jnp.where(spiking_mask, x, 0.0)
+        return spiked_x / (jnp.sum(spiked_x, axis=-1, keepdims=True) + epsilon)
+    
+    def store(self, keys, values, spike_threshold=0.1, epsilon=1e-8):
         keys = jax.block_until_ready(keys)
         values = jax.block_until_ready(values)
+        keys = self.apply_spiking_attention_jnp(keys, spike_threshold, epsilon)
         keys_np = np.asarray(jax.device_get(keys), dtype=np.float32)
         values_np = np.asarray(jax.device_get(values), dtype=np.float32)
         if keys_np.ndim == 1:
@@ -129,7 +165,10 @@ class MidTermMemory:
         self.buffer = self.buffer[-self.buffer_size:]
         self.step_count += 1
 
-    def retrieve(self, queries_np, epsilon=1e-8):
+    def retrieve(self, queries_np, spike_threshold=0.1, epsilon=1e-8):
+        queries_np = jax.block_until_ready(queries_np)
+        queries_np = self.apply_spiking_attention_jnp(queries_np, spike_threshold, epsilon)
+        queries_np = np.asarray(jax.device_get(queries_np), dtype=np.float32)
         if queries_np.ndim == 1:
             queries_np = queries_np.reshape(1, -1)
         assert queries_np.shape[1] == self.embedding_dim

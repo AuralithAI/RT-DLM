@@ -35,8 +35,8 @@ class TMSModel(hk.Module):
         self.stm_weight = stm_weight
         self.mtm_weight = mtm_weight
 
-    def __call__(self, inputs, rng=None, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None):
-        inputs = jnp.asarray(inputs, dtype=jnp.int32)
+    def __call__(self, inputs, rng=None, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold=None, epsilon=None):
+        inputs = jnp.asarray(inputs, dtype=jnp.int32, copy=True)
         x = self.embedding(inputs) + self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))
 
         # ** dummy_memory is used to initialize the memory projection layers [Not to be used anywhere else] ** 
@@ -66,9 +66,9 @@ class TMSModel(hk.Module):
         else:
             _ = self.memory_projection_mtm(dummy_memory)
 
-        x, attn_weights_self = self.self_attention(inputs, return_attention=True)
-        x, attn_weights_transformer = self.transformer(x, rng, return_attention=True)
-        x, top_k_expert_indices, aux_loss = self.moe(x)
+        x, attn_weights_self = self.self_attention(inputs, return_attention=True, spike_threshold=spike_threshold, epsilon=epsilon)
+        x, attn_weights_transformer = self.transformer(x, rng, return_attention=True, spike_threshold=spike_threshold, epsilon=epsilon)
+        x, top_k_expert_indices, aux_loss = self.moe(x, spike_threshold=spike_threshold, epsilon=epsilon)
         x = self.norm(x)
         logits = self.proj(x)
 

@@ -56,7 +56,8 @@ class TrainConfig:
         self.mtm_buffer_size = kwargs.get("mtm_buffer_size", 1000)  # Size of the mid-term memory buffer
         self.retention_steps = kwargs.get("retention_steps", 100)  # Number of steps to retain in mid-term memory
 
-        # --- Numerical Stability ---
+        # --- Spiking Attention and Numerical Stability ---
+        self.spike_threshold = kwargs.get("spike_threshold", 0.1)  # Threshold for Spiking Attention (0.05 to 0.3, tunable)
         self.EPSILON = kwargs.get("EPSILON", 1e-8)  # Small constant to avoid division by zero
 
         # --- XLA/GPU Configuration ---
@@ -99,3 +100,7 @@ class TrainConfig:
             raise ValueError("Memory weights (ltm_weight, stm_weight, mtm_weight) must be between 0 and 1")
         if self.xla_gpu_parallelism <= 0:
             raise ValueError(f"xla_gpu_parallelism must be positive, got {self.xla_gpu_parallelism}")
+        if self.spike_threshold <= 0 or self.spike_threshold > 1:
+            raise ValueError(f"spike_threshold ({self.spike_threshold}) must be between 0 and 1")
+        if self.EPSILON <= 0:
+            raise ValueError(f"EPSILON ({self.EPSILON}) must be positive")
