@@ -19,14 +19,14 @@ class TransformerBlock(hk.Module):
             hk.Linear(d_model)
         ])
         self.dropout_rate = dropout_rate
-        self.head_usage = hk.get_parameter("head_usage", [num_heads], dtype=jnp.float32, init=jnp.zeros)
-        self.ffn_usage = hk.get_parameter("ffn_usage", [d_model], dtype=jnp.float32, init=jnp.zeros)
+        self.head_usage = hk.get_state("head_usage", [num_heads], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
+        self.ffn_usage = hk.get_state("ffn_usage", [d_model], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
 
     def apply_spiking_attention(self, scores, spike_threshold, epsilon):
         """
         Apply Spiking Attention by thresholding attention scores.
         """
-        if spike_threshold is None or epsilon is None:
+        if spike_threshold is None or epsilon is None or not 0 <= spike_threshold <= 1:
             return scores
         spiking_mask = scores > spike_threshold
         spiked_scores = jnp.where(spiking_mask, scores, 0.0)
@@ -36,11 +36,15 @@ class TransformerBlock(hk.Module):
         """
         Update usage statistics for attention heads and FFN neurons.
         """
-        head_usage_update = jnp.mean(attn_weights, axis=(0, 1))  # Average usage across batch and sequence
-        ffn_usage_update = jnp.mean(jnp.abs(ffn_out), axis=(0, 1))  # Average activation magnitude across batch and sequence
-        self.head_usage = hk.get_state("head_usage", [], dtype=jnp.float32, init=lambda x: self.head_usage) + head_usage_update
-        self.ffn_usage = hk.get_state("ffn_usage", [], dtype=jnp.float32, init=lambda x: self.ffn_usage) + ffn_usage_update
-        return self.head_usage, self.ffn_usage
+        head_usage_update = jnp.mean(attn_weights, axis=(0, 1))
+        ffn_usage_update = jnp.mean(jnp.abs(ffn_out), axis=(0, 1))
+        current_head_usage = hk.get_state("head_usage", [], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
+        current_ffn_usage = hk.get_state("ffn_usage", [], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
+        new_head_usage = current_head_usage + head_usage_update
+        new_ffn_usage = current_ffn_usage + ffn_usage_update
+        hk.set_state("head_usage", new_head_usage)
+        hk.set_state("ffn_usage", new_ffn_usage)
+        return new_head_usage, new_ffn_usage
 
     def prune_components(self, head_threshold=0.01, ffn_threshold=0.01):
         """
@@ -67,8 +71,8 @@ class TransformerBlock(hk.Module):
             dropout_rate=self.dropout_rate,
             name=self.name
         )
-        new_model.head_usage = hk.get_parameter("head_usage", [new_num_heads], dtype=jnp.float32, init=jnp.zeros)
-        new_model.ffn_usage = hk.get_parameter("ffn_usage", [new_d_model], dtype=jnp.float32, init=jnp.zeros)
+        new_model.head_usage = hk.get_state("head_usage", [new_num_heads], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
+        new_model.ffn_usage = hk.get_state("ffn_usage", [new_d_model], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
 
         # Update attention weights with interpolation
         active_head_indices = jnp.where(active_heads)[0]
@@ -112,8 +116,8 @@ class TransformerBlock(hk.Module):
             ffn_out = hk.dropout(rng, self.dropout_rate, ffn_out)
         x = self.norm2(x + ffn_out)
         if return_attention:
-            return x, attention_weights
-        return x
+            self.update_usage(attention_weights, ffn_out)
+        return x if not return_attention else (x, attention_weights)
     
 class TransformerModel(hk.Module):
     def __init__(self, d_model: int, num_heads: int, num_layers: int, vocab_size: int, max_seq_length: int, name=None):

@@ -27,13 +27,13 @@ class SelfAttentionModel(hk.Module):
             hk.Linear(d_model),  
         ])
         self.proj = hk.Linear(vocab_size)
-        self.head_usage = hk.get_parameter("head_usage", [num_heads], dtype=jnp.float32, init=jnp.zeros)
+        self.head_usage = hk.get_state("head_usage", [num_heads], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
 
     def apply_spiking_attention(self, scores, spike_threshold, epsilon):
         """
         Apply Spiking Attention by thresholding attention scores to activate only important tokens.
         """
-        if spike_threshold is None or epsilon is None:
+        if spike_threshold is None or epsilon is None or not 0 <= spike_threshold <= 1:
             return scores
         spiking_mask = scores > spike_threshold
         spiked_scores = jnp.where(spiking_mask, scores, 0.0)
@@ -44,7 +44,7 @@ class SelfAttentionModel(hk.Module):
         Update usage statistics for attention heads based on their weights.
         """
         head_usage_update = jnp.mean(attn_weights, axis=(0, 1))
-        current_usage = hk.get_state("head_usage", [], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape, dtype=jnp.float32))
+        current_usage = hk.get_state("head_usage", [], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
         new_usage = current_usage + head_usage_update
         hk.set_state("head_usage", new_usage)
         return new_usage
@@ -70,7 +70,7 @@ class SelfAttentionModel(hk.Module):
             max_seq_length=self.max_seq_length,
             name=self.name
         )
-        new_model.head_usage = hk.get_state("head_usage", [new_num_heads], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape, dtype=jnp.float32))
+        new_model.head_usage = hk.get_state("head_usage", [new_num_heads], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
 
         active_indices = jnp.where(active_heads)[0]
         new_model.attention = hk.MultiHeadAttention(

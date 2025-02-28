@@ -39,13 +39,14 @@ class SparseMoE(hk.Module):
             hk.Linear(d_model)  
         ], name=f"expert_{i}") for i in range(num_experts)]
         self.gate = hk.Linear(num_experts, name="gate")
-        self.expert_usage = hk.get_parameter("expert_usage", [num_experts], dtype=jnp.float32, init=jnp.zeros)
+        # Initialize expert_usage as a state with correct shape
+        self.expert_usage = hk.get_state("expert_usage", [num_experts], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
 
     def apply_spiking_attention(self, x, spike_threshold, epsilon):
         """
         Apply Spiking Attention to input tensor.
         """
-        if spike_threshold is None or epsilon is None:
+        if spike_threshold is None or epsilon is None or not 0 <= spike_threshold <= 1:
             return x
         scores = jnp.mean(x, axis=-1, keepdims=True)
         spiking_mask = scores > spike_threshold
@@ -57,7 +58,10 @@ class SparseMoE(hk.Module):
         Update usage statistics for experts based on their selection frequency.
         """
         expert_usage_update = jnp.bincount(top_k_indices.flatten(), minlength=self.num_experts, length=self.num_experts) / self.num_experts
-        return hk.get_state("expert_usage", [], dtype=jnp.float32, init=lambda x: self.expert_usage) + expert_usage_update
+        current_usage = hk.get_state("expert_usage", [], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
+        new_usage = current_usage + expert_usage_update
+        hk.set_state("expert_usage", new_usage)
+        return new_usage
 
     def prune_experts(self, threshold=0.01):
         """
@@ -80,7 +84,7 @@ class SparseMoE(hk.Module):
             expert_capacity=self.expert_capacity,
             name=self.name
         )
-        new_model.expert_usage = hk.get_parameter("expert_usage", [new_num_experts], dtype=jnp.float32, init=jnp.zeros)
+        new_model.expert_usage = hk.get_state("expert_usage", [new_num_experts], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
         active_indices = jnp.where(active_experts)[0]
 
         # Initialize new experts and gate with interpolated weights
@@ -134,6 +138,6 @@ class SparseMoE(hk.Module):
 
         top_k_gating_probs = jnp.take_along_axis(gating_probs, top_k_indices, axis=-1)  
         final_output = jnp.einsum('bskd,bsk->bsd', selected_expert_outputs, top_k_gating_probs)
-        self.expert_usage = self.update_expert_usage(top_k_indices)
+        self.update_expert_usage(top_k_indices)
         aux_loss = load_balancing_loss(gating_logits, self.num_experts)
         return final_output, top_k_indices, aux_loss
