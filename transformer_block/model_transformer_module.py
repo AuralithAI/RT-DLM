@@ -13,6 +13,8 @@ class TransformerBlock(hk.Module):
         )
         self.norm1 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         self.norm2 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+        self.d_model = d_model
+        self.num_heads = num_heads
         self.ffn = hk.Sequential([
             hk.Linear(d_model * 2),
             jax.nn.silu,
@@ -36,7 +38,13 @@ class TransformerBlock(hk.Module):
         """
         Update usage statistics for attention heads and FFN neurons.
         """
-        head_usage_update = jnp.mean(attn_weights, axis=(0, 1))
+        if attn_weights.ndim == 3:
+            batch_size, seq_length, _ = attn_weights.shape
+            attn_weights = attn_weights.reshape(batch_size, self.num_heads, seq_length, self.d_model // self.num_heads)
+        elif attn_weights.ndim != 4:
+            raise ValueError(f"Unexpected attn_weights shape: {attn_weights.shape}. Expected (batch_size, seq_length, d_model) or (batch_size, num_heads, seq_length, seq_length)")
+
+        head_usage_update = jnp.mean(attn_weights, axis=(0, 2, 3)) 
         ffn_usage_update = jnp.mean(jnp.abs(ffn_out), axis=(0, 1))
         current_head_usage = hk.get_state("head_usage", [], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
         current_ffn_usage = hk.get_state("ffn_usage", [], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))

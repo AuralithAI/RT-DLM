@@ -43,7 +43,10 @@ class SelfAttentionModel(hk.Module):
         """
         Update usage statistics for attention heads based on their weights.
         """
-        head_usage_update = jnp.mean(attn_weights, axis=(0, 1))
+        if attn_weights.ndim == 3: 
+            batch_size, seq_length, _ = attn_weights.shape
+            attn_weights = attn_weights.reshape(batch_size, self.num_heads, seq_length, self.d_model // self.num_heads)
+        head_usage_update = jnp.mean(attn_weights, axis=(0, 2, 3))  
         current_usage = hk.get_state("head_usage", [], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
         new_usage = current_usage + head_usage_update
         hk.set_state("head_usage", new_usage)
