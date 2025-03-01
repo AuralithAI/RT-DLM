@@ -39,8 +39,7 @@ class SparseMoE(hk.Module):
             hk.Linear(d_model)  
         ], name=f"expert_{i}") for i in range(num_experts)]
         self.gate = hk.Linear(num_experts, name="gate")
-        # Initialize expert_usage as a state with correct shape
-        self.expert_usage = hk.get_state("expert_usage", [num_experts], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
+        self.expert_usage = hk.get_state("expert_usage", [num_experts], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
 
     def apply_spiking_attention(self, x, spike_threshold, epsilon):
         """
@@ -58,7 +57,7 @@ class SparseMoE(hk.Module):
         Update usage statistics for experts based on their selection frequency.
         """
         expert_usage_update = jnp.bincount(top_k_indices.flatten(), minlength=self.num_experts, length=self.num_experts) / self.num_experts
-        current_usage = hk.get_state("expert_usage", [], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
+        current_usage = hk.get_state("expert_usage", [], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
         new_usage = current_usage + expert_usage_update
         hk.set_state("expert_usage", new_usage)
         return new_usage
@@ -75,7 +74,7 @@ class SparseMoE(hk.Module):
         
         new_num_experts = int(jnp.sum(active_experts))
         if new_num_experts == self.num_experts:
-            return self  # No pruning needed
+            return self
 
         new_model = SparseMoE(
             d_model=self.d_model,
@@ -84,10 +83,9 @@ class SparseMoE(hk.Module):
             expert_capacity=self.expert_capacity,
             name=self.name
         )
-        new_model.expert_usage = hk.get_state("expert_usage", [new_num_experts], dtype=jnp.float32, init=lambda shape: jnp.zeros(shape))
+        new_model.expert_usage = hk.get_state("expert_usage", [new_num_experts], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
         active_indices = jnp.where(active_experts)[0]
 
-        # Initialize new experts and gate with interpolated weights
         new_model.experts = []
         for i in range(new_num_experts):
             idx = active_indices[i]
@@ -96,14 +94,12 @@ class SparseMoE(hk.Module):
                 jax.nn.silu,
                 hk.Linear(self.d_model, w_init=hk.initializers.VarianceScaling(1.0))
             ], name=f"expert_{i}")
-            # Copy weights from the active expert (simplified interpolation)
             new_expert.layers[0].w = self.experts[idx].layers[0].w
             new_expert.layers[0].b = self.experts[idx].layers[0].b
             new_expert.layers[2].w = self.experts[idx].layers[2].w
             new_expert.layers[2].b = self.experts[idx].layers[2].b
             new_model.experts.append(new_expert)
 
-        # Update gate with interpolated weights
         new_model.gate = hk.Linear(new_num_experts, name="gate")
         new_gate_w = jnp.zeros((self.d_model, new_num_experts))
         new_gate_b = jnp.zeros(new_num_experts)
