@@ -114,7 +114,9 @@ def objective(trial):
         "character_coverage": 0.9999,  # Default from TrainConfig
         "num_threads": 16,  # Default from TrainConfig
         "xla_gpu_parallelism": 10,  # Default from TrainConfig
-        "EPSILON": 1e-8  # Default from TrainConfig
+        "EPSILON": 1e-8,  # Default from TrainConfig
+        "prune_threshold": 0.01,  # Default from TrainConfig
+        "prune_interval": 50  # Default from TrainConfig
     }
     config = TrainConfig(**trial_params)
 
