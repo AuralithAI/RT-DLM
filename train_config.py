@@ -58,6 +58,14 @@ class TrainConfig:
         self.mtm_buffer_size = kwargs.get("mtm_buffer_size", 1000)  # Size of the mid-term memory buffer
         self.retention_steps = kwargs.get("retention_steps", 100)  # Number of steps to retain in mid-term memory
 
+        # --- New Multimodal Parameters ---
+        self.audio_sample_rate = kwargs.get("audio_sample_rate", 16000)  # Audio sample rate (Hz)
+        self.image_size = kwargs.get("image_size", 64)  # Image resolution (e.g., 64x64)
+        self.video_frame_rate = kwargs.get("video_frame_rate", 30)  # Frames per second for video
+        self.max_audio_length = kwargs.get("max_audio_length", 16000)  # Max audio samples
+        self.max_video_frames = kwargs.get("max_video_frames", 300)  # Max frames in video
+        self.output_modality = kwargs.get("output_modality", "text")
+
         # --- Spiking Attention and Numerical Stability ---
         self.spike_threshold = kwargs.get("spike_threshold", 0.1)  # Threshold for Spiking Attention (0.05 to 0.3, tunable)
         self.EPSILON = kwargs.get("EPSILON", 1e-8)  # Small constant to avoid division by zero
@@ -106,3 +114,16 @@ class TrainConfig:
             raise ValueError(f"spike_threshold ({self.spike_threshold}) must be between 0 and 1")
         if self.EPSILON <= 0:
             raise ValueError(f"EPSILON ({self.EPSILON}) must be positive")
+        if self.audio_sample_rate <= 0:
+            raise ValueError(f"audio_sample_rate must be positive, got {self.audio_sample_rate}")
+        if self.image_size <= 0:
+            raise ValueError(f"image_size must be positive, got {self.image_size}")
+        if self.video_frame_rate <= 0:
+            raise ValueError(f"video_frame_rate must be positive, got {self.video_frame_rate}")
+        if self.max_audio_length <= 0:
+            raise ValueError(f"max_audio_length must be positive, got {self.max_audio_length}")
+        if self.max_video_frames <= 0:
+            raise ValueError(f"max_video_frames must be positive, got {self.max_video_frames}")
+        valid_output_modalities = {"text", "audio", "image", "video"}
+        if self.output_modality not in valid_output_modalities:
+            raise ValueError(f"output_modality must be one of {valid_output_modalities}, got {self.output_modality}")
