@@ -34,12 +34,12 @@ class SparseMoE(hk.Module):
         self.top_k = top_k
         self.expert_capacity = expert_capacity
         self.experts = [hk.Sequential([
-            hk.Linear(d_model * 2),  
+            hk.Linear(d_model * 2, w_init=hk.initializers.VarianceScaling(1.0)),
             jax.nn.silu,
-            hk.Linear(d_model)  
+            hk.Linear(d_model, w_init=hk.initializers.VarianceScaling(1.0))
         ], name=f"expert_{i}") for i in range(num_experts)]
         self.gate = hk.Linear(num_experts, name="gate")
-        self.expert_usage = hk.get_state("expert_usage", [num_experts], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
+        self.expert_usage = hk.get_state("expert_usage", [num_experts], dtype=jnp.float32, init=jnp.zeros)
 
     def apply_spiking_attention(self, x, spike_threshold, epsilon):
         """
@@ -57,21 +57,20 @@ class SparseMoE(hk.Module):
         Update usage statistics for experts based on their selection frequency.
         """
         expert_usage_update = jnp.bincount(top_k_indices.flatten(), minlength=self.num_experts, length=self.num_experts) / self.num_experts
-        current_usage = hk.get_state("expert_usage", [], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
+        current_usage = hk.get_state("expert_usage", [self.num_experts], dtype=jnp.float32, init=jnp.zeros)
         new_usage = current_usage + expert_usage_update
         hk.set_state("expert_usage", new_usage)
-        return new_usage
 
-    def prune_experts(self, threshold=0.01):
+    def prune_experts_and_neurons(self, expert_threshold=0.01, neuron_threshold=0.01):
         """
         Prune experts with usage below a threshold, with weight interpolation for better performance.
         Returns a new model with pruned experts or updates in-place.
         """
         usage = self.expert_usage
-        active_experts = usage > threshold
+        active_experts = usage > expert_threshold
         if jnp.sum(active_experts) < 1:
-            raise ValueError("Cannot prune all experts; at least one must remain active.")
-        
+            raise ValueError("Cannot prune all experts.")
+
         new_num_experts = int(jnp.sum(active_experts))
         if new_num_experts == self.num_experts:
             return self
@@ -83,29 +82,30 @@ class SparseMoE(hk.Module):
             expert_capacity=self.expert_capacity,
             name=self.name
         )
-        new_model.expert_usage = hk.get_state("expert_usage", [new_num_experts], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
         active_indices = jnp.where(active_experts)[0]
 
-        new_model.experts = []
-        for i in range(new_num_experts):
-            idx = active_indices[i]
+        new_experts = []
+        for i, idx in enumerate(active_indices):
+            expert = self.experts[idx]
+            expert_ffn_usage = jnp.mean(jnp.abs(expert.layers[0].w), axis=0) 
+            active_neurons = expert_ffn_usage > neuron_threshold
+            new_intermediate_size = int(jnp.sum(active_neurons))
+            if new_intermediate_size < 1:
+                new_intermediate_size = self.d_model * 2 
+
             new_expert = hk.Sequential([
-                hk.Linear(self.d_model * 2, w_init=hk.initializers.VarianceScaling(1.0)),
+                hk.Linear(new_intermediate_size, w_init=hk.initializers.VarianceScaling(1.0)),
                 jax.nn.silu,
                 hk.Linear(self.d_model, w_init=hk.initializers.VarianceScaling(1.0))
-            ], name=f"expert_{i}")
-            new_expert.layers[0].w = self.experts[idx].layers[0].w
-            new_expert.layers[0].b = self.experts[idx].layers[0].b
-            new_expert.layers[2].w = self.experts[idx].layers[2].w
-            new_expert.layers[2].b = self.experts[idx].layers[2].b
-            new_model.experts.append(new_expert)
-
-        new_model.gate = hk.Linear(new_num_experts, name="gate")
-        new_gate_w = jnp.zeros((self.d_model, new_num_experts))
-        new_gate_b = jnp.zeros(new_num_experts)
-        for i, idx in enumerate(active_indices):
-            new_gate_w[:, i] = self.gate.w[:, idx]
-            new_gate_b[i] = self.gate.b[idx]
+            ])
+            new_expert.layers[0].w = jnp.take(expert.layers[0].w, jnp.where(active_neurons)[0], axis=1)
+            new_expert.layers[0].b = jnp.take(expert.layers[0].b, jnp.where(active_neurons)[0])
+            new_expert.layers[2].w = expert.layers[2].w
+            new_expert.layers[2].b = expert.layers[2].b
+            new_experts.append(new_expert)
+        new_model.experts = new_experts
+        new_gate_w = jnp.take(self.gate.w, active_indices, axis=1)
+        new_gate_b = jnp.take(self.gate.b, active_indices)
         new_model.gate.w = new_gate_w
         new_model.gate.b = new_gate_b
 
@@ -114,7 +114,6 @@ class SparseMoE(hk.Module):
     def __call__(self, x, spike_threshold=0.1, epsilon=1e-8):
         """
         Forward pass for Sparse MoE.
-        x: Input tensor of shape (batch_size, seq_len, d_model)
         """
         x = jnp.asarray(x, dtype=jnp.float32)
         batch_size, seq_len, d_model = x.shape

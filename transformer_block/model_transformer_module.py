@@ -16,13 +16,13 @@ class TransformerBlock(hk.Module):
         self.d_model = d_model
         self.num_heads = num_heads
         self.ffn = hk.Sequential([
-            hk.Linear(d_model * 2),
+            hk.Linear(d_model * 2, w_init=hk.initializers.VarianceScaling(1.0)),
             jax.nn.silu,
-            hk.Linear(d_model)
+            hk.Linear(d_model, w_init=hk.initializers.VarianceScaling(1.0))
         ])
         self.dropout_rate = dropout_rate
-        self.head_usage = hk.get_state("head_usage", [num_heads], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
-        self.ffn_usage = hk.get_state("ffn_usage", [d_model], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
+        self.head_usage = hk.get_state("head_usage", [num_heads], dtype=jnp.float32, init=jnp.zeros)
+        self.ffn_usage = hk.get_state("ffn_usage", [d_model], dtype=jnp.float32, init=jnp.zeros)
 
     def apply_spiking_attention(self, scores, spike_threshold, epsilon):
         """
@@ -37,7 +37,6 @@ class TransformerBlock(hk.Module):
     def update_usage(self, attn_weights, ffn_out):
         """
         Update usage statistics for attention heads and FFN neurons.
-        Ensure the shape of head_usage_update matches num_heads (12).
         """
         if attn_weights.ndim == 3:
             batch_size, seq_length, _ = attn_weights.shape
@@ -48,21 +47,18 @@ class TransformerBlock(hk.Module):
                 head_end = head_start + head_dim
                 head_weights = attn_weights[:, :, head_start:head_end]
                 head_usage = jnp.mean(jnp.abs(head_weights))
-                head_usage_update = head_usage_update.at[head].add(head_usage)
+                head_usage_update = head_usage_update.at[head].set(head_usage)
         elif attn_weights.ndim == 4:
             head_usage_update = jnp.mean(jnp.abs(attn_weights), axis=(0, 2, 3))
         else:
-            raise ValueError(f"Unexpected attn_weights shape: {attn_weights.shape}. Expected (batch_size, seq_length, d_model) or (batch_size, num_heads, seq_length, d_model // num_heads)")
+            raise ValueError(f"Unexpected attn_weights shape: {attn_weights.shape}")
 
-        ffn_usage_update = jnp.mean(jnp.abs(ffn_out), axis=(0, 1))  # Shape: (d_model,)
+        ffn_usage_update = jnp.mean(jnp.abs(ffn_out), axis=(0, 1))
 
-        current_head_usage = hk.get_state("head_usage", [], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
-        current_ffn_usage = hk.get_state("ffn_usage", [], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
-        new_head_usage = current_head_usage + head_usage_update
-        new_ffn_usage = current_ffn_usage + ffn_usage_update
-        hk.set_state("head_usage", new_head_usage)
-        hk.set_state("ffn_usage", new_ffn_usage)
-        return new_head_usage, new_ffn_usage
+        current_head_usage = hk.get_state("head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros)
+        current_ffn_usage = hk.get_state("ffn_usage", [self.d_model], dtype=jnp.float32, init=jnp.zeros)
+        hk.set_state("head_usage", current_head_usage + head_usage_update)
+        hk.set_state("ffn_usage", current_ffn_usage + ffn_usage_update)
 
     def prune_components(self, head_threshold=0.01, ffn_threshold=0.01):
         """
@@ -70,16 +66,13 @@ class TransformerBlock(hk.Module):
         Returns a new model with pruned components or updates in-place.
         """
         active_heads = self.head_usage > head_threshold
-        if jnp.sum(active_heads) < 1:
-            raise ValueError("Cannot prune all attention heads; at least one must remain active.")
-        
         active_ffn = self.ffn_usage > ffn_threshold
-        if jnp.sum(active_ffn) < 1:
-            raise ValueError("Cannot prune all FFN neurons; at least one must remain active.")
+        if jnp.sum(active_heads) < 1 or jnp.sum(active_ffn) < 1:
+            raise ValueError("Cannot prune all heads or FFN neurons.")
 
         new_num_heads = int(jnp.sum(active_heads))
         new_d_model = int(jnp.sum(active_ffn))
-        if new_num_heads == self.mha.num_heads and new_d_model == self.d_model:
+        if new_num_heads == self.num_heads and new_d_model == self.d_model:
             return self
 
         new_model = TransformerBlock(
@@ -88,35 +81,22 @@ class TransformerBlock(hk.Module):
             dropout_rate=self.dropout_rate,
             name=self.name
         )
-        new_model.head_usage = hk.get_state("head_usage", [new_num_heads], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
-        new_model.ffn_usage = hk.get_state("ffn_usage", [new_d_model], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
-
         active_head_indices = jnp.where(active_heads)[0]
-        new_model.mha = hk.MultiHeadAttention(
-            num_heads=new_num_heads,
-            key_size=new_d_model // new_num_heads,
-            model_size=new_d_model,
-            w_init=hk.initializers.VarianceScaling(1.0),
-        )
-        new_qkv = jnp.zeros_like(new_model.mha.w_qkv)
-        new_o = jnp.zeros_like(new_model.mha.w_o)
-        for i, idx in enumerate(active_head_indices):
-            new_qkv[:, i] = self.mha.w_qkv[:, idx]
-            new_o[i] = self.mha.w_o[idx]
+        active_ffn_indices = jnp.where(active_ffn)[0]
+
+        new_qkv = jnp.take(self.mha.w_qkv, active_head_indices, axis=1)
+        new_o = jnp.take(self.mha.w_o, active_head_indices, axis=0)
         new_model.mha.w_qkv = new_qkv
         new_model.mha.w_o = new_o
 
-        active_ffn_indices = jnp.where(active_ffn)[0]
-        new_model.ffn = hk.Sequential([
-            hk.Linear(new_d_model * 2, w_init=hk.initializers.VarianceScaling(1.0)),
+        intermediate_size = new_d_model * 2
+        new_ffn = hk.Sequential([
+            hk.Linear(intermediate_size, w_init=hk.initializers.VarianceScaling(1.0)),
             jax.nn.silu,
             hk.Linear(new_d_model, w_init=hk.initializers.VarianceScaling(1.0))
         ])
-        new_ffn_in = jnp.zeros((self.d_model, new_d_model * 2))
-        new_ffn_out = jnp.zeros((new_d_model, self.d_model))
-        for i, idx in enumerate(active_ffn_indices):
-            new_ffn_in[:, i] = self.ffn.layers[0].w[:, idx]
-            new_ffn_out[i] = self.ffn.layers[2].w[idx]
+        new_ffn_in = jnp.take(self.ffn.layers[0].w, active_ffn_indices, axis=0)[:, :intermediate_size]
+        new_ffn_out = jnp.take(self.ffn.layers[2].w, active_ffn_indices, axis=0)
         new_model.ffn.layers[0].w = new_ffn_in
         new_model.ffn.layers[2].w = new_ffn_out
         return new_model
@@ -124,16 +104,17 @@ class TransformerBlock(hk.Module):
     def __call__(self, x, rng=None, return_attention=False, spike_threshold=0.1, epsilon=1e-8):
         attn_out = self.mha(query=x, key=x, value=x)
         spiked_attentions = self.apply_spiking_attention(attn_out, spike_threshold, epsilon)
-        attention_weights = jax.nn.softmax(attn_out, axis=-1) if return_attention else None
         x = self.norm1(x + spiked_attentions)
         ffn_out = self.ffn(x)
         if rng is not None:
             ffn_out = hk.dropout(rng, self.dropout_rate, ffn_out)
         x = self.norm2(x + ffn_out)
         if return_attention:
+            attention_weights = jax.nn.softmax(attn_out, axis=-1)
             self.update_usage(attention_weights, ffn_out)
-        return x if not return_attention else (x, attention_weights)
-    
+            return x, attention_weights
+        return x
+
 class TransformerModel(hk.Module):
     def __init__(self, d_model: int, num_heads: int, num_layers: int, vocab_size: int, max_seq_length: int, name=None):
         super().__init__(name=name)
@@ -149,14 +130,10 @@ class TransformerModel(hk.Module):
         Prune underutilized components across all Transformer blocks.
         Returns a new model with pruned layers or updates in-place.
         """
-        new_layers = []
-        for layer in self.layers:
-            new_layer = layer.prune_components(head_threshold=threshold, ffn_threshold=threshold)
-            new_layers.append(new_layer)
-        
+        new_layers = [layer.prune_components(head_threshold=threshold, ffn_threshold=threshold) for layer in self.layers]
         new_model = TransformerModel(
             d_model=new_layers[0].d_model,
-            num_heads=new_layers[0].mha.num_heads,
+            num_heads=new_layers[0].num_heads,
             num_layers=len(new_layers),
             vocab_size=self.embedding.vocab_size,
             max_seq_length=self.position_enc.vocab_size,

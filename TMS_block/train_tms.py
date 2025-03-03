@@ -35,7 +35,6 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     mtm = MidTermMemory(buffer_size=config.mtm_buffer_size, embedding_dim=config.d_model, retention_steps=config.retention_steps)
     logger.info("Memory banks initialized")
 
-    # Load dataset directly to jnp
     dataset_path = "data/train_data.txt"
     logger.info(f"Loading dataset from {dataset_path}")
     processor = DataProcessor(vocab_size=config.vocab_size)
@@ -46,7 +45,6 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     targets = inputs  
     logger.info(f"Dataset loaded - {inputs.shape[0]} samples")
 
-    # Model definition with dynamic pruning
     def forward_fn(inputs, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, **kwargs):
         model = TMSModel(
             d_model=config.d_model, 
@@ -155,7 +153,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         ltm_memory = jnp.array(ltm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
         stm_memory = jnp.array(stm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
         mtm_memory = jnp.array(mtm.retrieve(query_key_np, config.spike_threshold, config.EPSILON), dtype=config.embedding_dtype)
-        logger.info(f"LTM norm: {jnp.linalg.norm(ltm_memory):.4f}, STM norm: {jnp.linalg.norm(stm_memory):.4f}, MTM norm: {jnp.linalg.norm(mtm_memory):.4f}")
+        #logger.info(f"LTM norm: {jnp.linalg.norm(ltm_memory):.4f}, STM norm: {jnp.linalg.norm(stm_memory):.4f}, MTM norm: {jnp.linalg.norm(mtm_memory):.4f}")
 
         batch_size = inputs.shape[0]
         mini_batch_size = batch_size // accum_steps
@@ -183,8 +181,8 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         # Log metrics after getting concrete values
         total_loss_concrete = float(jax.device_get(total_loss))
         logger.info(f"Cross-entropy loss: {float(jax.device_get(metrics['loss'])):.4f}, Aux loss: {float(jax.device_get(metrics['aux_loss'])):.4f}, Total loss: {total_loss_concrete:.4f}")
-        logger.info(f"Logits norm: {float(jax.device_get(metrics['logits_norm'])):.4f}, Targets norm: {float(jax.device_get(metrics['targets_norm'])):.4f}")
-        logger.info(f"Similarity score: {float(jax.device_get(metrics['similarity_mean'])):.4f}")
+        #logger.info(f"Logits norm: {float(jax.device_get(metrics['logits_norm'])):.4f}, Targets norm: {float(jax.device_get(metrics['targets_norm'])):.4f}")
+        #logger.info(f"Similarity score: {float(jax.device_get(metrics['similarity_mean'])):.4f}")
 
         total_grads = jax.tree.map(lambda x: x / accum_steps, total_grads)
         # Apply gradient clipping
@@ -232,38 +230,35 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
         # Prune SelfAttentionModel
         self_attention = new_state["self_attention"]
-        if hasattr(self_attention, "prune_heads"):
-            new_self_attention = self_attention.prune_heads(threshold=config.prune_threshold)
-            new_self_attention_params, new_self_attention_state = hk.transform_with_state(
-                lambda x: new_self_attention(x, return_attention=True)
-            ).init(rng, inputs[:1])
-            params["self_attention"] = new_self_attention_params
-            state["self_attention"] = new_self_attention_state
+        new_self_attention = self_attention.prune_heads_and_ffn(head_threshold=config.prune_threshold, ffn_threshold=config.prune_threshold)
+        new_params, new_state_sa = hk.transform_with_state(
+            lambda x: new_self_attention(x, return_attention=True)
+        ).init(rng, inputs[:1])
+        params["self_attention"] = new_params
+        state["self_attention"] = new_state_sa
 
         # Prune SparseMoE
         moe = new_state["moe"]
-        if hasattr(moe, "prune_experts"):
-            new_moe = moe.prune_experts(threshold=config.prune_threshold)
-            new_moe_params, new_moe_state = hk.transform_with_state(
-                lambda x: new_moe(x)
-            ).init(rng, inputs[:1])
-            params["moe"] = new_moe_params
-            state["moe"] = new_moe_state
+        new_moe = moe.prune_experts_and_neurons(expert_threshold=config.prune_threshold, neuron_threshold=config.prune_threshold)
+        new_params, new_state_moe = hk.transform_with_state(
+            lambda x: new_moe(x)
+        ).init(rng, inputs[:1])
+        params["moe"] = new_params
+        state["moe"] = new_state_moe
 
         # Prune TransformerModel
         transformer = new_state["transformer"]
-        if hasattr(transformer, "prune_layers"):
-            new_transformer = transformer.prune_layers(threshold=config.prune_threshold)
-            new_transformer_params, new_transformer_state = hk.transform_with_state(
-                lambda x: new_transformer(x, return_attention=True)
-            ).init(rng, inputs[:1])
-            params["transformer"] = new_transformer_params
-            state["transformer"] = new_transformer_state
+        new_transformer = transformer.prune_layers(threshold=config.prune_threshold)
+        new_params, new_state_tf = hk.transform_with_state(
+            lambda x: new_transformer(x, return_attention=True)
+        ).init(rng, inputs[:1])
+        params["transformer"] = new_params
+        state["transformer"] = new_state_tf
 
         return params, state
 
     # Meta-step: Outer loop (MAML update)
-    def meta_step(params, state, meta_opt_state, inner_opt_state, rng, support_inputs, support_targets, query_inputs, query_targets, accum_steps=2):
+    def meta_step(params, state, meta_opt_state, inner_opt_state, rng, support_inputs, support_targets, query_inputs, query_targets, accum_steps=2, prune_interval=50):
         adapted_params = params
         adapted_state = state
         new_inner_opt_state = inner_opt_state
@@ -271,7 +266,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
         for _ in range(num_inner_steps):
             loss, adapted_state, support_thoughts, new_inner_opt_state = train_step(
-                adapted_params, adapted_state, new_inner_opt_state, rng, support_inputs, support_targets, 0, accum_steps=accum_steps, prune_interval=50
+                adapted_params, adapted_state, new_inner_opt_state, rng, support_inputs, support_targets, 0, accum_steps=accum_steps, prune_interval=prune_interval
             )
             adapted_params = jax.tree.map(lambda p: p, adapted_params)
 
@@ -284,9 +279,6 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         loss, new_state, query_thoughts, metrics = compute_loss(
             adapted_params, adapted_state, rng, query_inputs, query_targets, ltm_memory_query, stm_memory_query, mtm_memory_query
         )
-
-        # Log metrics after getting concrete values
-        logger.info(f"Aux loss: {float(jax.device_get(metrics['aux_loss'])):.4f}, Total loss: {float(jax.device_get(loss)):.4f}")
 
         grads = jax.grad(loss_for_gradients)(params, state, rng, query_inputs, query_targets, ltm_memory_query, stm_memory_query, mtm_memory_query)
         updates, new_meta_opt_state = meta_optimizer.update(grads, meta_opt_state, params)
@@ -318,7 +310,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         step_rng, rng = jax.random.split(rng)
         try:
             loss, params, state, meta_opt_state, support_thoughts, query_thoughts, inner_opt_state = meta_step(
-                params, state, meta_opt_state, inner_opt_state, step_rng, support_inputs, support_targets, query_inputs, query_targets, accum_steps=2
+                params, state, meta_opt_state, inner_opt_state, step_rng, support_inputs, support_targets, query_inputs, query_targets, accum_steps=2, prune_interval=config.prune_interval
             )
         except Exception as e:
             logger.error(f"[Task {task_idx+1}] Failed: {e}")
@@ -431,7 +423,8 @@ if __name__ == "__main__":
         mtm_weight=0.3,
         spike_threshold=0.3,
         epsilon=1e-6,
-        prune_threshold=0.01
+        prune_threshold=0.01,
+        prune_interval=50,
     )
     losses, params, similarity_scores, state, ltm, stm, mtm, thought_logs = train_and_evaluate(config, [], [], [])
     logger.info(f"Training completed - Final Loss: {losses[-1]:.4f}, Final Similarity: {similarity_scores[-1]:.4f}")
