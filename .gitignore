@@ -43,6 +43,12 @@ data/validation_data.txt
 data/rt_dlm_sp.model
 data/rt_dlm_sp.vocab
 
+# Avoid mp3/jpeg/png/mp4 files
+*.mp3
+*.jpeg
+*.png
+*.mp4
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
