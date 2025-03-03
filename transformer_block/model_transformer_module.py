@@ -37,15 +37,25 @@ class TransformerBlock(hk.Module):
     def update_usage(self, attn_weights, ffn_out):
         """
         Update usage statistics for attention heads and FFN neurons.
+        Ensure the shape of head_usage_update matches num_heads (12).
         """
         if attn_weights.ndim == 3:
             batch_size, seq_length, _ = attn_weights.shape
-            attn_weights = attn_weights.reshape(batch_size, self.num_heads, seq_length, self.d_model // self.num_heads)
-        elif attn_weights.ndim != 4:
-            raise ValueError(f"Unexpected attn_weights shape: {attn_weights.shape}. Expected (batch_size, seq_length, d_model) or (batch_size, num_heads, seq_length, seq_length)")
+            head_dim = self.d_model // self.num_heads
+            head_usage_update = jnp.zeros((self.num_heads,))
+            for head in range(self.num_heads):
+                head_start = head * head_dim
+                head_end = head_start + head_dim
+                head_weights = attn_weights[:, :, head_start:head_end]
+                head_usage = jnp.mean(jnp.abs(head_weights))
+                head_usage_update = head_usage_update.at[head].add(head_usage)
+        elif attn_weights.ndim == 4:
+            head_usage_update = jnp.mean(jnp.abs(attn_weights), axis=(0, 2, 3))
+        else:
+            raise ValueError(f"Unexpected attn_weights shape: {attn_weights.shape}. Expected (batch_size, seq_length, d_model) or (batch_size, num_heads, seq_length, d_model // num_heads)")
 
-        head_usage_update = jnp.mean(attn_weights, axis=(0, 2, 3)) 
-        ffn_usage_update = jnp.mean(jnp.abs(ffn_out), axis=(0, 1))
+        ffn_usage_update = jnp.mean(jnp.abs(ffn_out), axis=(0, 1))  # Shape: (d_model,)
+
         current_head_usage = hk.get_state("head_usage", [], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
         current_ffn_usage = hk.get_state("ffn_usage", [], dtype=jnp.float32, init=lambda shape, dtype: jnp.zeros(shape, dtype=dtype))
         new_head_usage = current_head_usage + head_usage_update
