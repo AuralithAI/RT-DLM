@@ -210,12 +210,12 @@ class TMSModel(hk.Module):
         else:
             _ = self.memory_projection_mtm(dummy_memory)
 
+        attn_weights_self = None
         if "text" in modality_types and modality_types[0] == "text":
             x_sa, attn_weights_self = self.self_attention(inputs[0], return_attention=True, 
-                                                         spike_threshold=spike_threshold, epsilon=epsilon)
-            x = x + x_sa
-        else:
-            attn_weights_self = None
+                                                        spike_threshold=spike_threshold, epsilon=epsilon,
+                                                        output_logits=False)  
+        x = x + x_sa
         x, attn_weights_transformer = self.transformer(x, rng, return_attention=True, spike_threshold=spike_threshold, epsilon=epsilon)
         x, top_k_expert_indices, aux_loss = self.moe(x, spike_threshold=spike_threshold, epsilon=epsilon)
         x = self.norm(x)

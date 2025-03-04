@@ -12,6 +12,7 @@ class SelfAttentionModel(hk.Module):
         self.d_model = d_model
         self.num_heads = num_heads
         self.max_seq_length = max_seq_length
+        self.vocab_size = vocab_size
         self.embedding = hk.Embed(vocab_size=vocab_size, embed_dim=d_model, name="token_embedding")
         self.attention = hk.MultiHeadAttention(
             num_heads=num_heads,
@@ -87,7 +88,7 @@ class SelfAttentionModel(hk.Module):
         new_model = SelfAttentionModel(
             d_model=new_d_model,
             num_heads=new_num_heads,
-            vocab_size=self.embedding.vocab_size,
+            vocab_size=self.vocab_size,
             max_seq_length=self.max_seq_length,
             name=self.name
         )
@@ -105,12 +106,13 @@ class SelfAttentionModel(hk.Module):
         new_model.ffn.layers[0].w = new_ffn_in
         new_model.ffn.layers[2].w = new_ffn_out
 
-        new_model.proj = hk.Linear(self.embedding.vocab_size, w_init=hk.initializers.VarianceScaling(1.0))
+        new_model.proj = hk.Linear(self.vocab_size, w_init=hk.initializers.VarianceScaling(1.0))
         return new_model
 
-    def __call__(self, inputs, return_attention=False, spike_threshold=0.1, epsilon=1e-8):
+    def __call__(self, inputs, return_attention=False, spike_threshold=0.1, epsilon=1e-8, output_logits=False):
         """
         Forward pass with Spiking Attention and usage tracking.
+        :param output_logits: If True, applies final projection to vocab_size; if False, returns embeddings.
         """
         inputs = jnp.asarray(inputs, dtype=jnp.int32)
         mask = (inputs != 0).astype(jnp.float32)[:, None, None, :]
@@ -122,10 +124,17 @@ class SelfAttentionModel(hk.Module):
         x = self.norm2(x)
         ffn_out = self.ffn(x)
         x = x + ffn_out
-        logits = self.proj(x)
 
-        if return_attention:
-            attention_weights = jax.nn.softmax(attn_out, axis=-1)
-            self.update_usage(attention_weights, ffn_out)
-            return logits, attention_weights
-        return logits
+        if output_logits:
+            logits = self.proj(x)
+            if return_attention:
+                attention_weights = jax.nn.softmax(attn_out, axis=-1)
+                self.update_usage(attention_weights, ffn_out)
+                return logits, attention_weights
+            return logits
+        else:
+            if return_attention:
+                attention_weights = jax.nn.softmax(attn_out, axis=-1)
+                self.update_usage(attention_weights, ffn_out)
+                return x, attention_weights
+            return x
