@@ -85,10 +85,12 @@ def load_text_data(file_path: str, config=None) -> jnp.ndarray:
     return jnp.array([processor.pad_sequence(tokens, config.max_seq_length if config else 64) for tokens in tokenized_texts], dtype=jnp.int32)
 
 def load_audio_data(directory: str, config=None) -> jnp.ndarray:
-    """Loads and preprocesses audio data from WAV files."""
+    """Loads and preprocesses audio data from WAV and MP3 files."""
     if not os.path.exists(directory):
         return None
-    audio_files = [f for f in os.listdir(directory) if f.endswith('.wav')]
+    audio_files = [f for f in os.listdir(directory) if f.lower().endswith(('.wav', '.mp3'))]
+    if not audio_files:
+        return None
     audio_data = []
     sample_rate = config.audio_sample_rate if config else 16000
     max_length = config.max_audio_length if config else 16000
