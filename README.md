@@ -1,4 +1,4 @@
-# Real-Time Disaster Language Model (RT-DLM)
+# Real-Time Deep Learning Model (RT-DLM)
 
 RT-DLM is a highly scalable, transformer-based language model designed for real-time disaster response scenarios. This model leverages modern deep learning techniques, such as Mixture of Experts (MoE) for scalability, and includes support for efficient embedding, self-attention, and transformer layers.
 
