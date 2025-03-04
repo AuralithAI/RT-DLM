@@ -46,6 +46,7 @@ data/rt_dlm_sp.vocab
 # Avoid mp3/jpeg/png/mp4 files
 *.mp3
 *.jpeg
+*.jpg
 *.png
 *.mp4
 
