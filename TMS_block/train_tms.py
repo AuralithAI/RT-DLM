@@ -65,7 +65,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
     # Initialize with a small batch
     init_inputs = [jnp.ones((min(8, config.batch_size), config.max_seq_length), dtype=jnp.int32)]
-    init_modality_types = ("text",)
+    init_modality_types = ["text"]
     init_output_modality = "text"
     params, state = model.init(rng, init_inputs, init_modality_types, init_output_modality)
     logger.info("Model initialized")
@@ -124,10 +124,8 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         # Modality-specific loss
         if output_modality == "text":
             loss = optax.softmax_cross_entropy_with_integer_labels(output, targets).mean()
-            logger.info(f"Text Loss: {float(loss):.4f}")
         elif output_modality in ["audio", "image", "video"]:
             loss = jnp.mean((output - targets) ** 2)
-            logger.info(f"{output_modality.capitalize()} Loss: {float(loss):.4f}")
         else:
             raise ValueError(f"Unsupported output modality: {output_modality}")
 
@@ -146,19 +144,16 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
                                      retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
         return loss
 
+    #@jax.jit(static_argnums=(4, 6))
     def _accumulate_gradients(params, state, rng, inputs, modality_types, targets, output_modality,
                               retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm):
-        modality_types = tuple(modality_types)
         loss, new_state, thoughts, metrics = compute_loss(params, state, rng, inputs, modality_types, targets, output_modality,
                                                          retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
         grads = jax.grad(loss_for_gradients)(params, state, rng, inputs, modality_types, targets, output_modality,
                                              retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
         return grads, loss, new_state, thoughts, metrics
-    
-    _accumulate_gradients = jax.jit(_accumulate_gradients, static_argnums=(4, 6))
 
     def train_step(params, state, inner_opt_state, rng, inputs, modality_types, targets, output_modality, step, accum_steps=2, prune_interval=50):
-        modality_types = tuple(modality_types)
         embeddings = jnp.mean(get_embeddings(config, params, state, rng, inputs, modality_types, 
                                             spike_threshold=config.spike_threshold, epsilon=config.EPSILON), axis=1)
         query_key_np = np.asarray(jax.device_get(embeddings), dtype=np.float32)
@@ -189,7 +184,13 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
             thoughts = mini_thoughts if thoughts is None else thoughts
             metrics = mini_metrics if metrics is None else metrics
 
-        logger.info(f"Loss: {float(jax.device_get(total_loss)):.4f}, Similarity: {float(jax.device_get(metrics['similarity_mean'])):.4f}")
+        total_loss_scalar = float(jax.device_get(total_loss))
+        similarity_mean_scalar = float(jax.device_get(metrics['similarity_mean']))
+        logger.info(f"Loss: {total_loss_scalar:.4f}, Similarity: {similarity_mean_scalar:.4f}")
+        if output_modality == "text":
+            logger.info(f"Text Loss: {total_loss_scalar:.4f}")
+        elif output_modality in ["audio", "image", "video"]:
+            logger.info(f"{output_modality.capitalize()} Loss: {total_loss_scalar:.4f}")
         
         total_grads = jax.tree.map(lambda x: x / accum_steps, total_grads)
         total_grads = clip_gradients(config, total_grads, max_norm=10.0)
@@ -205,7 +206,6 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         return total_loss, new_state, thoughts, new_inner_opt_state
 
     def _prune_model(params, state, rng, inputs, modality_types):
-        modality_types = tuple(modality_types)
         def forward_prune(inputs, modality_types, output_modality, return_attention=False, **kwargs):
             model = TMSModel(
                 d_model=config.d_model,
@@ -258,8 +258,6 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     def meta_step(params, state, meta_opt_state, inner_opt_state, rng, support_inputs, support_modality_types, 
                   support_targets, support_output_modality, query_inputs, query_modality_types, query_targets, 
                   query_output_modality, accum_steps=2, prune_interval=50):
-        support_modality_types = tuple(support_modality_types)
-        query_modality_types = tuple(query_modality_types)
         adapted_params = params
         adapted_state = state
         new_inner_opt_state = inner_opt_state
@@ -362,7 +360,6 @@ def clip_gradients(config, grads, max_norm=10.0):
 
 def get_embeddings(config, params, state, rng, inputs, modality_types, retrieved_memory_ltm=None, 
                    retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold=0.1, epsilon=1e-8):
-    modality_types = tuple(modality_types)
     def forward_with_embeddings(inputs, modality_types, output_modality="text", return_attention=False, 
                                 retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, 
                                 spike_threshold=spike_threshold, epsilon=epsilon):
