@@ -124,8 +124,10 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         # Modality-specific loss
         if output_modality == "text":
             loss = optax.softmax_cross_entropy_with_integer_labels(output, targets).mean()
+            logger.info(f"Text Loss: {float(loss):.4f}")
         elif output_modality in ["audio", "image", "video"]:
             loss = jnp.mean((output - targets) ** 2)
+            
         else:
             raise ValueError(f"Unsupported output modality: {output_modality}")
 
@@ -144,7 +146,6 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
                                      retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
         return loss
 
-    @jax.jit(static_argnums=(4, 6))
     def _accumulate_gradients(params, state, rng, inputs, modality_types, targets, output_modality,
                               retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm):
         loss, new_state, thoughts, metrics = compute_loss(params, state, rng, inputs, modality_types, targets, output_modality,
@@ -152,6 +153,8 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         grads = jax.grad(loss_for_gradients)(params, state, rng, inputs, modality_types, targets, output_modality,
                                              retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm)
         return grads, loss, new_state, thoughts, metrics
+    
+    _accumulate_gradients = jax.jit(_accumulate_gradients, static_argnums=(4, 6))
 
     def train_step(params, state, inner_opt_state, rng, inputs, modality_types, targets, output_modality, step, accum_steps=2, prune_interval=50):
         embeddings = jnp.mean(get_embeddings(config, params, state, rng, inputs, modality_types, 
