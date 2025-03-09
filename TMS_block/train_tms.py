@@ -64,8 +64,13 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     model = hk.transform_with_state(forward_fn)
 
     # Initialize with a small batch
-    init_inputs = [jnp.ones((min(8, config.batch_size), config.max_seq_length), dtype=jnp.int32)]
-    init_modality_types = ["text"]
+    init_inputs = [
+        jnp.ones((min(8, config.batch_size), config.max_seq_length), dtype=jnp.int32),
+        jnp.ones((min(8, config.batch_size), config.audio_sample_rate, 1), dtype=jnp.float32),
+        jnp.ones((min(8, config.batch_size), config.image_size, config.image_size, 3), dtype=jnp.float32),
+        jnp.ones((min(8, config.batch_size), config.max_video_frames, config.image_size, config.image_size, 3), dtype=jnp.float32),
+    ]
+    init_modality_types = ["text", "audio", "image", "video"]
     init_output_modality = "text"
     params, state = model.init(rng, init_inputs, init_modality_types, init_output_modality)
     logger.info("Model initialized")
