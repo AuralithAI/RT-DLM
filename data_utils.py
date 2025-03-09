@@ -1,4 +1,5 @@
 import os
+import sys
 import random
 import re
 import numpy as np
@@ -6,10 +7,21 @@ import sentencepiece as spm
 import jax.numpy as jnp
 import librosa
 import cv2
+import logging
 from typing import List
 from train_config import TrainConfig
 
 config = TrainConfig()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('train.log', mode='a')
+    ]
+)
+logger = logging.getLogger(__name__)
 
 class DataProcessor:
     def __init__(self, vocab_size: int = config.vocab_size, model_prefix: str = "data/rt_dlm_sp"):
