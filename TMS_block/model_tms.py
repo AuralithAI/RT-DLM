@@ -83,9 +83,9 @@ class TMSModel(hk.Module):
         self.decoders = {
             "text": hk.Linear(vocab_size, name="text_decoder"),
             "audio": hk.Sequential([
-                        hk.Linear(d_model * 2),
+                        hk.Linear(d_model, name="linear_1"),
                         jax.nn.relu,
-                        hk.Linear(audio_sample_rate * max_seq_length),
+                        hk.Linear(audio_sample_rate * max_seq_length, name="linear_2"),
                         lambda x: x.reshape(-1, max_seq_length * audio_sample_rate)
                     ], name="audio_decoder"),
             "image": hk.Sequential([
