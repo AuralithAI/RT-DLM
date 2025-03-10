@@ -312,7 +312,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
             logger.info(f"Skipping task {task_idx+1} - insufficient support/query samples")
             continue
 
-        logger.info(f"Processing task {task_idx+1}/{len(task_batches)} ({(task_idx + 1) / len(task_batches) * 100:.1f}% complete)")
+        logger.info(f"Processing task {task_idx+1} (max_samples={config.task_size*(task_idx+1)}/{multimodal_datasets[0].inputs[0].shape[0]})")
         step_rng, rng = jax.random.split(rng)
         try:
             loss, params, state, meta_opt_state, support_thoughts, query_thoughts, inner_opt_state = meta_step(

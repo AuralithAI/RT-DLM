@@ -184,31 +184,33 @@ def create_batches(inputs: jnp.ndarray, targets: jnp.ndarray, batch_size: int, s
         yield inputs[batch_indices], targets[batch_indices]
 
 def create_multimodal_batches(multimodal_datasets: List[MultimodalData], batch_size: int, shuffle: bool = True):
-    """Create batches with combined multimodal inputs, using all samples."""
+    """Yield batches with combined multimodal inputs, one at a time."""
     modality_map = {d.target_modality: d for d in multimodal_datasets if d.inputs[0].shape[0] > 0}
     max_samples = max(d.inputs[0].shape[0] for d in multimodal_datasets)
     modalities = list(modality_map.keys())
-    all_batches = []
     
     logger.info(f"Creating batches with max_samples={max_samples}, batch_size={batch_size}")
     for modality in modalities:
         logger.info(f"Modality {modality}: {modality_map[modality].inputs[0].shape[0]} samples")
+    
+    indices = np.arange(max_samples)
+    if shuffle:
+        np.random.shuffle(indices)
     
     for i in range(0, max_samples, batch_size):
         batch_inputs = []
         batch_modality_types = []
         for modality in modalities:
             num_samples = modality_map[modality].inputs[0].shape[0]
-            indices = np.arange(num_samples)
+            modality_indices = np.arange(num_samples)
             if shuffle:
-                np.random.shuffle(indices)
-            # Repeat indices for smaller datasets
+                np.random.shuffle(modality_indices)
             batch_start = i % num_samples
             batch_end = (i + batch_size) % num_samples if (i + batch_size) > num_samples else i + batch_size
             if batch_end <= batch_start:
-                batch_indices = np.concatenate([indices[batch_start:], indices[:batch_end]])
+                batch_indices = np.concatenate([modality_indices[batch_start:], modality_indices[:batch_end]])
             else:
-                batch_indices = indices[batch_start:batch_end]
+                batch_indices = modality_indices[batch_start:batch_end]
             if len(batch_indices) < batch_size:
                 batch_indices = np.tile(batch_indices, (batch_size // len(batch_indices) + 1))[:batch_size]
             batch_inputs.append(modality_map[modality].inputs[0][batch_indices])
@@ -227,9 +229,5 @@ def create_multimodal_batches(multimodal_datasets: List[MultimodalData], batch_s
             batch_target_indices = np.tile(batch_target_indices, (batch_size // len(batch_target_indices) + 1))[:batch_size]
         batch_targets = modality_map[output_modality].targets[batch_target_indices]
         
-        all_batches.append((batch_inputs, batch_modality_types, batch_targets, output_modality))
-        logger.info(f"Batch {len(all_batches)}: modalities={batch_modality_types}, output={output_modality}, input_shapes={[inp.shape for inp in batch_inputs]}")
-    
-    if shuffle:
-        np.random.shuffle(all_batches)
-    return all_batches
+        logger.info(f"Yielding batch: modalities={batch_modality_types}, output={output_modality}, input_shapes={[inp.shape for inp in batch_inputs]}")
+        yield (batch_inputs, batch_modality_types, batch_targets, output_modality)

@@ -94,7 +94,7 @@ def objective(trial):
         "mtm_weight": mtm_weight,
         "vocab_size": 8000,
         "max_seq_length": 64,
-        "task_size": 15,
+        "task_size": 4,
         "num_inner_steps": 10,
         "num_epochs": 3,
         "eval_interval": 25,
