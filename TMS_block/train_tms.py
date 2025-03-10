@@ -65,10 +65,6 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
     # Initialize with a small batch
     init_batch_size = 2
-    init_audio_length = 1600
-    init_video_frames = 10
-    init_image_size = 32
-    init_seq_length = 64
     init_inputs = [
         jnp.ones((init_batch_size, config.max_seq_length), dtype=jnp.int32),
         jnp.ones((init_batch_size, config.audio_sample_rate, 1), dtype=jnp.float32),

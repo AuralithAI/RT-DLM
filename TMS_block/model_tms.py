@@ -83,26 +83,26 @@ class TMSModel(hk.Module):
         self.decoders = {
             "text": hk.Linear(vocab_size, name="text_decoder"),
             "audio": hk.Sequential([
-                        hk.Linear(d_model, name="linear_1"),
+                        hk.Linear(d_model, name="audio_linear_1"),
                         jax.nn.relu,
-                        hk.Linear(audio_sample_rate * max_seq_length, name="linear_2"),
+                        hk.Linear(audio_sample_rate * max_seq_length, name="audio_linear_2"),
                         lambda x: x.reshape(-1, max_seq_length * audio_sample_rate)
                     ], name="audio_decoder"),
             "image": hk.Sequential([
-                        hk.Linear(image_size * image_size * 64),
+                        hk.Linear(image_size * image_size * 64, name="image_linear_1"),
                         jax.nn.relu,
                         lambda x: x.reshape(-1, image_size, image_size, 64),
-                        hk.Conv2DTranspose(output_channels=32, kernel_shape=3, stride=2),
+                        hk.Conv2DTranspose(output_channels=32, kernel_shape=3, stride=2, name="image_conv2d_transpose_1"),
                         jax.nn.relu,
-                        hk.Conv2DTranspose(output_channels=3, kernel_shape=3, stride=2),
+                        hk.Conv2DTranspose(output_channels=3, kernel_shape=3, stride=2, name="image_conv2d_transpose_2"),
                     ], name="image_decoder"),
             "video": hk.Sequential([
-                        hk.Linear(max_seq_length * image_size * image_size * 32),
+                        hk.Linear(max_seq_length * image_size * image_size * 32, name="video_linear_1"),
                         jax.nn.relu,
                         lambda x: x.reshape(-1, max_seq_length, image_size, image_size, 32),
-                        hk.Conv3DTranspose(output_channels=16, kernel_shape=(3, 3, 3), stride=(1, 2, 2)),
+                        hk.Conv3DTranspose(output_channels=16, kernel_shape=(3, 3, 3), stride=(1, 2, 2), name="video_conv3d_transpose_1"),
                         jax.nn.relu,
-                        hk.Conv3DTranspose(output_channels=3, kernel_shape=(3, 3, 3), stride=(1, 2, 2)),
+                        hk.Conv3DTranspose(output_channels=3, kernel_shape=(3, 3, 3), stride=(1, 2, 2), name="video_conv3d_transpose_2"),
                     ], name="video_decoder")
         }
 
