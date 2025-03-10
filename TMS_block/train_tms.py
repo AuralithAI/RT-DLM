@@ -65,11 +65,15 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
     # Initialize with a small batch
     init_batch_size = 2
+    init_audio_length = 1600
+    init_video_frames = 10
+    init_image_size = 32
+    init_seq_length = 64
     init_inputs = [
-        jnp.ones((init_batch_size, config.max_seq_length), dtype=jnp.int32),
-        jnp.ones((init_batch_size, config.audio_sample_rate, 1), dtype=jnp.float32),
-        jnp.ones((init_batch_size, config.image_size, config.image_size, 3), dtype=jnp.float32),
-        jnp.ones((init_batch_size, config.max_video_frames, config.image_size, config.image_size, 3), dtype=jnp.float32),
+        jnp.ones((init_batch_size, init_seq_length), dtype=jnp.int32),
+        jnp.ones((init_batch_size, init_audio_length, 1), dtype=jnp.float32),
+        jnp.ones((init_batch_size, init_image_size, init_image_size, 3), dtype=jnp.float32),
+        jnp.ones((init_batch_size, init_video_frames, init_image_size, init_image_size, 3), dtype=jnp.float32),
     ]
     init_modality_types = ["text", "audio", "image", "video"]
     init_output_modality = "text"
