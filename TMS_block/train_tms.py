@@ -64,11 +64,11 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     model = hk.transform_with_state(forward_fn)
 
     # Initialize with a small batch
-    init_batch_size = 2
-    init_audio_length = 1600
-    init_video_frames = 10
-    init_image_size = 32
-    init_seq_length = 64
+    init_batch_size = 1
+    init_seq_length = config.max_seq_length
+    init_audio_length = config.audio_sample_rate // 10
+    init_image_size = config.image_size // 4
+    init_video_frames = config.max_video_frames // 10
     init_inputs = [
         jnp.ones((init_batch_size, init_seq_length), dtype=jnp.int32),
         jnp.ones((init_batch_size, init_audio_length, 1), dtype=jnp.float32),

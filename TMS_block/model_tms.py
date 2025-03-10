@@ -26,6 +26,9 @@ class TMSModel(hk.Module):
         self.max_seq_length = max_seq_length
         self.audio_sample_rate = audio_sample_rate
         self.image_size = image_size
+        self.full_audio_length = audio_sample_rate * max_seq_length
+        self.full_image_size = image_size * image_size * 64
+        self.full_video_size = max_seq_length * image_size * image_size * 32
 
         # Modality Encoders (Text, Audio, Image, Video)
         self.text_encoder = hk.Embed(vocab_size, d_model, name="text_embedding")
@@ -85,11 +88,11 @@ class TMSModel(hk.Module):
             "audio": hk.Sequential([
                         hk.Linear(d_model, name="audio_linear_1"),
                         jax.nn.relu,
-                        hk.Linear(audio_sample_rate * max_seq_length, name="audio_linear_2"),
+                        hk.Linear(self.full_audio_length, name="audio_linear_2"),
                         lambda x: x.reshape(-1, max_seq_length * audio_sample_rate)
                     ], name="audio_decoder"),
             "image": hk.Sequential([
-                        hk.Linear(image_size * image_size * 64, name="image_linear_1"),
+                        hk.Linear(self.full_image_size, name="image_linear_1"),
                         jax.nn.relu,
                         lambda x: x.reshape(-1, image_size, image_size, 64),
                         hk.Conv2DTranspose(output_channels=32, kernel_shape=3, stride=2, name="image_conv2d_transpose_1"),
@@ -97,7 +100,7 @@ class TMSModel(hk.Module):
                         hk.Conv2DTranspose(output_channels=3, kernel_shape=3, stride=2, name="image_conv2d_transpose_2"),
                     ], name="image_decoder"),
             "video": hk.Sequential([
-                        hk.Linear(max_seq_length * image_size * image_size * 32, name="video_linear_1"),
+                        hk.Linear(self.full_video_size, name="video_linear_1"),
                         jax.nn.relu,
                         lambda x: x.reshape(-1, max_seq_length, image_size, image_size, 32),
                         hk.Conv3DTranspose(output_channels=16, kernel_shape=(3, 3, 3), stride=(1, 2, 2), name="video_conv3d_transpose_1"),
@@ -150,6 +153,9 @@ class TMSModel(hk.Module):
         decoder = self.decoders.get(output_modality)
         if decoder is None:
             raise ValueError(f"No decoder for output modality: {output_modality}")
+        # Adjust input shape if needed
+        if x.shape[-1] != self.d_model:
+            x = hk.Linear(self.d_model, name=f"{output_modality}_input_proj")(x)
         return decoder(x)
 
     def __call__(self, inputs, modality_types, output_modality="text", rng=None, return_attention=False, 
