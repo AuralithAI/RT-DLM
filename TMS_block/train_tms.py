@@ -300,8 +300,6 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
         return loss, params, new_state, new_meta_opt_state, support_thoughts, query_thoughts, new_inner_opt_state
 
     task_batches = create_multimodal_batches(multimodal_datasets, config.task_size, shuffle=True)
-    logger.info(f"Created {len(task_batches)} multimodal task batches")
-
     for task_idx, (inputs, modality_types, targets, output_modality) in enumerate(task_batches):
         support_inputs = [inp[:5] for inp in inputs]
         support_targets = targets[:5] if targets is not None else None
