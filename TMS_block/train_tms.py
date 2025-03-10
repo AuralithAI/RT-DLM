@@ -301,12 +301,13 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
 
     task_batches = create_multimodal_batches(multimodal_datasets, config.task_size, shuffle=True)
     for task_idx, (inputs, modality_types, targets, output_modality) in enumerate(task_batches):
-        support_inputs = [inp[:5] for inp in inputs]
-        support_targets = targets[:5] if targets is not None else None
-        query_inputs = [inp[5:] for inp in inputs]
-        query_targets = targets[5:] if targets is not None else None
+        support_size = min(3, config.task_size - 1)
+        support_inputs = [inp[:support_size] for inp in inputs]
+        support_targets = targets[:support_size] if targets is not None else None
+        query_inputs = [inp[support_size:] for inp in inputs]
+        query_targets = targets[support_size:] if targets is not None else None
 
-        if any(inp.shape[0] < 5 for inp in support_inputs) or any(inp.shape[0] < 1 for inp in query_inputs):
+        if any(inp.shape[0] < support_size for inp in support_inputs) or any(inp.shape[0] < 1 for inp in query_inputs):
             logger.info(f"Skipping task {task_idx+1} - insufficient support/query samples")
             continue
 
