@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class MemoryBank:
     def __init__(self, memory_size: int, embedding_dim: int, retrieval_k: int):
         """
-        Memory Bank using FAISS for efficient retrieval.
+        Long-Term Memory Bank for efficient retrieval.
         """
         self.memory_size = memory_size
         self.embedding_dim = embedding_dim
