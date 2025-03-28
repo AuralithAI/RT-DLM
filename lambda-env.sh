@@ -14,6 +14,7 @@ echo "Detected OS: $OS_NAME"
 VENV_DIR="$HOME/venv"
 PYTHON="python3"
 PIP="$VENV_DIR/bin/pip"
+AWS_CLI="$VENV_DIR/bin/aws"
 
 # Function to set up virtual environment
 setup_venv() {
@@ -62,6 +63,12 @@ install_jax_cuda() {
     $PIP install --upgrade "jax[cuda12]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 }
 
+# Function to install AWS CLI
+install_aws_cli() {
+    echo "Installing AWS CLI..."
+    $PIP install --upgrade awscli
+}
+
 # Main execution
 echo "Starting minimal setup..."
 
@@ -76,12 +83,14 @@ setup_venv
 update_pip
 install_requirements
 install_jax_cuda
+install_aws_cli
 
 # Verify installations
 echo "Verifying installations..."
 $VENV_DIR/bin/python --version
 $PIP --version
 $VENV_DIR/bin/python -c "import jax; print('JAX version:', jax.__version__)"
+$AWS_CLI --version
 
 echo "Minimal setup completed successfully!"
 echo "To activate the virtual environment, run: source $VENV_DIR/bin/activate"
