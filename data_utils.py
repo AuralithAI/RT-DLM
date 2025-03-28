@@ -155,26 +155,33 @@ def load_video_data(directory: str, config=None) -> jnp.ndarray:
 def load_multimodal_data(data_dir: str, config=None) -> List[MultimodalData]:
     """Loads all modality data from the specified directory."""
     datasets = []
-    text_data = load_text_data(os.path.join(data_dir, "train_data.txt"), config)
+
+    # Text
+    text_path = os.path.join(data_dir, "train_data.txt")
+    text_data = load_text_data(text_path, config)
     if text_data is not None:
         datasets.append(MultimodalData(inputs=[text_data], modality_types=["text"], targets=text_data, target_modality="text"))
 
+    # Audio
     audio_data = load_audio_data(os.path.join(data_dir, "audio"), config)
     if audio_data is not None:
         datasets.append(MultimodalData(inputs=[audio_data], modality_types=["audio"], targets=audio_data, target_modality="audio"))
 
+    # Image
     image_data = load_image_data(os.path.join(data_dir, "images"), config)
     if image_data is not None:
         datasets.append(MultimodalData(inputs=[image_data], modality_types=["image"], targets=image_data, target_modality="image"))
 
+    # Video
     video_data = load_video_data(os.path.join(data_dir, "videos"), config)
     if video_data is not None:
         datasets.append(MultimodalData(inputs=[video_data], modality_types=["video"], targets=video_data, target_modality="video"))
 
+    logger.info(f"Loaded datasets: {[d.modality_types for d in datasets]}")
     return datasets
 
 def create_batches(inputs: jnp.ndarray, targets: jnp.ndarray, batch_size: int, shuffle: bool = True):
-    """Yield batches of input and target data (for text only)."""
+    """Yield batches of input and target data (for single modality)."""
     n_samples = inputs.shape[0]
     indices = np.arange(n_samples)
     if shuffle:
@@ -184,7 +191,7 @@ def create_batches(inputs: jnp.ndarray, targets: jnp.ndarray, batch_size: int, s
         yield inputs[batch_indices], targets[batch_indices]
 
 def create_multimodal_batches(multimodal_datasets: List[MultimodalData], batch_size: int, shuffle: bool = True):
-    """Yield batches with combined multimodal inputs, one at a time."""
+    """Yield batches with combined multimodal inputs."""
     modality_map = {d.target_modality: d for d in multimodal_datasets if d.inputs[0].shape[0] > 0}
     max_samples = max(d.inputs[0].shape[0] for d in multimodal_datasets)
     modalities = list(modality_map.keys())
@@ -231,3 +238,12 @@ def create_multimodal_batches(multimodal_datasets: List[MultimodalData], batch_s
         
         logger.info(f"Yielding batch: modalities={batch_modality_types}, output={output_modality}, input_shapes={[inp.shape for inp in batch_inputs]}")
         yield (batch_inputs, batch_modality_types, batch_targets, output_modality)
+
+if __name__ == "__main__":
+    # Test the data loading
+    config = TrainConfig()
+    datasets = load_multimodal_data("data/", config)
+    for batch in create_multimodal_batches(datasets, batch_size=4):
+        inputs, modality_types, targets, output_modality = batch
+        print(f"Batch: {modality_types}, Input shapes: {[inp.shape for inp in inputs]}, Target shape: {targets.shape}")
+        break

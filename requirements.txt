@@ -24,3 +24,6 @@ bs4==0.0.2
 librosa==0.10.2
 opencv-python==4.11.0
 pytube==15.0.0
+transformers==4.50.1
+tokenizers==0.21.1
+safetensors==0.5.3

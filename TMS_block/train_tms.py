@@ -30,11 +30,13 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     devices = jax.devices()
     logger.info(f"Detected devices: {devices}")
 
+    # Initialize memory banks
     ltm = MemoryBank(memory_size=config.memory_size, embedding_dim=config.d_model, retrieval_k=config.retrieval_k)
     stm = ShortTermMemory(buffer_size=config.stm_buffer_size, embedding_dim=config.d_model)
     mtm = MidTermMemory(buffer_size=config.mtm_buffer_size, embedding_dim=config.d_model, retention_steps=config.retention_steps)
     logger.info("Memory banks initialized")
 
+    # Load and preprocess multimodal data using MultimodalPreprocessor
     multimodal_datasets = load_multimodal_data("data/", config)
     logger.info(f"Loaded {len(multimodal_datasets)} modality datasets")
 
@@ -54,7 +56,8 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
             stm_weight=config.stm_weight,
             mtm_weight=config.mtm_weight,
             audio_sample_rate=config.audio_sample_rate,
-            image_size=config.image_size
+            image_size=config.image_size,
+            name="tms_model"
         )
         return model(inputs, modality_types, output_modality, return_attention=return_attention,
                      retrieved_memory_ltm=retrieved_memory_ltm, retrieved_memory_stm=retrieved_memory_stm,
@@ -231,7 +234,8 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
                 stm_weight=config.stm_weight,
                 mtm_weight=config.mtm_weight,
                 audio_sample_rate=config.audio_sample_rate,
-                image_size=config.image_size
+                image_size=config.image_size,
+                name="tms_model"
             )
             return model(inputs, modality_types, output_modality, return_attention=return_attention, **kwargs)
 
@@ -386,7 +390,8 @@ def get_embeddings(config, params, state, rng, inputs, modality_types, retrieved
             stm_weight=config.stm_weight,
             mtm_weight=config.mtm_weight,
             audio_sample_rate=config.audio_sample_rate,
-            image_size=config.image_size
+            image_size=config.image_size,
+            name="tms_model"
         )
         x = jnp.zeros((inputs[0].shape[0], config.max_seq_length, config.d_model)) # Initialize with zeros
         for inp, m_type in zip(inputs, modality_types):

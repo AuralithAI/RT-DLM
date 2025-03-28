@@ -4,20 +4,31 @@
 OS_NAME=$(grep -Ei '^(ID)=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
 
 if [[ "$OS_NAME" != "ubuntu" ]]; then
-    echo "This script is optimized for Ubuntu-based Lambda Cloud instances."
+    echo "Error: This script is designed for Ubuntu-based Lambda Cloud instances."
     exit 1
 fi
 
 echo "Detected OS: $OS_NAME"
 
-# Function to update pip and install JAX with CUDA 12 support
-install_pip_and_jax() {
-    echo "Upgrading pip..."
-    python3 -m ensurepip --default-pip
-    python3 -m pip install --upgrade pip
+# Variables
+VENV_DIR="$HOME/venv"
+PYTHON="python3"
+PIP="$VENV_DIR/bin/pip"
 
-    echo "Installing JAX for CUDA 12..."
-    pip3 install --upgrade "jax[cuda12]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+# Function to set up virtual environment
+setup_venv() {
+    echo "Setting up virtual environment in $VENV_DIR..."
+    if [ ! -d "$VENV_DIR" ]; then
+        $PYTHON -m venv "$VENV_DIR"
+    fi
+    source "$VENV_DIR/bin/activate"
+    echo "Virtual environment activated."
+}
+
+# Function to update pip
+update_pip() {
+    echo "Upgrading pip..."
+    $PIP install --upgrade pip
 }
 
 # Function to install Tkinter and GUI dependencies
@@ -34,34 +45,43 @@ install_tkinter() {
     fi
 }
 
-# Function to install project dependencies
+# Function to install dependencies from requirements.txt
 install_requirements() {
     if [ -f "requirements.txt" ]; then
         echo "Installing dependencies from requirements.txt..."
-        pip3 install -r requirements.txt
+        $PIP install -r requirements.txt
     else
-        echo "Warning: requirements.txt not found!"
+        echo "Error: requirements.txt not found in the current directory!"
+        exit 1
     fi
 }
 
-#Degrade numpy and pandas to match lambda instance
-downgrade_numpy() {
-    echo "Degrade numpy to less than version 2.xx"
-    pip3 install --upgrade "numpy<2" --force-reinstall
-    pip3 uninstall numpy pandas datasets
-    pip3 install --force-reinstall numpy pandas datasets
-    pip install "numpy<2" --force-reinstall
-    pip install --upgrade --force-reinstall numpy jax jaxlib dm-haiku ml_dtypes
+# Function to install JAX with CUDA 12 support
+install_jax_cuda() {
+    echo "Installing JAX with CUDA 12 support..."
+    $PIP install --upgrade "jax[cuda12]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 }
 
-# Run functions
-install_pip_and_jax
-install_tkinter
+# Main execution
+echo "Starting minimal setup..."
+
+# Update system packages (minimal set for Python and GPU support)
+sudo apt update -y
+sudo apt install -y python3 python3-pip python3-venv
+
+# Set up virtual environment and activate it
+setup_venv
+
+# Update pip and install dependencies
+update_pip
 install_requirements
-downgrade_numpy
+install_jax_cuda
 
 # Verify installations
-pip3 --version
-python3 --version
+echo "Verifying installations..."
+$VENV_DIR/bin/python --version
+$PIP --version
+$VENV_DIR/bin/python -c "import jax; print('JAX version:', jax.__version__)"
 
 echo "Minimal setup completed successfully!"
+echo "To activate the virtual environment, run: source $VENV_DIR/bin/activate"
