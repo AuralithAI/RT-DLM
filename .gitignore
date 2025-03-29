@@ -49,6 +49,7 @@ data/rt_dlm_sp.vocab
 *.jpg
 *.png
 *.mp4
+*.zip
 
 # Unit test / coverage reports
 htmlcov/
