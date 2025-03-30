@@ -89,11 +89,11 @@ class TMSModel(hk.Module):
                         hk.Linear(d_model, name="audio_linear_1"),
                         jax.nn.relu,
                         hk.Linear(self.audio_reduced_length, name="audio_linear_2"),
-                        lambda x: jnp.interp(
-                            jnp.linspace(0, x.shape[1] - 1, self.full_audio_length),
-                            jnp.arange(x.shape[1]),
-                            x
-                        )
+                        lambda x: jax.vmap(lambda y: jnp.interp(
+                            jnp.linspace(0, self.audio_reduced_length - 1, self.full_audio_length),
+                            jnp.arange(self.audio_reduced_length),
+                            y.squeeze(0)
+                        ))(x)
                     ], name="audio_decoder"),
             "image": hk.Sequential([
                         hk.Linear(self.full_image_size, name="image_linear_1"),
