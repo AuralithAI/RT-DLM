@@ -1,7 +1,6 @@
 import haiku as hk
 import jax
 import jax.numpy as jnp
-import numpy as np
 import os
 import sys
 
@@ -26,7 +25,8 @@ class TMSModel(hk.Module):
         self.max_seq_length = max_seq_length
         self.audio_sample_rate = audio_sample_rate
         self.image_size = image_size
-        self.full_audio_length = audio_sample_rate * max_seq_length
+        self.audio_reduced_length = audio_sample_rate // (5 * 2)
+        self.full_audio_length = audio_sample_rate
         self.full_image_size = image_size * image_size * 64
         self.full_video_size = max_seq_length * image_size * image_size * 32
 
@@ -88,8 +88,12 @@ class TMSModel(hk.Module):
             "audio": hk.Sequential([
                         hk.Linear(d_model, name="audio_linear_1"),
                         jax.nn.relu,
-                        hk.Linear(self.full_audio_length, name="audio_linear_2"),
-                        lambda x: x.reshape(-1, max_seq_length * audio_sample_rate)
+                        hk.Linear(self.audio_reduced_length, name="audio_linear_2"),
+                        lambda x: jnp.interp(
+                            jnp.linspace(0, x.shape[1] - 1, self.full_audio_length),
+                            jnp.arange(x.shape[1]),
+                            x
+                        )
                     ], name="audio_decoder"),
             "image": hk.Sequential([
                         hk.Linear(self.full_image_size, name="image_linear_1"),
@@ -150,10 +154,9 @@ class TMSModel(hk.Module):
         """
         Decode model output based on modality type.
         """
-        decoder = self.decoders.get(output_modality)
-        if decoder is None:
-            raise ValueError(f"No decoder for output modality: {output_modality}")
-        # Adjust input shape if needed
+        decoder = self.decoders[output_modality]
+        if output_modality in ["audio", "image", "video"] and x.shape[1] > 1:
+            x = jnp.mean(x, axis=1, keepdims=True)
         if x.shape[-1] != self.d_model:
             x = hk.Linear(self.d_model, name=f"{output_modality}_input_proj")(x)
         return decoder(x)
@@ -189,9 +192,8 @@ class TMSModel(hk.Module):
 
         # ** dummy_memory is used to initialize the memory projection layers [Not to be used anywhere else] ** 
         batch_size = modality_embeddings[0].shape[0]
-        dummy_memory = jnp.zeros((batch_size, self.max_seq_length, self.d_model), dtype=jnp.float32)
-        dummy_memory = dummy_memory[:, :1, :]
-    
+        dummy_memory = jnp.zeros((batch_size, self.max_seq_length, self.d_model), dtype=jnp.float32)[:, :1, :]
+
         # Handle LTM
         if retrieved_memory_ltm is not None:
             ltm_emb = self.memory_projection_ltm(retrieved_memory_ltm[:, None, :])
@@ -219,12 +221,18 @@ class TMSModel(hk.Module):
         attn_weights_self = None
         if "text" in modality_types and modality_types[0] == "text":
             x_sa, attn_weights_self = self.self_attention(inputs[0], return_attention=True, 
-                                                        spike_threshold=spike_threshold, epsilon=epsilon,
-                                                        output_logits=False)  
-        x = x + x_sa
-        x, attn_weights_transformer = self.transformer(x, rng, return_attention=True, spike_threshold=spike_threshold, epsilon=epsilon)
+                                                         spike_threshold=spike_threshold, epsilon=epsilon,
+                                                         output_logits=False)
+            x = x + x_sa
+        x, attn_weights_transformer = self.transformer(x, rng, return_attention=True, 
+                                                      spike_threshold=spike_threshold, epsilon=epsilon)
         x, top_k_expert_indices, aux_loss = self.moe(x, spike_threshold=spike_threshold, epsilon=epsilon)
         x = self.norm(x)
+
+        if hk.running_init():
+            dummy_x = jnp.zeros((batch_size, self.max_seq_length, self.d_model))
+            for modality in self.decoders:
+                _ = self.decode_output(dummy_x, modality)
 
         logits = self.decode_output(x, output_modality)
 
