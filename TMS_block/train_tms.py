@@ -105,7 +105,7 @@ def train_and_evaluate(config, losses, similarity_scores, thought_logs):
     inner_opt_state = inner_optimizer.init(params)
     logger.info("Optimizers initialized")
 
-    @jax.checkpoint
+    #@jax.checkpoint
     def compute_loss(params, state, rng, inputs, modality_types, targets, output_modality, 
                      retrieved_memory_ltm, retrieved_memory_stm, retrieved_memory_mtm):
         (output, (attn_weights_self, attn_weights_transformer), expert_indices, aux_loss), new_state = model.apply(
