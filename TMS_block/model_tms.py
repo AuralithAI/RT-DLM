@@ -92,8 +92,7 @@ class TMSModel(hk.Module):
                         lambda x: jax.image.resize(
                         x.squeeze(1),
                         shape=(x.shape[0], self.full_audio_length),
-                        method="linear"
-                    )
+                        method="linear"),
                     ], name="audio_decoder"),
             "image": hk.Sequential([
                         hk.Linear(self.full_image_size, name="image_linear_1"),
