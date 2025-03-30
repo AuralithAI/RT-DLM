@@ -20,10 +20,12 @@ def set_jax_config(config):
     jax.config.update("jax_enable_x64", False)
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+    os.environ["JAX_MEMORY_FRACTION"] = "0.8"
     os.environ["XLA_FLAGS"] = (
         f"--xla_gpu_force_compilation_parallelism={config.xla_gpu_parallelism}"
         "--xla_gpu_enable_triton_gemm=true"
         "--xla_gpu_memory_efficient=true"
+        "--xla_gpu_force_memory_efficient_conv=true"
     )
     logger.info("[INFO] JAX device: %s", jax.devices())
 
