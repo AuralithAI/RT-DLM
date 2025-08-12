@@ -52,6 +52,24 @@ class ConsciousnessSimulator(hk.Module):
         # Metacognition tracker
         self.metacognition = hk.Linear(d_model, name="metacognition")
         
+        # Multi-level introspection layers
+        self.deep_introspection = hk.Sequential([
+            hk.Linear(d_model), jax.nn.silu,
+            hk.Linear(d_model), jax.nn.silu,
+            hk.Linear(d_model)
+        ], name="deep_introspection")
+        
+        # Self-reflection mechanism
+        self.self_reflection = hk.MultiHeadAttention(
+            num_heads=8, key_size=d_model//8, name="self_reflection"
+        )
+        
+        # Goal revision system
+        self.goal_revision = hk.Sequential([
+            hk.Linear(d_model * 3), jax.nn.silu,
+            hk.Linear(d_model), jax.nn.tanh
+        ], name="goal_revision")
+        
     def __call__(self, internal_state, external_input, previous_goals=None):
         """
         Simulate consciousness processes
@@ -80,12 +98,32 @@ class ConsciousnessSimulator(hk.Module):
         # Metacognitive awareness
         meta_awareness = self.metacognition(introspective_analysis.mean(axis=1))
         
+        # Deep multi-level introspection
+        deep_intro = self.deep_introspection(introspective_analysis.mean(axis=1))
+        
+        # Self-reflection on own cognitive processes
+        self_reflection = self.self_reflection(
+            internal_state, introspective_analysis, introspective_analysis
+        )
+        
+        # Goal revision based on reflection
+        if previous_goals is not None:
+            goal_revision_input = jnp.concatenate([
+                autonomous_goals.mean(axis=1),
+                previous_goals.mean(axis=1) if previous_goals.ndim > 1 else previous_goals,
+                meta_awareness
+            ], axis=-1)
+            revised_goals = self.goal_revision(goal_revision_input)
+            autonomous_goals = autonomous_goals + revised_goals[:, None, :] * 0.3
+        
         # Scale by consciousness level
         consciousness_signal = {
             "self_awareness": self_state * self.consciousness_level,
             "introspection": introspective_analysis * self.consciousness_level,
             "autonomous_goals": autonomous_goals * self.consciousness_level,
-            "meta_awareness": meta_awareness * self.consciousness_level
+            "meta_awareness": meta_awareness * self.consciousness_level,
+            "deep_introspection": deep_intro * self.consciousness_level,
+            "self_reflection": self_reflection * self.consciousness_level
         }
         
         return consciousness_signal
@@ -126,6 +164,31 @@ class ScientificDiscoveryEngine(hk.Module):
             w_init=hk.initializers.TruncatedNormal(stddev=0.02)
         )
         
+        # Literature review automation
+        self.literature_analyzer = hk.Sequential([
+            hk.Linear(d_model * 2), jax.nn.silu,
+            hk.Linear(d_model), jax.nn.silu,
+            hk.Linear(d_model)
+        ], name="literature_analyzer")
+        
+        # Experiment simulation
+        self.experiment_simulator = hk.Sequential([
+            hk.Linear(d_model), jax.nn.relu,
+            hk.Linear(d_model), jax.nn.relu,
+            hk.Linear(d_model)
+        ], name="experiment_simulator")
+        
+        # Result synthesis
+        self.result_synthesizer = hk.MultiHeadAttention(
+            num_heads=4, key_size=d_model//4, name="result_synthesizer"
+        )
+        
+        # Hypothesis refinement
+        self.hypothesis_refiner = hk.Sequential([
+            hk.Linear(d_model * 3), jax.nn.silu,
+            hk.Linear(d_model), jax.nn.tanh
+        ], name="hypothesis_refiner")
+        
     def __call__(self, knowledge_base, observations, research_question=None):
         """
         Generate scientific hypotheses and experiments
@@ -154,9 +217,35 @@ class ScientificDiscoveryEngine(hk.Module):
         # Design experiments to test hypothesis
         experiment_design = self.experiment_designer(hypothesis)
         
+        # Automated literature review
+        literature_context = jnp.concatenate([
+            encoded_knowledge, hypothesis
+        ], axis=-1)
+        literature_analysis = self.literature_analyzer(literature_context)
+        
+        # Simulate experiment outcomes
+        experiment_simulation = self.experiment_simulator(experiment_design)
+        
+        # Synthesize results
+        result_synthesis = self.result_synthesizer(
+            experiment_simulation, literature_analysis, encoded_knowledge
+        )
+        
+        # Refine hypothesis based on results
+        refinement_input = jnp.concatenate([
+            hypothesis.mean(axis=1),
+            result_synthesis.mean(axis=1),
+            literature_analysis.mean(axis=1)
+        ], axis=-1)
+        refined_hypothesis = self.hypothesis_refiner(refinement_input)
+        
         return {
             "hypothesis": hypothesis,
+            "refined_hypothesis": refined_hypothesis,
             "experiment_design": experiment_design,
+            "experiment_simulation": experiment_simulation,
+            "literature_analysis": literature_analysis,
+            "result_synthesis": result_synthesis,
             "causal_analysis": causal_analysis,
             "encoded_knowledge": encoded_knowledge
         }

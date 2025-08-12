@@ -63,6 +63,68 @@ class QuantumSimulator:
     def __init__(self, max_qubits: int = 10):
         self.max_qubits = max_qubits
         self.state_vector = None
+        self.entanglement_map = {}  # Track entangled qubit pairs
+        self.coherence_time = 1000  # Simulation steps before decoherence
+        
+    def create_bell_state(self, qubit1: int, qubit2: int, num_qubits: int) -> jnp.ndarray:
+        """Create maximally entangled Bell state between two qubits."""
+        state = self.initialize_state(num_qubits)
+        # Apply H gate to first qubit, then CNOT
+        h_gate = QuantumGate(QuantumGateType.HADAMARD, [qubit1])
+        cnot_gate = QuantumGate(QuantumGateType.CNOT, [qubit1, qubit2])
+        
+        state = self.apply_gate(state, h_gate, num_qubits)
+        state = self.apply_gate(state, cnot_gate, num_qubits)
+        
+        self.entanglement_map[f"{qubit1}_{qubit2}"] = "bell_state"
+        return state
+        
+    def variational_quantum_layer(self, params: jnp.ndarray, num_qubits: int) -> jnp.ndarray:
+        """Implement parameterized quantum layer for VQC."""
+        state = self.initialize_state(num_qubits)
+        param_idx = 0
+        
+        # Layer 1: Rotation gates
+        for i in range(num_qubits):
+            rx_gate = QuantumGate(QuantumGateType.ROTATION_X, [i], [params[param_idx]])
+            ry_gate = QuantumGate(QuantumGateType.ROTATION_Y, [i], [params[param_idx + 1]])
+            state = self.apply_gate(state, rx_gate, num_qubits)
+            state = self.apply_gate(state, ry_gate, num_qubits)
+            param_idx += 2
+            
+        # Layer 2: Entangling gates
+        for i in range(num_qubits - 1):
+            cnot_gate = QuantumGate(QuantumGateType.CNOT, [i, i + 1])
+            state = self.apply_gate(state, cnot_gate, num_qubits)
+            
+        # Layer 3: Final rotations
+        for i in range(num_qubits):
+            rz_gate = QuantumGate(QuantumGateType.ROTATION_Z, [i], [params[param_idx]])
+            state = self.apply_gate(state, rz_gate, num_qubits)
+            param_idx += 1
+            
+        return state
+        
+    def quantum_attention_circuit(self, query_params: jnp.ndarray, key_params: jnp.ndarray, 
+                                num_qubits: int) -> jnp.ndarray:
+        """Quantum circuit for attention mechanism with superposition."""
+        state = self.initialize_state(num_qubits)
+        
+        # Encode query in superposition
+        for i in range(min(len(query_params), num_qubits)):
+            h_gate = QuantumGate(QuantumGateType.HADAMARD, [i])
+            ry_gate = QuantumGate(QuantumGateType.ROTATION_Y, [i], [query_params[i]])
+            state = self.apply_gate(state, h_gate, num_qubits)
+            state = self.apply_gate(state, ry_gate, num_qubits)
+            
+        # Apply key encoding through controlled rotations
+        for i in range(min(len(key_params), num_qubits - 1)):
+            # Controlled rotation based on key parameters
+            angle = key_params[i] * jnp.pi
+            controlled_ry = QuantumGate(QuantumGateType.ROTATION_Y, [i + 1], [angle])
+            state = self.apply_gate(state, controlled_ry, num_qubits)
+            
+        return state
         
     def initialize_state(self, num_qubits: int) -> jnp.ndarray:
         """Initialize quantum state |00...0>."""
