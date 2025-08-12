@@ -102,7 +102,7 @@ def list_tests():
     print("\\nUsage:")
     print("  python test_runner.py simple      # Run basic CPU test")
     print("  python test_runner.py hybrid      # Run full hybrid demo")
-    print("  python test_runner.py tokenizer   # Run tokenizer test")
+    print("  python test_runner.py validator   # Run system validation")
     print("  python test_runner.py --list      # Show this list")
 
 def check_dependencies():
