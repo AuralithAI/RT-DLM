@@ -1,10 +1,10 @@
 import jax.numpy as jnp
 from tokenization.multimodal_tokenizer import TokenizationConfig
 
-class AdvancedAGIConfig:
+class AGIConfig:
     """
-    Enhanced configuration class for RT-DLM AGI model with advanced features including
-    multi-modal processing, quantum-inspired components, and meta-learning capabilities.
+    Configuration class for RT-DLM AGI model with multi-modal processing,
+    quantum-inspired components, and meta-learning capabilities.
     """
 
     def __init__(self, **kwargs):
