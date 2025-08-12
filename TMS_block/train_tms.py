@@ -10,9 +10,9 @@ import logging
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from model_tms import TMSModel
-from data_utils import DataProcessor, load_data, create_batches
+from data_processing.data_utils import DataProcessor, load_data, create_batches
 from memory_bank import MemoryBank, ShortTermMemory, MidTermMemory
-from train_config import TrainConfig
+from config.train_config import TrainConfig
 
 logging.basicConfig(
     level=logging.INFO, 

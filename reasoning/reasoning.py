@@ -329,8 +329,8 @@ class SelfImprovementModule(hk.Module):
         strategy = self.generate_improvement_strategy(0.0, current_input)
         return strategy
 
-class AdvancedReasoningEngine(hk.Module):
-    """Complete advanced reasoning engine combining all components"""
+class ReasoningEngine(hk.Module):
+    """Complete reasoning engine combining all components"""
     
     def __init__(self, config, name=None):
         super().__init__(name=name)

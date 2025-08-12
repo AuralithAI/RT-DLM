@@ -9,7 +9,7 @@ from datasets import load_dataset
 import matplotlib
 import matplotlib.pyplot as plt
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from data_utils import DataProcessor
+from data_processing.data_utils import DataProcessor
 from text_summarization.text_summary_module import TextSummarizationModel
 import warnings
 

@@ -11,9 +11,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from TMS_block.model_tms import TMSModel
 from multimodal.fusion_module import MultiModalRTDLM
-from reasoning.advanced_reasoning import AdvancedReasoningEngine
+from reasoning.reasoning import ReasoningEngine
 from quantum.quantum_agi_core import QuantumAGICore
-from agi_config import AdvancedAGIConfig
+from config.agi_config import AGIConfig
 
 class ConsciousnessSimulator(hk.Module):
     """Simulates aspects of consciousness including self-awareness and introspection"""
@@ -308,7 +308,7 @@ class RT_DLM_AGI(hk.Module):
     Complete RT-DLM AGI System integrating all advanced components
     """
     
-    def __init__(self, config: AdvancedAGIConfig, name=None):
+    def __init__(self, config: AGIConfig, name=None):
         super().__init__(name=name)
         self.config = config
         
@@ -333,7 +333,7 @@ class RT_DLM_AGI(hk.Module):
             self.multimodal_processor = MultiModalRTDLM(config)
         
         # Advanced reasoning
-        self.reasoning_engine = AdvancedReasoningEngine(config)
+        self.reasoning_engine = ReasoningEngine(config)
         
         # Quantum-enhanced processing
         if config.quantum_layers > 0:
@@ -508,7 +508,7 @@ class RT_DLM_AGI(hk.Module):
         return agi_output
 
 # Convenience function for model creation
-def create_rtdlm_agi(config: AdvancedAGIConfig):
+def create_rtdlm_agi(config: AGIConfig):
     """Create RT-DLM AGI model with given configuration"""
     
     def forward_fn(**kwargs):
@@ -518,7 +518,7 @@ def create_rtdlm_agi(config: AdvancedAGIConfig):
     return hk.transform(forward_fn)
 
 # Training utilities
-def create_agi_optimizer(config: AdvancedAGIConfig):
+def create_agi_optimizer(config: AGIConfig):
     """Create optimized optimizer for AGI training"""
     
     # Learning rate schedule

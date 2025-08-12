@@ -1,17 +1,17 @@
 """
 Train the multi-modal tokenizer for RT-DLM AGI
 """
-from data_processing.advanced_data_processor import AdvancedDataProcessor
-from agi_config import AdvancedAGIConfig
+from data_processing.data_processor import DataProcessor
+from config.agi_config import AGIConfig
 
 def main():
     # Load configuration
-    config = AdvancedAGIConfig()
+    config = AGIConfig()
     
     # Initialize data processor (this will train the tokenizer automatically)
-    processor = AdvancedDataProcessor(config)
+    processor = DataProcessor(config)
     
-    print("✅ Multi-modal tokenizer training complete!")
+    print("Multi-modal tokenizer training complete!")
     print(f"Total vocabulary size: {processor.get_vocab_size():,}")
     
     # Test with sample text

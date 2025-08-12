@@ -5,7 +5,7 @@ import haiku as hk
 import jax
 import os
 import pickle
-from data_utils import DataProcessor
+from data_processing.data_utils import DataProcessor
 from text_summarization.text_summary_module import TextSummarizationModel
 from datasets import load_dataset
 

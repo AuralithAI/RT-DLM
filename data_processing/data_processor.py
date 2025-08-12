@@ -1,5 +1,5 @@
 """
-Advanced Data Processing for RT-DLM AGI with Multi-Modal Tokenization
+Data Processing for RT-DLM AGI with Multi-Modal Tokenization
 """
 
 import os
@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Union, Any, Optional
 from dataclasses import dataclass
 
-from tokenization.multimodal_tokenizer import AdvancedMultiModalTokenizer, ModalityType, TokenizationConfig
-from agi_config import AdvancedAGIConfig
+from tokenization.multimodal_tokenizer import MultiModalTokenizer, ModalityType, TokenizationConfig
+from config.agi_config import AGIConfig
 
 @dataclass
 class MultiModalDataSample:
@@ -26,15 +26,15 @@ class MultiModalDataSample:
     tokens: Optional[List[int]] = None
     modalities: Optional[List[ModalityType]] = None
 
-class AdvancedDataProcessor:
+class DataProcessor:
     """
-    Advanced data processor for RT-DLM AGI that handles all data modalities
+    Data processor for RT-DLM AGI that handles all data modalities
     and creates unified token sequences for training and inference.
     """
     
-    def __init__(self, config: AdvancedAGIConfig):
+    def __init__(self, config: AGIConfig):
         self.config = config
-        self.tokenizer = AdvancedMultiModalTokenizer(config.tokenization_config)
+        self.tokenizer = MultiModalTokenizer(config.tokenization_config)
         
         # Initialize tokenizer if not already trained
         self._ensure_tokenizer_ready()
@@ -408,10 +408,10 @@ class AdvancedDataProcessor:
 # Example usage and testing
 if __name__ == "__main__":
     # Initialize configuration and processor
-    config = AdvancedAGIConfig()
-    processor = AdvancedDataProcessor(config)
+    config = AGIConfig()
+    processor = DataProcessor(config)
     
-    print("🚀 TESTING ADVANCED DATA PROCESSOR")
+    print("TESTING DATA PROCESSOR")
     print("=" * 50)
     
     # Test single text sample

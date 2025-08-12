@@ -236,9 +236,9 @@ analysis = agi.analyze_document(
 
 ### **📋 Core Configuration**
 ```python
-from agi_config import AdvancedAGIConfig
+from config.agi_config import AGIConfig
 
-config = AdvancedAGIConfig(
+config = AGIConfig(
     d_model=512,                    # Model dimension
     num_heads=8,                    # Attention heads
     num_layers=12,                  # Transformer layers
@@ -253,7 +253,7 @@ config = AdvancedAGIConfig(
 
 ### **🎨 Multi-Modal Tokenization**
 ```python
-from tokenization.multimodal_tokenizer import AdvancedMultiModalTokenizer
+from tokenization.multimodal_tokenizer import MultiModalTokenizer
 
 tokenizer = AdvancedMultiModalTokenizer()
 tokens = tokenizer.tokenize("path/to/any/file")  # Works with ANY file type!
@@ -261,7 +261,7 @@ tokens = tokenizer.tokenize("path/to/any/file")  # Works with ANY file type!
 
 ### **📊 Data Processing**
 ```python
-from data_processing.advanced_data_processor import AdvancedDataProcessor
+from data_processing.data_processor import DataProcessor
 
 processor = AdvancedDataProcessor(config)
 samples = processor.process_directory("dataset/", recursive=True)
@@ -305,7 +305,7 @@ RT-DLM/
 │
 ├── 📊 Data Processing
 │   ├── data_processing/
-│   │   └── advanced_data_processor.py # Multi-modal data processor
+│   │   └── data_processor.py # Multi-modal data processor
 │   └── data/                      # Training datasets
 │
 ├── 🧪 Testing Suite

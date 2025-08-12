@@ -6,7 +6,7 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
-from data_utils import DataProcessor
+from data_processing.data_utils import DataProcessor
 
 
 class EthicalDimension(Enum):

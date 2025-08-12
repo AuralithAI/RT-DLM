@@ -125,7 +125,7 @@ class TokenizationConfig:
             "CODE_END": 25,
         }
 
-class AdvancedMultiModalTokenizer:
+class MultiModalTokenizer:
     """
     Comprehensive tokenizer for all data modalities.
     Converts any input type into a unified token sequence.
@@ -602,7 +602,7 @@ class AdvancedMultiModalTokenizer:
 if __name__ == "__main__":
     # Initialize tokenizer
     config = TokenizationConfig()
-    tokenizer = AdvancedMultiModalTokenizer(config)
+    tokenizer = MultiModalTokenizer(config)
     
     # Example texts for training
     sample_texts = [

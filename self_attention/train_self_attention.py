@@ -7,9 +7,9 @@ import haiku as hk
 import matplotlib.pyplot as plt
 import seaborn as sns
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from train_config import TrainConfig
+from config.train_config import TrainConfig
 from model_module_self_attention import SelfAttentionModel
-from data_utils import DataProcessor, load_data
+from data_processing.data_utils import DataProcessor, load_data
 from logLevel.logLevel import Logging
 from datetime import datetime
 
