@@ -2,7 +2,7 @@
 Train the multi-modal tokenizer for RT-DLM AGI
 """
 from data_processing.data_processor import DataProcessor
-from agi_config import AGIConfig
+from config.agi_config import AGIConfig
 
 def main():
     # Load configuration

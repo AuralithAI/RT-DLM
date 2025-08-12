@@ -6,6 +6,8 @@ Showcase core AGI capabilities for production deployment
 import time
 import jax
 import jax.numpy as jnp
+from data_processing.data_utils import DataProcessor
+from config.agi_config import AGIConfig
 
 def demo_reasoning():
     """Demonstrate reasoning capabilities"""
@@ -89,8 +91,6 @@ def demo_tokenization():
     print("Tokenization Demo:")
     
     try:
-        from data_processing.data_utils import DataProcessor
-        
         processor = DataProcessor(vocab_size=1000, model_prefix="data/rt_dlm_sp")
         
         test_inputs = [
@@ -116,8 +116,6 @@ def demo_agi_integration():
     print("AGI Integration Demo:")
     
     try:
-        from agi_config import AGIConfig
-        
         config = AGIConfig()
         
         print(f"   Model Dimension: {config.d_model}")

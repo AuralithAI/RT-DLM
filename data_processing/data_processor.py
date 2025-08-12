@@ -12,7 +12,7 @@ from typing import List, Dict, Tuple, Union, Any, Optional
 from dataclasses import dataclass
 
 from tokenization.multimodal_tokenizer import MultiModalTokenizer, ModalityType, TokenizationConfig
-from agi_config import AGIConfig
+from config.agi_config import AGIConfig
 
 @dataclass
 class MultiModalDataSample:

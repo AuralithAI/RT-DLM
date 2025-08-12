@@ -4,7 +4,7 @@ import numpy as np
 import sentencepiece as spm
 import jax.numpy as jnp
 from typing import List
-from train_config import TrainConfig
+from config.train_config import TrainConfig
 
 config = TrainConfig()
 

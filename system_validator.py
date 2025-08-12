@@ -4,7 +4,11 @@ Production readiness validation for RT-DLM AGI system
 """
 
 import sys
+import jax
+import jax.numpy as jnp
 from pathlib import Path
+from data_processing.data_utils import DataProcessor
+from config.agi_config import AGIConfig
 
 def print_header():
     """Print validation header"""
@@ -23,8 +27,6 @@ def check_core_systems():
     
     # Test Python+JAX environment
     try:
-        import jax
-        import jax.numpy as jnp
         # Simple JAX test
         x = jnp.array([1, 2, 3])
         result = jnp.sum(x)
@@ -36,7 +38,6 @@ def check_core_systems():
     
     # Test data processing
     try:
-        from data_processing.data_utils import DataProcessor
         processor = DataProcessor(vocab_size=1000, model_prefix="data/rt_dlm_sp")
         test_text = "Hello AGI world"
         tokens = processor.tokenize(test_text)
@@ -48,7 +49,6 @@ def check_core_systems():
     
     # Test configuration
     try:
-        from agi_config import AGIConfig
         config = AGIConfig()
         checks["Configuration"] = hasattr(config, 'd_model')
         print(f"[PASS] Configuration: d_model={config.d_model}")

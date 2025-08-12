@@ -7,12 +7,17 @@ import time
 import sys
 import os
 import traceback
+import jax
+import jax.numpy as jnp
 from typing import Dict, List, Any, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 # Add project to path
 sys.path.append(str(Path(__file__).parent.parent))
+
+from data_processing.data_utils import DataProcessor
+from config.agi_config import AGIConfig
 
 @dataclass
 class TestResult:
@@ -55,12 +60,9 @@ class RTDLMTestFramework:
     
     def test_python_environment(self):
         """Test Python environment and core libraries"""
-        import sys
         assert sys.version_info >= (3, 8), "Python 3.8+ required"
         
         # Test JAX
-        import jax
-        import jax.numpy as jnp
         x = jnp.array([1, 2, 3])
         result = jnp.sum(x)
         assert result == 6, f"JAX computation failed: {result}"
@@ -71,11 +73,9 @@ class RTDLMTestFramework:
         """Test that core system modules can be imported"""
         
         # Core data processing
-        from data_processing.data_utils import DataProcessor
         print("   Data processing module imported")
         
         # Configuration system
-        from agi_config import AGIConfig
         config = AGIConfig()
         assert hasattr(config, 'd_model'), "Configuration missing d_model"
         print(f"   Configuration loaded (d_model: {config.d_model})")
@@ -96,8 +96,6 @@ class RTDLMTestFramework:
     
     def test_data_processing(self):
         """Test data processing capabilities"""
-        from data_processing.data_utils import DataProcessor
-        
         processor = DataProcessor(vocab_size=1000, model_prefix="data/rt_dlm_sp")
         
         # Test tokenization
@@ -111,8 +109,6 @@ class RTDLMTestFramework:
     
     def test_model_components(self):
         """Test model architecture components"""
-        from agi_config import AGIConfig
-        
         config = AGIConfig()
         
         # Validate configuration
@@ -124,8 +120,6 @@ class RTDLMTestFramework:
     
     def test_tokenization(self):
         """Test tokenization system"""
-        from data_processing.data_utils import DataProcessor
-        
         processor = DataProcessor(vocab_size=1000, model_prefix="data/rt_dlm_sp")
         
         test_cases = [
@@ -184,8 +178,6 @@ class RTDLMTestFramework:
     
     def test_performance_baseline(self):
         """Test basic performance requirements"""
-        import jax
-        import jax.numpy as jnp
         
         # Test computation performance
         start_time = time.time()
