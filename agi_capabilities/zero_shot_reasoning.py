@@ -67,10 +67,57 @@ class ConceptualKnowledgeGraph:
         self.concept_embeddings = None  # Will be JAX array for similarity search
         self.concept_ids = []  # Parallel to embeddings
         
+        # Enterprise-scale storage and indexing
+        self.concept_cache = {}  # LRU cache for frequent lookups
+        self.relation_index = {}  # Fast relation lookup
+        self.multi_hop_cache = {}  # Cache for multi-hop reasoning
+        
     def add_concept(self, concept: ConceptNode):
         """Add a new concept to the knowledge graph."""
         self.concepts[concept.concept_id] = concept
         self._rebuild_embedding_index()
+        self._update_relation_index(concept)
+        
+    def _update_relation_index(self, concept: ConceptNode):
+        """Update fast relation lookup index."""
+        for relation in concept.relations:
+            rel_key = f"{relation['type']}_{relation['target']}"
+            if rel_key not in self.relation_index:
+                self.relation_index[rel_key] = []
+            self.relation_index[rel_key].append(concept.concept_id)
+            
+    def multi_hop_reasoning(self, start_concept: str, target_concept: str, max_hops: int = 3):
+        """Perform multi-hop reasoning between concepts."""
+        cache_key = f"{start_concept}_{target_concept}_{max_hops}"
+        if cache_key in self.multi_hop_cache:
+            return self.multi_hop_cache[cache_key]
+            
+        # BFS for reasoning paths
+        queue = [(start_concept, [])]
+        visited = set()
+        paths = []
+        
+        for _ in range(max_hops):
+            next_queue = []
+            for current, path in queue:
+                if current == target_concept:
+                    paths.append(path)
+                    continue
+                    
+                if current in visited:
+                    continue
+                visited.add(current)
+                
+                # Explore connected concepts
+                if current in self.concepts:
+                    for relation in self.concepts[current].relations:
+                        next_concept = relation['target']
+                        new_path = path + [(current, relation['type'], next_concept)]
+                        next_queue.append((next_concept, new_path))
+            queue = next_queue
+            
+        self.multi_hop_cache[cache_key] = paths[:5]  # Cache top 5 paths
+        return paths[:5]
         
     def find_similar_concepts(self, query_embedding: jnp.ndarray, 
                             top_k: int = 5) -> List[Tuple[str, float]]:
