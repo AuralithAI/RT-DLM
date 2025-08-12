@@ -17,6 +17,7 @@ class MemoryBank:
         self.retrieval_k = retrieval_k
         self.index = faiss.IndexFlatL2(embedding_dim)
         self.values = []
+        self.feedback_scores = []
 
     def apply_spiking_attention_jnp(self, x, spike_threshold, epsilon):
         """
@@ -27,7 +28,7 @@ class MemoryBank:
         spiked_x = jnp.where(spiking_mask, x, 0.0)
         return spiked_x / (jnp.sum(spiked_x, axis=-1, keepdims=True) + epsilon)
 
-    def store(self, keys, values, spike_threshold=0.1, epsilon=1e-8):
+    def store(self, keys, values, feedback_scores=None, spike_threshold=0.1, epsilon=1e-8):
         """
         Stores key-value pairs in the memory bank.
         :param keys: Batch of mean-pooled embeddings (shape: [batch_size, embedding_dim])
@@ -56,6 +57,7 @@ class MemoryBank:
             self.index.add(np.asarray(self.values, dtype=np.float32))
 
         self.values.extend(values_np.tolist())
+        self.feedback_scores.extend([feedback_scores] * len(keys_np) if feedback_scores else [0.0] * len(keys_np))
         self.index.add(keys_np)
 
     def retrieve(self, queries_np, spike_threshold=0.1, epsilon=1e-8):
@@ -90,7 +92,8 @@ class ShortTermMemory:
         """Short-Term Memory as a per-batch buffer."""
         self.buffer_size = buffer_size  
         self.embedding_dim = embedding_dim
-        self.buffer = []  
+        self.buffer = []
+        self.feedback_scores = []  
 
     def apply_spiking_attention_jnp(self, x, spike_threshold, epsilon):
         """
@@ -136,7 +139,8 @@ class MidTermMemory:
     def __init__(self, buffer_size: int, embedding_dim: int, retention_steps: int):
         self.buffer_size = buffer_size  
         self.embedding_dim = embedding_dim
-        self.buffer = []  
+        self.buffer = []
+        self.feedback_scores = []  
         self.step_count = 0
         self.retention_steps = retention_steps  
 

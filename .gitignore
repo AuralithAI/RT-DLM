@@ -37,12 +37,222 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Avoid model and data set creation
+# ==============================================================================
+# IDE and Editor Configuration Files
+# ==============================================================================
+# Visual Studio Code
+.vscode/
+.vscode-test/
+*.code-workspace
+
+# PyCharm / IntelliJ
+.idea/
+*.iws
+*.iml
+*.ipr
+.idea_modules/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ==============================================================================
+# Image Files (Training Data / Generated Content)
+# ==============================================================================
+# Common image formats
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.svg
+*.webp
+*.ico
+*.psd
+*.ai
+*.eps
+*.raw
+*.cr2
+*.nef
+*.orf
+*.sr2
+
+# ==============================================================================
+# Video Files (Training Data / Generated Content)
+# ==============================================================================
+# Common video formats
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+*.mkv
+*.m4v
+*.3gp
+*.3g2
+*.mpg
+*.mpeg
+*.m2v
+*.m4v
+*.f4v
+*.f4p
+*.f4a
+*.f4b
+
+# ==============================================================================
+# Audio Files (Training Data / Generated Content)
+# ==============================================================================
+# Common audio formats
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
+*.wma
+*.m4a
+*.opus
+*.aiff
+*.au
+*.ra
+*.3ga
+*.amr
+*.awb
+
+# ==============================================================================
+# Document Files (Training Data)
+# ==============================================================================
+# Office documents
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+*.pdf
+*.odt
+*.ods
+*.odp
+*.rtf
+
+# Text and markup files (large datasets)
+*.txt
+*.md
+*.rst
+*.tex
+*.html
+*.htm
+*.xml
+*.json
+*.yaml
+*.yml
+*.csv
+*.tsv
+
+# ==============================================================================
+# Archive Files
+# ==============================================================================
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.gz
+*.bz2
+*.xz
+*.Z
+
+# ==============================================================================
+# Machine Learning / AI Specific Files
+# ==============================================================================
+# Model files
+*.pkl
+*.joblib
+*.h5
+*.hdf5
+*.pb
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.safetensors
+
+# Tokenizer models
+*.model
+*.vocab
+*.json
+*.merges
+
+# Dataset files
+dataset/
+datasets/
 data/train_data.txt
 data/validation_data.txt
+data/test_data.txt
 data/rt_dlm_sp.model
 data/rt_dlm_sp.vocab
 
+# Training artifacts
+checkpoints/
+models/
+wandb/
+runs/
+tensorboard/
+lightning_logs/
+
+# ==============================================================================
+# Temporary and Cache Files
+# ==============================================================================
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.tmp/
+temp/
+
+# ==============================================================================
+# Python Development Environment
+# ==============================================================================
 # Unit test / coverage reports
 htmlcov/
 .tox/
@@ -90,41 +300,23 @@ profile_default/
 ipython_config.py
 
 # pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+.python-version
 
 # pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+Pipfile.lock
 
 # UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
+uv.lock
 
 # poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
+poetry.lock
 
 # pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
 .pdm.toml
 .pdm-python
 .pdm-build/
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+# PEP 582
 __pypackages__/
 
 # Celery stuff
@@ -167,16 +359,100 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
-
 # PyPI configuration file
 .pypirc
-*.pkl
 
-train_data.txt
-validation_data.txt
+# ==============================================================================
+# Development and Debug Files
+# ==============================================================================
+# Debug logs
+debug.log
+error.log
+*.log
+
+# Profiling data
+*.prof
+*.lprof
+
+# Configuration files with secrets
+config.ini
+secrets.json
+.secrets
+.env.local
+.env.production
+.env.staging
+
+# ==============================================================================
+# Operating System Generated Files
+# ==============================================================================
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ==============================================================================
+# Cloud and Remote Storage
+# ==============================================================================
+# Google Drive
+.gdrive
+*.gdoc
+*.gsheet
+*.gslides
+
+# Dropbox
+.dropbox
+.dropbox.attr
+.dropbox.cache
+
+# OneDrive
+*.tmp
+
+# ==============================================================================
+# AGI-Specific Ignores
+# ==============================================================================
+# Generated content
+generated/
+outputs/
+results/
+experiments/
+logs/
+
+# Large training files
+*.npy
+*.npz
+*.dat
+*.bin
+
+# Backup files
+*.backup
+*.bak
+*.orig
+
+# Test outputs
+test_outputs/
+test_results/
