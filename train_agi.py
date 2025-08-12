@@ -14,14 +14,15 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from rtdlm_agi_complete import (
     RT_DLM_AGI, create_rtdlm_agi, create_agi_optimizer, 
-    compute_agi_loss, AdvancedAGIConfig
+    compute_agi_loss
 )
-from data_utils import DataProcessor, load_data, create_batches
+from config.agi_config import AGIConfig
+from data_processing.data_utils import DataProcessor, load_data, create_batches
 
 class AGITrainer:
     """Advanced trainer for RT-DLM AGI with comprehensive capabilities"""
     
-    def __init__(self, config: AdvancedAGIConfig):
+    def __init__(self, config: AGIConfig):
         self.config = config
         self.rng = jax.random.PRNGKey(42)
         
@@ -448,8 +449,8 @@ class AGITrainer:
 
 def main():
     """Main training function"""
-    # Create advanced AGI configuration
-    config = AdvancedAGIConfig(
+    # Create AGI configuration
+    config = AGIConfig(
         # Core architecture
         d_model=512,
         num_heads=8,

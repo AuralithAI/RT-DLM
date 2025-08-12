@@ -7,7 +7,7 @@ import sys
 # Add parent directory to path so we can import from tokenization module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tokenization.multimodal_tokenizer import AdvancedMultiModalTokenizer, TokenizationConfig, ModalityType
+from tokenization.multimodal_tokenizer import MultiModalTokenizer, TokenizationConfig, ModalityType
 
 def test_multimodal_tokenizer():
     """Test the advanced multi-modal tokenizer with various data types."""
@@ -22,7 +22,7 @@ def test_multimodal_tokenizer():
         max_sequence_length=2048
     )
     
-    tokenizer = AdvancedMultiModalTokenizer(config)
+    tokenizer = MultiModalTokenizer(config)
     
     # Sample texts for training the text tokenizer
     sample_texts = [

@@ -13,7 +13,7 @@ from self_attention.model_module_self_attention import SelfAttentionModel
 from transformer_block.model_transformer_module import TransformerModel
 from ethics.reward_model import EthicalRewardModel
 from moe_block.sparse_moe import SparseMoE
-from memory_bank import MemoryBank
+from TMS_block.memory_bank import MemoryBank
 
 class TMSModel(hk.Module):
     """

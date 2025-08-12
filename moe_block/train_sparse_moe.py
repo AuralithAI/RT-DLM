@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from sparse_moe import SparseMoE
-from data_utils import DataProcessor, load_data
+from data_processing.data_utils import DataProcessor, load_data
 
 # Training Configuration
 class TrainConfig:

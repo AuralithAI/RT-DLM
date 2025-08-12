@@ -2,7 +2,7 @@ import os
 import requests
 import time
 import random
-from data_utils import DataProcessor
+from data_processing.data_utils import DataProcessor
 
 DATA_PATH_TRAIN = os.path.join("data", "train_data.txt")
 DATA_PATH_VALIDATION = os.path.join("data", "validation_data.txt")

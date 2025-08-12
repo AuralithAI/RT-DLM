@@ -11,13 +11,13 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from rtdlm_agi_complete import RT_DLM_AGI, create_rtdlm_agi
-from agi_config import AdvancedAGIConfig
-from data_utils import DataProcessor
+from config.agi_config import AGIConfig
+from data_processing.data_utils import DataProcessor
 
 class RT_DLM_AGI_Assistant:
     """Interactive RT-DLM AGI Assistant for demonstrations and real-world usage"""
     
-    def __init__(self, config: AdvancedAGIConfig, checkpoint_path: Optional[str] = None):
+    def __init__(self, config: AGIConfig, checkpoint_path: Optional[str] = None):
         self.config = config
         self.rng = jax.random.PRNGKey(42)
         
@@ -491,7 +491,7 @@ def demonstrate_agi_capabilities():
     print("=" * 80)
     
     # Create AGI configuration
-    config = AdvancedAGIConfig(
+    config = AGIConfig(
         d_model=384,
         num_heads=8,
         num_layers=6,
@@ -559,7 +559,7 @@ def main():
     if args.demo:
         demonstrate_agi_capabilities()
     elif args.interactive:
-        config = AdvancedAGIConfig(
+        config = AGIConfig(
             d_model=384,
             num_heads=8,
             num_layers=6,
