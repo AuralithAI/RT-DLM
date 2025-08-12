@@ -4,8 +4,14 @@ Showcase core AGI capabilities for production deployment
 """
 
 import time
+import sys
+import os
 import jax
 import jax.numpy as jnp
+
+# Add parent directories to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
 from data_processing.data_utils import DataProcessor
 from config.agi_config import AGIConfig
 
@@ -151,8 +157,8 @@ def main():
     print("Ready for production deployment")
     print()
     print("Next steps:")
-    print("1. Run system validation: python system_validator.py")
-    print("2. Execute test suite: cd tests && python test_framework.py") 
+    print("1. Run system validation: python test_runner.py validator")
+    print("2. Execute test suite: python test_runner.py simple") 
     print("3. Deploy to production environment")
 
 if __name__ == "__main__":

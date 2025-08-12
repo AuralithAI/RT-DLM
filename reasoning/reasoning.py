@@ -22,7 +22,8 @@ class ReasoningStep(hk.Module):
         
         # Working memory
         self.working_memory = hk.MultiHeadAttention(
-            num_heads=8, key_size=d_model//8, name="working_memory"
+            num_heads=8, key_size=d_model//8, name="working_memory",
+            w_init=hk.initializers.TruncatedNormal(stddev=0.02)
         )
         
         # Hypothesis generation

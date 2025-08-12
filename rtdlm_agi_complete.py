@@ -11,9 +11,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from TMS_block.model_tms import TMSModel
 from multimodal.fusion_module import MultiModalRTDLM
+from multimodal.hybrid_audio_module import HybridAudioEncoder
+from multimodal.hybrid_video_module import HybridVideoEncoder
 from reasoning.reasoning import ReasoningEngine
 from quantum.quantum_agi_core import QuantumAGICore
 from config.agi_config import AGIConfig
+from external_integration.web_integration import HybridKnowledgeIntegration
+from hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
 
 class ConsciousnessSimulator(hk.Module):
     """Simulates aspects of consciousness including self-awareness and introspection"""
@@ -33,7 +37,8 @@ class ConsciousnessSimulator(hk.Module):
         
         # Introspection module
         self.introspection = hk.MultiHeadAttention(
-            num_heads=4, key_size=d_model//4, name="introspection"
+            num_heads=4, key_size=d_model//4, name="introspection",
+            w_init=hk.initializers.TruncatedNormal(stddev=0.02)
         )
         
         # Goal setting module
@@ -117,7 +122,8 @@ class ScientificDiscoveryEngine(hk.Module):
         
         # Causal reasoning
         self.causal_reasoner = hk.MultiHeadAttention(
-            num_heads=8, key_size=d_model//8, name="causal_reasoning"
+            num_heads=8, key_size=d_model//8, name="causal_reasoning",
+            w_init=hk.initializers.TruncatedNormal(stddev=0.02)
         )
         
     def __call__(self, knowledge_base, observations, research_question=None):
@@ -188,7 +194,8 @@ class CreativeGenerationEngine(hk.Module):
         
         # Cross-domain inspiration
         self.inspiration_network = hk.MultiHeadAttention(
-            num_heads=6, key_size=d_model//6, name="inspiration"
+            num_heads=6, key_size=d_model//6, name="inspiration",
+            w_init=hk.initializers.TruncatedNormal(stddev=0.02)
         )
         
     def __call__(self, content_context, style_reference=None, creativity_level=0.7):
@@ -255,7 +262,8 @@ class SocialEmotionalIntelligence(hk.Module):
         
         # Social context analyzer
         self.social_analyzer = hk.MultiHeadAttention(
-            num_heads=4, key_size=d_model//4, name="social_context"
+            num_heads=4, key_size=d_model//4, name="social_context",
+            w_init=hk.initializers.TruncatedNormal(stddev=0.02)
         )
         
         # Response modulator
@@ -303,9 +311,9 @@ class SocialEmotionalIntelligence(hk.Module):
             "socially_aware_response": socially_aware_response
         }
 
-class RT_DLM_AGI(hk.Module):
+class RTDLMAGISystem(hk.Module):
     """
-    Complete RT-DLM AGI System integrating all advanced components
+    Complete RT-DLM AGI System integrating hybrid ML architectures
     """
     
     def __init__(self, config: AGIConfig, name=None):
@@ -328,11 +336,19 @@ class RT_DLM_AGI(hk.Module):
             mtm_weight=config.mtm_weight
         )
         
-        # Multi-modal processing
+        # Hybrid architecture integrator
+        self.hybrid_integrator = HybridArchitectureIntegrator(config.d_model)
+        
+        # Enhanced multi-modal processing with hybrid components
         if config.multimodal_enabled:
             self.multimodal_processor = MultiModalRTDLM(config)
+            self.hybrid_audio = HybridAudioEncoder(config.d_model)
+            self.hybrid_video = HybridVideoEncoder(config.d_model)
         
-        # Advanced reasoning
+        # Web and external knowledge integration
+        self.external_knowledge = HybridKnowledgeIntegration(config.d_model)
+        
+        # Reasoning engine
         self.reasoning_engine = ReasoningEngine(config)
         
         # Quantum-enhanced processing
@@ -358,9 +374,9 @@ class RT_DLM_AGI(hk.Module):
         if config.social_intelligence or config.emotional_intelligence:
             self.social_emotional = SocialEmotionalIntelligence(config.d_model)
         
-        # AGI integration layer
+        # AGI integration layer with hybrid fusion
         self.agi_integrator = hk.Sequential([
-            hk.Linear(config.d_model * 3),
+            hk.Linear(config.d_model * 4),  # Increased for hybrid components
             jax.nn.silu,
             hk.Linear(config.d_model),
             hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
@@ -374,16 +390,10 @@ class RT_DLM_AGI(hk.Module):
                  multimodal_inputs: Optional[Dict[str, jnp.ndarray]] = None,
                  conversation_history: Optional[jnp.ndarray] = None,
                  knowledge_base: Optional[jnp.ndarray] = None,
+                 query_text: Optional[str] = None,
                  return_reasoning: bool = False):
         """
-        Complete AGI forward pass
-        
-        Args:
-            inputs: Text inputs and other core inputs
-            multimodal_inputs: Images, audio, video (optional)
-            conversation_history: Previous conversation context
-            knowledge_base: Available knowledge for reasoning
-            return_reasoning: Whether to return reasoning chain
+        Complete AGI forward pass with hybrid architecture
         """
         # Extract text inputs
         text_inputs = inputs.get("text", inputs.get("input_ids"))
@@ -398,124 +408,127 @@ class RT_DLM_AGI(hk.Module):
         
         core_features = tms_output if not isinstance(tms_output, tuple) else tms_output[0]
         
-        # Multi-modal processing
-        multimodal_features = None
-        if self.config.multimodal_enabled and multimodal_inputs:
-            multimodal_result = self.multimodal_processor(
-                multimodal_inputs, 
-                text_features=core_features
-            )
-            multimodal_features = multimodal_result["fused_features"]
+        # Hybrid architecture integration
+        hybrid_result = self.hybrid_integrator(
+            {"text": core_features}, 
+            task_type="reasoning"
+        )
+        hybrid_features = hybrid_result["ensemble_output"]
         
-        # Advanced reasoning
-        reasoning_context = knowledge_base if knowledge_base is not None else core_features
-        reasoning_result = self.reasoning_engine(
-            core_features, 
-            reasoning_context
+        # External knowledge integration
+        external_knowledge = None
+        if query_text:
+            knowledge_result = self.external_knowledge(
+                core_features.mean(axis=1), 
+                query_text
+            )
+            external_knowledge = knowledge_result["fused_knowledge"]
+        
+        # Enhanced multi-modal processing
+        multimodal_features = self._process_multimodal_inputs(
+            multimodal_inputs, core_features
         )
         
-        # Quantum enhancement
-        quantum_features = None
-        if self.config.quantum_layers > 0:
-            quantum_result = self.quantum_core(core_features)
-            quantum_features = quantum_result["quantum_features"]
+        # Reasoning with hybrid features
+        reasoning_result = self.reasoning_engine(
+            hybrid_features, 
+            external_knowledge or core_features
+        )
         
-        # Consciousness simulation
-        consciousness_signal = None
-        if self.config.consciousness_simulation:
-            consciousness_signal = self.consciousness(
-                core_features,
-                text_inputs,
-                previous_goals=None
-            )
-        
-        # Social-emotional processing
-        social_emotional_result = None
-        if self.config.social_intelligence or self.config.emotional_intelligence:
-            social_emotional_result = self.social_emotional(
-                core_features,
-                conversation_history=conversation_history
-            )
-        
-        # Scientific discovery
-        science_result = None
-        if self.config.scientific_reasoning and knowledge_base is not None:
-            science_result = self.science_engine(
-                knowledge_base,
-                core_features
-            )
-        
-        # Creative generation
-        creative_result = None
-        if self.config.creative_generation:
-            creative_result = self.creative_engine(
-                core_features,
-                creativity_level=0.7
-            )
-        
-        # Integrate all AGI components
-        integration_features = [core_features.mean(axis=1)]
-        
-        if multimodal_features is not None:
-            integration_features.append(multimodal_features.mean(axis=1))
-        else:
-            integration_features.append(jnp.zeros_like(core_features.mean(axis=1)))
-            
-        if quantum_features is not None:
-            integration_features.append(quantum_features.mean(axis=1))
-        else:
-            integration_features.append(jnp.zeros_like(core_features.mean(axis=1)))
+        # Integrate all features
+        all_features = self._integrate_features(
+            core_features, hybrid_features, multimodal_features, 
+            external_knowledge, reasoning_result
+        )
         
         # Final AGI integration
-        integrated_features = self.agi_integrator(
-            jnp.concatenate(integration_features, axis=-1)
+        integrated_features = self.agi_integrator(all_features)
+        
+        # Generate output
+        logits = self.output_head(integrated_features)
+        
+        return self._build_output_dict(
+            logits, hybrid_result, reasoning_result, return_reasoning
         )
+    
+    def _process_multimodal_inputs(self, multimodal_inputs, core_features):
+        """Process multimodal inputs with hybrid components"""
+        if not self.config.multimodal_enabled or not multimodal_inputs:
+            return None
         
-        # Generate final output
-        final_logits = self.output_head(integrated_features)
+        multimodal_features = []
         
-        # Prepare comprehensive output
-        agi_output = {
-            "logits": final_logits,
-            "core_features": core_features,
-            "integrated_features": integrated_features,
-            "reasoning_output": reasoning_result["reasoning_output"],
+        # Process with original multimodal processor
+        if hasattr(self, 'multimodal_processor'):
+            multimodal_result = self.multimodal_processor(
+                multimodal_inputs, text_features=core_features
+            )
+            multimodal_features.append(multimodal_result["fused_features"])
+        
+        # Enhanced audio processing
+        if "audio" in multimodal_inputs:
+            audio_result = self.hybrid_audio(
+                multimodal_inputs["audio"], task_hint="speech"
+            )
+            multimodal_features.append(audio_result["primary_features"])
+        
+        # Enhanced video processing
+        if "video" in multimodal_inputs:
+            video_result = self.hybrid_video(
+                multimodal_inputs["video"], task_hint="action"
+            )
+            multimodal_features.append(video_result["primary_features"])
+        
+        if multimodal_features:
+            return jnp.concatenate(multimodal_features, axis=-1)
+        return None
+    
+    def _integrate_features(self, core_features, hybrid_features, 
+                          multimodal_features, external_knowledge, reasoning_result):
+        """Integrate all feature types"""
+        features_list = [core_features, hybrid_features]
+        
+        if multimodal_features is not None:
+            # Ensure compatible shapes
+            if multimodal_features.shape[-1] != core_features.shape[-1]:
+                projection = hk.Linear(core_features.shape[-1], name="multimodal_proj")
+                multimodal_features = projection(multimodal_features)
+            features_list.append(multimodal_features)
+        
+        if external_knowledge is not None:
+            features_list.append(external_knowledge)
+        
+        # Add reasoning features
+        if "reasoning_features" in reasoning_result:
+            features_list.append(reasoning_result["reasoning_features"])
+        
+        # Concatenate all features
+        return jnp.concatenate(features_list, axis=-1)
+    
+    def _build_output_dict(self, logits, hybrid_result, reasoning_result, return_reasoning):
+        """Build comprehensive output dictionary"""
+        output = {
+            "logits": logits,
+            "hybrid_analysis": hybrid_result,
+            "reasoning_analysis": reasoning_result
         }
         
-        # Add optional outputs
-        if multimodal_features is not None:
-            agi_output["multimodal_features"] = multimodal_features
-            
-        if quantum_features is not None:
-            agi_output["quantum_features"] = quantum_features
-            
-        if consciousness_signal is not None:
-            agi_output["consciousness"] = consciousness_signal
-            
-        if social_emotional_result is not None:
-            agi_output["social_emotional"] = social_emotional_result
-            
-        if science_result is not None:
-            agi_output["scientific_discovery"] = science_result
-            
-        if creative_result is not None:
-            agi_output["creative_output"] = creative_result
-            
-        if return_reasoning:
-            agi_output["reasoning_chain"] = reasoning_result["reasoning_chain"]
-            agi_output["confidence_scores"] = reasoning_result["confidence_scores"]
+        if return_reasoning and "reasoning_chain" in reasoning_result:
+            output["reasoning_chain"] = reasoning_result["reasoning_chain"]
         
-        return agi_output
+        return output
+
 
 # Convenience function for model creation
 def create_rtdlm_agi(config: AGIConfig):
     """Create RT-DLM AGI model with given configuration"""
     
     def forward_fn(**kwargs):
-        model = RT_DLM_AGI(config)
+        model = RTDLMAGISystem(config)
         return model(**kwargs)
     
     return hk.transform(forward_fn)
+
 
 # Training utilities
 def create_agi_optimizer(config: AGIConfig):
@@ -608,7 +621,7 @@ def compute_consciousness_loss(consciousness_signals):
     
     return 0.0
 
-def compute_multimodal_alignment_loss(aux_outputs):
+def compute_multimodal_alignment_loss(_aux_outputs):
     """Compute loss for multi-modal alignment"""
     # Placeholder for multi-modal alignment loss
     return 0.0
