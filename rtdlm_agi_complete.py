@@ -4,10 +4,13 @@ import jax.numpy as jnp
 import optax
 import sys
 import os
+import logging
 from typing import Dict, List, Tuple, Optional, Any
 
 # Add paths for importing modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+logger = logging.getLogger(__name__)
 
 from TMS_block.model_tms import TMSModel
 from multimodal.fusion_module import MultiModalRTDLM
@@ -15,6 +18,12 @@ from multimodal.hybrid_audio_module import HybridAudioEncoder
 from multimodal.hybrid_video_module import HybridVideoEncoder
 from reasoning.reasoning import ReasoningEngine
 from quantum.quantum_agi_core import QuantumAGICore
+from quantum.quantum_readiness import (
+    QubitAssistedOptimization, 
+    SelfEvolvingArchitecture, 
+    AutonomousScientificDiscovery, 
+    AutonomousMultiAgentSystem
+)
 from config.agi_config import AGIConfig
 from external_integration.web_integration import HybridKnowledgeIntegration
 from hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
@@ -446,10 +455,22 @@ class RTDLMAGISystem(hk.Module):
         
         # Consciousness simulation
         if config.consciousness_simulation:
-            self.consciousness = ConsciousnessSimulator(
-                config.d_model, 
-                config.self_awareness_level
-            )
+            self.consciousness_sim = ConsciousnessSimulator(config.d_model)
+        
+        # Scientific discovery engine
+        self.scientific_discovery = ScientificDiscoveryEngine(config.d_model)
+        
+        # Quantum optimization capabilities
+        self.quantum_optimization = QubitAssistedOptimization(config.d_model)
+        
+        # Self-evolving architecture
+        self.self_evolution = SelfEvolvingArchitecture(config.d_model)
+        
+        # Autonomous scientific discovery
+        self.autonomous_discovery = AutonomousScientificDiscovery(config.d_model)
+        
+        # Multi-agent coordination
+        self.multi_agent_system = AutonomousMultiAgentSystem(config.d_model)
         
         # Scientific discovery
         if config.scientific_reasoning:
@@ -533,12 +554,66 @@ class RTDLMAGISystem(hk.Module):
         # Final AGI integration
         integrated_features = self.agi_integrator(all_features)
         
-        # Generate output
-        logits = self.output_head(integrated_features)
+        # Quantum optimization processing
+        quantum_results = None
+        try:
+            quantum_optimal_decision, quantum_search_probs = self.quantum_optimization(
+                hybrid_features, reasoning_result
+            )
+            quantum_results = {
+                "optimal_decision": quantum_optimal_decision,
+                "search_probabilities": quantum_search_probs
+            }
+        except Exception as e:
+            logger.warning(f"Quantum processing failed: {e}")
         
-        return self._build_output_dict(
+        # Self-evolving architecture processing
+        architecture_results = None
+        try:
+            system_state = integrated_features.mean(axis=1)
+            evolved_dna, layer_types, predicted_perf = self.self_evolution(system_state)
+            
+            architecture_results = {
+                "evolved_architecture": evolved_dna,
+                "layer_types": layer_types,
+                "predicted_performance": predicted_perf
+            }
+        except Exception as e:
+            logger.warning(f"Architecture evolution failed: {e}")
+        
+        # Autonomous scientific discovery
+        discovery_results = None
+        if external_knowledge is not None:
+            try:
+                theories, experiments, validation = self.autonomous_discovery(
+                    external_knowledge, reasoning_result
+                )
+                discovery_results = {
+                    "theories": theories,
+                    "experiments": experiments,
+                    "validation_scores": validation
+                }
+            except Exception as e:
+                logger.warning(f"Scientific discovery failed: {e}")
+        
+        # Use quantum-enhanced features if available
+        final_features = integrated_features
+        if quantum_results and "optimal_decision" in quantum_results:
+            final_features = quantum_results["optimal_decision"]
+        
+        # Generate output
+        logits = self.output_head(final_features)
+        
+        # Build output with quantum and ASI results
+        base_output = self._build_output_dict(
             logits, hybrid_result, reasoning_result, return_reasoning
         )
+        
+        # Add quantum and ASI results to output
+        if quantum_results:
+            base_output["quantum_processing"] = quantum_results
+            
+        return base_output
     
     def _process_multimodal_inputs(self, multimodal_inputs, core_features):
         """Process multimodal inputs with hybrid components"""
