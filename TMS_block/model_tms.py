@@ -5,10 +5,13 @@ import numpy as np
 import os
 import sys
 
+import optax
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from self_attention.model_module_self_attention import SelfAttentionModel
 from transformer_block.model_transformer_module import TransformerModel
+from ethics.reward_model import EthicalRewardModel
 from moe_block.sparse_moe import SparseMoE
 from memory_bank import MemoryBank
 
@@ -34,8 +37,10 @@ class TMSModel(hk.Module):
         self.ltm_weight = ltm_weight  
         self.stm_weight = stm_weight
         self.mtm_weight = mtm_weight
+        self.reward_model = EthicalRewardModel(d_model, vocab_size, max_seq_length * 2)
+        self.ethics_weight = hk.get_parameter("ethics_weight", [], init=jnp.ones) * 0.1
 
-    def __call__(self, inputs, rng=None, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold=None, epsilon=None):
+    def __call__(self, inputs, rng=None, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold=None, epsilon=None, outputs=None, feedback_score=None):
         inputs = jnp.asarray(inputs, dtype=jnp.int32, copy=True)
         x = self.embedding(inputs) + self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))
 
@@ -74,6 +79,15 @@ class TMSModel(hk.Module):
 
         if memory_logits is not None:
             logits += memory_logits
+
+        # Compute ethical score
+        ethical_loss = 0.0
+        ethical_score = None
+        if outputs is not None:
+            ethical_score = self.reward_model(inputs, outputs)
+            if feedback_score is not None:
+                ethical_loss = jnp.mean(optax.l2_loss(ethical_score, feedback_score))
+                aux_loss += self.ethics_weight * ethical_loss
 
         if return_attention:
             return logits, (attn_weights_self, attn_weights_transformer), top_k_expert_indices, aux_loss
