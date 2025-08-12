@@ -4,9 +4,14 @@ Production readiness validation for RT-DLM AGI system
 """
 
 import sys
+import os
 import jax
 import jax.numpy as jnp
 from pathlib import Path
+
+# Add parent directory to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from data_processing.data_utils import DataProcessor
 from config.agi_config import AGIConfig
 
@@ -57,7 +62,7 @@ def check_core_systems():
         print(f"[FAIL] Configuration: {e}")
     
     # Test framework exists
-    test_file = Path("tests/test_framework.py")
+    test_file = Path("tests/test_tokenizer.py")
     checks["Testing Framework"] = test_file.exists()
     if checks["Testing Framework"]:
         print("[PASS] Testing Framework: Available in tests/")
@@ -65,7 +70,7 @@ def check_core_systems():
         print("[FAIL] Testing Framework: Missing")
     
     # Demo exists
-    demo_file = Path("system_demo.py")
+    demo_file = Path("tests/demo/system_demo.py")
     checks["Demo Script"] = demo_file.exists()
     if checks["Demo Script"]:
         print("[PASS] Demo Script: Available")
@@ -99,8 +104,8 @@ def main():
         print("AGI capabilities validated")
         
         print("\nReady for Deployment:")
-        print("1. Run tests: cd tests && python test_framework.py")
-        print("2. Run demo: python system_demo.py") 
+        print("1. Run tests: python test_runner.py")
+        print("2. Run demo: python test_runner.py system") 
         print("3. Deploy to production environment")
         
         print("\nSystem: Ready for AGI applications")
