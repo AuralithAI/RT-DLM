@@ -11,12 +11,6 @@ from typing import Dict, List, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 from enum import Enum
 import logging
-    def __init__(self, d_model: int, num_heads: int, num_qubits: int = 16, name=None):
-        super().__init__(name=name)
-        self.d_model = d_model
-        self.num_heads = num_heads
-        self.num_qubits = num_qubits
-        self.head_dim = d_model // num_heads math
 from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
