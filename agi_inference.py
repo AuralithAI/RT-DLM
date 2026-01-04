@@ -121,7 +121,7 @@ class RT_DLM_AGI_Assistant:
     
     def think_step_by_step(self, question: str, context: Optional[str] = None) -> Dict[str, Any]:
         """Perform step-by-step reasoning on a question"""
-        print(f"\n🤔 [RT-DLM AGI] Thinking step by step about: {question}")
+        print(f"\n[REASONING] RT-DLM AGI Thinking step by step about: {question}")
         
         # Prepare inputs
         if context:
@@ -318,9 +318,9 @@ class RT_DLM_AGI_Assistant:
                 dominant_emotion = jnp.argmax(emotions)
                 emotion_names = ["joy", "sadness", "anger", "fear", "disgust", "surprise", "neutral"]
                 result["detected_emotion"] = emotion_names[int(dominant_emotion)]
-                print(f"  😊 Detected Emotion: {result['detected_emotion']}")
+                print(f"  [EMOTION] Detected Emotion: {result['detected_emotion']}")
         
-        print(f"  💬 Empathetic Response: {empathetic_response}")
+        print(f"  [RESPONSE] Empathetic Response: {empathetic_response}")
         
         return result
     
