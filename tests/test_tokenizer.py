@@ -12,7 +12,7 @@ from tokenization.multimodal_tokenizer import MultiModalTokenizer, TokenizationC
 def test_multimodal_tokenizer():
     """Test the advanced multi-modal tokenizer with various data types."""
     
-    print("🚀 TESTING ADVANCED MULTI-MODAL TOKENIZER")
+    print("[TEST] TESTING ADVANCED MULTI-MODAL TOKENIZER")
     print("=" * 60)
     
     # Initialize tokenizer
@@ -38,44 +38,44 @@ def test_multimodal_tokenizer():
         "RT-DLM tokenizer: bridging the gap between raw data and AI understanding."
     ]
     
-    print("🔧 Training text tokenizer...")
+    print("[INFO] Training text tokenizer...")
     try:
         tokenizer.train_text_tokenizer(sample_texts, "tokenizers/agi_text_model")
-        print("✅ Text tokenizer trained successfully!")
+        print("[OK] Text tokenizer trained successfully!")
     except Exception as e:
-        print(f"⚠️ Text tokenizer training failed: {e}")
-        print("🔄 Continuing with fallback character-level tokenization...")
+        print(f"[WARN] Text tokenizer training failed: {e}")
+        print("[INFO] Continuing with fallback character-level tokenization...")
     
     print("\n" + "=" * 60)
-    print("🧪 TESTING DIFFERENT DATA MODALITIES")
+    print("[TEST] TESTING DIFFERENT DATA MODALITIES")
     print("=" * 60)
     
     # Test cases for different modalities
     test_cases = [
         # Text data
         {
-            "name": "📝 Plain Text",
+            "name": "[TEXT] Plain Text",
             "data": "Hello, this is a test of the AGI tokenizer! It can handle various text formats.",
             "modality": ModalityType.TEXT
         },
         {
-            "name": "💻 Code",
+            "name": "[CODE] Code",
             "data": "def hello_world():\n    print('Hello, AGI!')\n    return 42",
             "modality": ModalityType.CODE
         },
         {
-            "name": "📊 JSON Data",
+            "name": "[JSON] JSON Data",
             "data": '{"name": "RT-DLM", "type": "AGI", "capabilities": ["text", "image", "audio", "video"]}',
             "modality": ModalityType.JSON
         },
         {
-            "name": "🌐 XML Data",
+            "name": "[XML] XML Data",
             "data": "<ai><name>RT-DLM</name><type>AGI</type><version>2.0</version></ai>",
             "modality": ModalityType.XML
         },
         # Binary-like data
         {
-            "name": "🔢 Binary Data",
+            "name": "[BINARY] Binary Data",
             "data": b'\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52',
             "modality": ModalityType.BINARY
         }
@@ -103,7 +103,7 @@ def test_multimodal_tokenizer():
         # Tokenize
         try:
             tokens = tokenizer.tokenize(data, expected_modality)
-            print(f"✅ Tokenization successful!")
+            print("[OK] Tokenization successful!")
             print(f"Token count: {len(tokens)}")
             print(f"First 10 tokens: {tokens[:10]}")
             print(f"Last 10 tokens: {tokens[-10:]}")
@@ -126,13 +126,13 @@ def test_multimodal_tokenizer():
                         detokenized = tokenizer.detokenize_text(text_tokens)
                         print(f"Detokenized: {detokenized[:100]}{'...' if len(detokenized) > 100 else ''}")
                     except Exception as e:
-                        print(f"⚠️ Detokenization failed: {e}")
+                        print(f"[WARN] Detokenization failed: {e}")
         
         except Exception as e:
-            print(f"❌ Tokenization failed: {e}")
+            print(f"[FAIL] Tokenization failed: {e}")
     
     print("\n" + "=" * 60)
-    print("📈 TOKENIZER STATISTICS")
+    print("[STATS] TOKENIZER STATISTICS")
     print("=" * 60)
     
     print(f"Total vocabulary size: {tokenizer.get_vocab_size():,}")
@@ -141,24 +141,24 @@ def test_multimodal_tokenizer():
     print(f"Audio vocabulary size: {config.audio_vocab_size:,}")
     print(f"Max sequence length: {config.max_sequence_length:,}")
     
-    print("\n🎯 MODALITY TOKEN MAPPING")
+    print("\n[MAPPING] MODALITY TOKEN MAPPING")
     print("-" * 30)
     for name, token_id in tokenizer.modality_tokens.items():
         print(f"{name}: {token_id}")
     
     print("\n" + "=" * 60)
-    print("🎉 MULTI-MODAL TOKENIZER TEST COMPLETE!")
+    print("[COMPLETE] MULTI-MODAL TOKENIZER TEST COMPLETE!")
     print("=" * 60)
     
-    print("\n📋 SUMMARY:")
-    print("✅ Text tokenization with SentencePiece/character fallback")
-    print("✅ JSON/XML structured data tokenization")
-    print("✅ Code tokenization with syntax awareness")
-    print("✅ Binary data tokenization")
-    print("✅ Modality detection and token mapping")
-    print("✅ Unified token sequence with modality markers")
+    print("\n[SUMMARY] SUMMARY:")
+    print("[OK] Text tokenization with SentencePiece/character fallback")
+    print("[OK] JSON/XML structured data tokenization")
+    print("[OK] Code tokenization with syntax awareness")
+    print("[OK] Binary data tokenization")
+    print("[OK] Modality detection and token mapping")
+    print("[OK] Unified token sequence with modality markers")
     
-    print("\n🚀 READY FOR AGI TRAINING!")
+    print("\n[READY] READY FOR AGI TRAINING!")
     print("The tokenizer can now handle ANY data type for your RT-DLM AGI system.")
     
     return tokenizer
@@ -210,7 +210,7 @@ def process_multimodal_input(text, image, audio, video):
     return agi_output
 """)
     
-    print("📁 Sample test files created in 'test_data/' directory")
+    print("[INFO] Sample test files created in 'test_data/' directory")
 
 if __name__ == "__main__":
     # Create sample files for testing
@@ -219,7 +219,7 @@ if __name__ == "__main__":
     # Run the main test
     tokenizer = test_multimodal_tokenizer()
     
-    print("\n🔬 TESTING WITH SAMPLE FILES")
+    print("\n[TEST] TESTING WITH SAMPLE FILES")
     print("=" * 40)
     
     # Test with actual files
@@ -232,12 +232,12 @@ if __name__ == "__main__":
     
     for file_path, modality in file_tests:
         if os.path.exists(file_path):
-            print(f"\n📄 Testing {file_path}")
+            print(f"\n[FILE] Testing {file_path}")
             try:
                 tokens = tokenizer.tokenize(file_path, modality)
-                print(f"✅ File tokenized: {len(tokens)} tokens")
+                print(f"[OK] File tokenized: {len(tokens)} tokens")
                 print(f"Sample tokens: {tokens[:5]}...{tokens[-5:]}")
             except Exception as e:
-                print(f"❌ Error: {e}")
+                print(f"[FAIL] Error: {e}")
     
-    print("\n🎯 All tests completed! Your AGI tokenizer is ready!")
+    print("\n[COMPLETE] All tests completed! Your AGI tokenizer is ready!")

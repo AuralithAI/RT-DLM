@@ -103,6 +103,7 @@ ray==2.40.0
 # Safety and alignment
 transformers==4.47.1  # For alignment techniques
 torch==2.5.1  # Sometimes needed for certain alignment tools
+fairlearn==0.10.0  # Fairness assessment and mitigation
 
 # Development and testing
 pytest==8.3.4

@@ -44,18 +44,18 @@ class DataProcessor:
         tokenizer_path = "tokenizers/agi_text_model"
         
         if not os.path.exists(f"{tokenizer_path}.model"):
-            print("🔧 Training text tokenizer for AGI...")
+            print("[INFO] Training text tokenizer for AGI...")
             
             # Create sample training data
             sample_texts = self._get_sample_training_texts()
             
             # Train tokenizer
             self.tokenizer.train_text_tokenizer(sample_texts, tokenizer_path)
-            print("✅ Text tokenizer training complete!")
+            print("[OK] Text tokenizer training complete!")
         else:
             # Load existing tokenizer
             self.tokenizer.load_text_tokenizer(tokenizer_path)
-            print("✅ Text tokenizer loaded successfully!")
+            print("[OK] Text tokenizer loaded successfully!")
     
     def _get_sample_training_texts(self) -> List[str]:
         """Get sample texts for training the tokenizer."""
@@ -445,4 +445,4 @@ if __name__ == "__main__":
         print(f"Sample input tokens: {batch['inputs'][0][:10]}")
     
     print(f"\nTotal vocabulary size: {processor.get_vocab_size():,}")
-    print("✅ Data processor testing complete!")
+    print("[OK] Data processor testing complete!")

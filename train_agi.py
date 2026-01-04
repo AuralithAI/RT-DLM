@@ -8,9 +8,20 @@ import matplotlib.pyplot as plt
 import time
 import os
 import sys
+import logging
+from pathlib import Path
 
-# Add project paths
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(levelname)s] %(asctime)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+# Add project paths using absolute path
+PROJECT_ROOT = Path(__file__).parent.resolve()
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from rtdlm_agi_complete import (
     RT_DLM_AGI, create_rtdlm_agi, create_agi_optimizer, 
@@ -351,6 +362,7 @@ class AGITrainer:
         plt.tight_layout()
         plt.savefig("agi_training_metrics.png", dpi=300, bbox_inches='tight')
         plt.show()
+        plt.close(fig)  # Clean up figure resources
     
     def train(self, train_data: List[str], val_data: List[str]):
         """Complete training loop for RT-DLM AGI"""

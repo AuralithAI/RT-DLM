@@ -6,9 +6,20 @@ from typing import Dict, List, Optional, Any
 import time
 import os
 import sys
+import logging
+from pathlib import Path
 
-# Add project paths
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(levelname)s] %(asctime)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+# Add project paths using absolute path
+PROJECT_ROOT = Path(__file__).parent.resolve()
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from rtdlm_agi_complete import RT_DLM_AGI, create_rtdlm_agi
 from config.agi_config import AGIConfig
@@ -142,11 +153,11 @@ class RT_DLM_AGI_Assistant:
             for i, step in enumerate(model_output["reasoning_chain"]):
                 step_text = self.postprocess_output(step.mean(axis=0, keepdims=True))
                 reasoning_steps.append(f"Step {i+1}: {step_text}")
-                print(f"  💭 Step {i+1}: {step_text}")
+                print(f"  [STEP] Step {i+1}: {step_text}")
         
         # Generate final answer
         final_answer = self.postprocess_output(model_output["logits"], temperature=0.7)
-        print(f"  ✅ Final Answer: {final_answer}")
+        print(f"  [OK] Final Answer: {final_answer}")
         
         # Extract other cognitive processes
         result = {
@@ -164,23 +175,23 @@ class RT_DLM_AGI_Assistant:
                 "introspection": "Model examined its own thoughts",
                 "autonomous_goals": "Model set goals for problem solving"
             }
-            print(f"  🧠 Consciousness Level: {self.config.self_awareness_level}")
+            print(f"  [CONSCIOUSNESS] Consciousness Level: {self.config.self_awareness_level}")
         
         # Add multimodal processing if available
         if "multimodal_features" in model_output:
             result["multimodal_processing"] = "Integrated multi-modal understanding"
-            print(f"  🎭 Multi-modal processing active")
+            print("  [MULTIMODAL] Multi-modal processing active")
         
         # Add quantum enhancement if available
         if "quantum_features" in model_output:
             result["quantum_enhancement"] = "Quantum-inspired processing enabled"
-            print(f"  ⚛️ Quantum enhancement active")
+            print("  [QUANTUM] Quantum enhancement active")
         
         return result
     
     def creative_generation(self, prompt: str, creativity_level: float = 0.7) -> Dict[str, Any]:
         """Generate creative content"""
-        print(f"\n🎨 [RT-DLM AGI] Creative generation with level {creativity_level}")
+        print(f"\n[CREATIVE] RT-DLM AGI Creative generation with level {creativity_level}")
         print(f"Prompt: {prompt}")
         
         creative_prompt = f"Create something creative based on: {prompt}\\n\\nCreative output:"
@@ -209,15 +220,15 @@ class RT_DLM_AGI_Assistant:
         if "creative_output" in model_output:
             novelty_score = float(jnp.mean(model_output["creative_output"].get("novelty_score", 0.5)))
             result["novelty_score"] = novelty_score
-            print(f"  ✨ Novelty Score: {novelty_score:.3f}")
+            print(f"  [NOVELTY] Novelty Score: {novelty_score:.3f}")
         
-        print(f"  🎭 Creative Output: {creative_output}")
+        print(f"  [OUTPUT] Creative Output: {creative_output}")
         
         return result
     
     def scientific_inquiry(self, hypothesis: str, observations: str) -> Dict[str, Any]:
         """Perform scientific reasoning and hypothesis testing"""
-        print(f"\n🔬 [RT-DLM AGI] Scientific Inquiry Mode")
+        print("\n[SCIENCE] RT-DLM AGI Scientific Inquiry Mode")
         print(f"Hypothesis: {hypothesis}")
         print(f"Observations: {observations}")
         
@@ -256,15 +267,15 @@ class RT_DLM_AGI_Assistant:
             discovery = model_output["scientific_discovery"]
             if "experiment_design" in discovery:
                 result["suggested_experiments"] = "AI generated experimental designs"
-                print(f"  🧪 Experimental designs generated")
+                print("  [EXPERIMENT] Experimental designs generated")
         
-        print(f"  📊 Scientific Analysis: {analysis}")
+        print(f"  [ANALYSIS] Scientific Analysis: {analysis}")
         
         return result
     
     def social_emotional_interaction(self, user_message: str, emotional_context: str = "neutral") -> Dict[str, Any]:
         """Handle social and emotional aspects of interaction"""
-        print(f"\n💝 [RT-DLM AGI] Social-Emotional Interaction")
+        print("\n[SOCIAL] RT-DLM AGI Social-Emotional Interaction")
         print(f"User Message: {user_message}")
         print(f"Emotional Context: {emotional_context}")
         
@@ -315,7 +326,7 @@ class RT_DLM_AGI_Assistant:
     
     def multimodal_understanding(self, text_input: str, image_description: str = None, audio_description: str = None) -> Dict[str, Any]:
         """Demonstrate multimodal understanding capabilities"""
-        print(f"\n🎭 [RT-DLM AGI] Multi-Modal Understanding")
+        print("\n[MULTIMODAL] RT-DLM AGI Multi-Modal Understanding")
         
         if not self.config.multimodal_enabled:
             return {"error": "Multi-modal processing not enabled in configuration"}
@@ -357,29 +368,29 @@ class RT_DLM_AGI_Assistant:
         
         if "multimodal_features" in model_output:
             result["cross_modal_fusion"] = "Successfully integrated multiple modalities"
-            print(f"  🔄 Cross-modal fusion successful")
+            print("  [FUSION] Cross-modal fusion successful")
         
-        print(f"  🎯 Multi-modal Analysis: {analysis}")
+        print(f"  [RESULT] Multi-modal Analysis: {analysis}")
         
         return result
     
     def interactive_session(self):
         """Start an interactive session with the AGI"""
         print("\\n" + "=" * 80)
-        print("🚀 RT-DLM AGI Interactive Session")
+        print("RT-DLM AGI Interactive Session")
         print("Advanced Artificial General Intelligence")
         print("=" * 80)
         
         self.config.print_summary()
         
         print("\\nAvailable capabilities:")
-        print("  1. 💭 Step-by-step reasoning")
-        print("  2. 🎨 Creative generation")
-        print("  3. 🔬 Scientific inquiry")
-        print("  4. 💝 Social-emotional interaction")
-        print("  5. 🎭 Multi-modal understanding")
-        print("  6. 🧠 Consciousness simulation")
-        print("  7. ⚛️ Quantum-enhanced processing")
+        print("  1. Step-by-step reasoning")
+        print("  2. Creative generation")
+        print("  3. Scientific inquiry")
+        print("  4. Social-emotional interaction")
+        print("  5. Multi-modal understanding")
+        print("  6. Consciousness simulation")
+        print("  7. Quantum-enhanced processing")
         
         print("\\nCommands:")
         print("  /reason <question> - Step-by-step reasoning")
@@ -390,14 +401,14 @@ class RT_DLM_AGI_Assistant:
         print("  /quit - Exit session")
         
         print("\\n" + "-" * 80)
-        print("🤖 RT-DLM AGI: Hello! I'm your advanced AGI assistant. How can I help you today?")
+        print("RT-DLM AGI: Hello! I'm your advanced AGI assistant. How can I help you today?")
         
         while True:
             try:
-                user_input = input("\\n👤 You: ").strip()
+                user_input = input("\\nYou: ").strip()
                 
                 if user_input.lower() in ["/quit", "quit", "exit"]:
-                    print("🤖 RT-DLM AGI: Goodbye! Thank you for using RT-DLM AGI.")
+                    print("RT-DLM AGI: Goodbye! Thank you for using RT-DLM AGI.")
                     break
                 
                 # Add to conversation history
@@ -474,20 +485,20 @@ class RT_DLM_AGI_Assistant:
                 
                 inference_time = time.time() - start_time
                 
-                print(f"\\n🤖 RT-DLM AGI: {response}")
-                print(f"   ⏱️ Response time: {inference_time:.2f}s")
+                print(f"\\nRT-DLM AGI: {response}")
+                print(f"   Response time: {inference_time:.2f}s")
                 
             except KeyboardInterrupt:
-                print("\\n\\n🤖 RT-DLM AGI: Session interrupted. Goodbye!")
+                print("\\n\\nRT-DLM AGI: Session interrupted. Goodbye!")
                 break
             except Exception as e:
-                print(f"\\n❌ Error: {str(e)}")
+                print(f"\\n[ERROR] Error: {str(e)}")
                 print("Please try again with a different input.")
 
 def demonstrate_agi_capabilities():
     """Demonstrate various AGI capabilities"""
     print("\\n" + "=" * 80)
-    print("🚀 RT-DLM AGI Capabilities Demonstration")
+    print("RT-DLM AGI Capabilities Demonstration")
     print("=" * 80)
     
     # Create AGI configuration
@@ -509,30 +520,30 @@ def demonstrate_agi_capabilities():
     # Initialize AGI assistant
     assistant = RT_DLM_AGI_Assistant(config)
     
-    print("\\n🧠 Demonstrating Advanced Reasoning...")
+    print("\\n[REASONING] Demonstrating Advanced Reasoning...")
     reasoning_result = assistant.think_step_by_step(
         "If a train travels 60 mph for 2 hours, then 80 mph for 1.5 hours, what is the total distance?"
     )
     
-    print("\\n🎨 Demonstrating Creative Generation...")
+    print("\\n[CREATIVE] Demonstrating Creative Generation...")
     creative_result = assistant.creative_generation(
         "A world where gravity works backwards"
     )
     
-    print("\\n🔬 Demonstrating Scientific Inquiry...")
+    print("\\n[SCIENCE] Demonstrating Scientific Inquiry...")
     science_result = assistant.scientific_inquiry(
         "Increased CO2 levels cause global warming",
         "Global temperatures have risen 1.1°C since 1880, CO2 levels increased from 315ppm to 415ppm"
     )
     
-    print("\\n💝 Demonstrating Social-Emotional Intelligence...")
+    print("\\n[SOCIAL] Demonstrating Social-Emotional Intelligence...")
     social_result = assistant.social_emotional_interaction(
         "I'm feeling really stressed about my upcoming exams",
         emotional_context="anxious"
     )
     
     if config.multimodal_enabled:
-        print("\\n🎭 Demonstrating Multi-Modal Understanding...")
+        print("\\n[MULTIMODAL] Demonstrating Multi-Modal Understanding...")
         multimodal_result = assistant.multimodal_understanding(
             "What do you see in this scene?",
             image_description="A sunset over mountains with a lake",
@@ -540,8 +551,8 @@ def demonstrate_agi_capabilities():
         )
     
     print("\\n" + "=" * 80)
-    print("✅ RT-DLM AGI Demonstration Complete!")
-    print("🤖 The model showcased reasoning, creativity, scientific analysis,")
+    print("[OK] RT-DLM AGI Demonstration Complete!")
+    print("The model showcased reasoning, creativity, scientific analysis,")
     print("   social intelligence, and multi-modal understanding.")
     print("=" * 80)
 

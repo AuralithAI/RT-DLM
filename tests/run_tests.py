@@ -12,7 +12,7 @@ def run_tests():
     
     tests_dir = Path(__file__).parent
     
-    print("🧪 Running RT-DLM AGI Tests")
+    print("[TEST] Running RT-DLM AGI Tests")
     print("=" * 40)
     
     # Test files to run
@@ -31,7 +31,7 @@ def run_tests():
         test_path = tests_dir / test_file
         
         if test_path.exists():
-            print(f"\n🔍 Running {test_file}...")
+            print(f"\n[RUN] Running {test_file}...")
             try:
                 result = subprocess.run(
                     [sys.executable, str(test_path)],
@@ -42,30 +42,30 @@ def run_tests():
                 )
                 
                 if result.returncode == 0:
-                    print(f"✅ {test_file} - PASSED")
+                    print(f"[PASS] {test_file} - PASSED")
                     passed += 1
                 else:
-                    print(f"❌ {test_file} - FAILED")
+                    print(f"[FAIL] {test_file} - FAILED")
                     print(f"Error: {result.stderr}")
                     failed += 1
                     
             except subprocess.TimeoutExpired:
-                print(f"⏰ {test_file} - TIMEOUT")
+                print(f"[TIMEOUT] {test_file} - TIMEOUT")
                 failed += 1
             except Exception as e:
-                print(f"💥 {test_file} - ERROR: {e}")
+                print(f"[ERROR] {test_file} - ERROR: {e}")
                 failed += 1
         else:
-            print(f"⚠️ {test_file} - NOT FOUND")
+            print(f"[WARN] {test_file} - NOT FOUND")
             failed += 1
     
     print("\n" + "=" * 40)
-    print(f"📊 Test Results: {passed} passed, {failed} failed")
+    print(f"[RESULTS] Test Results: {passed} passed, {failed} failed")
     
     if failed == 0:
-        print("🎉 All tests passed! RT-DLM AGI is ready!")
+        print("[OK] All tests passed! RT-DLM AGI is ready!")
     else:
-        print("⚠️ Some tests failed. Check the output above.")
+        print("[WARN] Some tests failed. Check the output above.")
     
     return failed == 0
 
