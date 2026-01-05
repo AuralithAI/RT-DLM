@@ -7,8 +7,9 @@ import jax
 import haiku as hk
 import jax.numpy as jnp
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from model import SelfAttention
+# Add tests folder to path (one level up from test_example)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from test_model import SelfAttention
 
 def test_attention():
     """

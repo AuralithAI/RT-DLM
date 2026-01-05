@@ -7,8 +7,9 @@ import jax
 import haiku as hk
 import jax.numpy as jnp
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from model import TransformerBlock
+# Add tests folder to path (one level up from test_example)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from test_model import TransformerBlock
 
 def test_transformer_block():
     d_model = 512

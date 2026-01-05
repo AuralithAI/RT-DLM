@@ -98,8 +98,20 @@ class AGITrainer:
         
         return self.params, self.opt_state
     
-    def create_training_batch(self, texts: List[str], include_multimodal: bool = False):
-        """Create a training batch with optional multimodal data"""
+    def create_training_batch(self, texts: List[str], include_multimodal: bool = False,
+                               images: Optional[np.ndarray] = None,
+                               audio: Optional[np.ndarray] = None):
+        """Create a training batch with optional multimodal data
+        
+        Args:
+            texts: List of text strings to tokenize
+            include_multimodal: Whether to include synthetic multimodal data
+            images: Optional real image data (batch, H, W, C) in uint8 [0-255]
+            audio: Optional real audio mel spectrograms (batch, time, freq)
+        
+        Returns:
+            Dictionary with input_ids, targets, and optional multimodal_inputs
+        """
         # Tokenize texts
         tokenized = [self.data_processor.tokenize(text) for text in texts]
         
@@ -113,18 +125,50 @@ class AGITrainer:
         batch = {
             "input_ids": inputs,
             "targets": inputs,  # For next-token prediction
+            "text": inputs,  # Alias for multimodal batch format
         }
         
-        # Add synthetic multimodal data for training
+        batch_size = inputs.shape[0]
+        
+        # Add multimodal data if provided or generate synthetic
         if include_multimodal and self.config.multimodal_enabled:
-            batch_size = inputs.shape[0]
-            
-            # Generate synthetic multimodal data
             self.rng, *modal_rngs = jax.random.split(self.rng, 4)
             
+            # Use provided images or generate synthetic
+            if images is not None:
+                # Normalize real images from [0-255] to [0-1]
+                batch_images = jnp.array(images[:batch_size] / 255.0, dtype=jnp.float32)
+                # Resize if needed
+                if batch_images.shape[1:3] != (224, 224):
+                    batch_images = jax.image.resize(
+                        batch_images, 
+                        (batch_size, 224, 224, 3),
+                        method='bilinear'
+                    )
+            else:
+                # Generate synthetic image data
+                batch_images = jax.random.normal(modal_rngs[0], (batch_size, 224, 224, 3)) * 0.1
+            
+            # Use provided audio or generate synthetic mel spectrograms
+            if audio is not None:
+                mel_spectrograms = jnp.array(audio[:batch_size], dtype=jnp.float32)
+                # Resize if needed
+                if mel_spectrograms.shape[1:] != (128, 128):
+                    mel_spectrograms = jax.image.resize(
+                        mel_spectrograms[..., None],  # Add channel dim
+                        (batch_size, 128, 128, 1),
+                        method='bilinear'
+                    )[..., 0]  # Remove channel dim
+            else:
+                # Generate synthetic mel spectrogram
+                mel_spectrograms = jax.random.normal(modal_rngs[1], (batch_size, 128, 128)) * 0.1
+            
+            batch["image"] = batch_images
+            batch["audio"] = mel_spectrograms
+            
             batch["multimodal_inputs"] = {
-                "images": jax.random.normal(modal_rngs[0], (batch_size, 224, 224, 3)) * 0.1,
-                "audio": jax.random.normal(modal_rngs[1], (batch_size, 128, 128)) * 0.1,
+                "images": batch_images,
+                "audio": mel_spectrograms,
                 "video": jax.random.normal(modal_rngs[2], (batch_size, 8, 112, 112, 3)) * 0.1,
             }
         
@@ -273,8 +317,8 @@ class AGITrainer:
         
         return metrics
     
-    def evaluate_reasoning_quality(self, reasoning_chain):
-        """Evaluate the quality of reasoning chain"""
+    def evaluate_reasoning_quality(self, reasoning_chain, ground_truth: Optional[str] = None):
+        """Evaluate the quality of reasoning chain with regex parsing"""
         if not reasoning_chain:
             return 0.0
         
@@ -287,7 +331,37 @@ class AGITrainer:
             )
             consistency_score += float(step_similarity)
         
-        return consistency_score / max(1, len(reasoning_chain) - 1)
+        base_score = consistency_score / max(1, len(reasoning_chain) - 1)
+        
+        # If ground truth provided, compute accuracy via regex parsing
+        if ground_truth is not None:
+            # Parse step-by-step reasoning patterns
+            # Matches patterns like "Step 1: ...", "step 2: ...", "Answer: ..."
+            step_pattern = r'[Ss]tep\s*\d+:\s*(.+?)(?=[Ss]tep\s*\d+:|[Aa]nswer:|$)'
+            answer_pattern = r'[Aa]nswer:\s*(.+?)(?:\.|$)'
+            
+            # Extract steps and answer from reasoning output (if available as text)
+            # This works with string representations of the reasoning chain
+            reasoning_text = str(reasoning_chain)
+            
+            steps = re.findall(step_pattern, reasoning_text, re.DOTALL)
+            answers = re.findall(answer_pattern, reasoning_text)
+            
+            # Compute accuracy based on matching
+            if answers and ground_truth:
+                # Simple string matching for answer accuracy
+                answer_text = answers[-1].strip().lower()
+                gt_text = ground_truth.strip().lower()
+                
+                # Check if answer contains ground truth or vice versa
+                if gt_text in answer_text or answer_text in gt_text:
+                    return min(1.0, base_score + 0.5)  # Boost score for correct answer
+            
+            # Reward having multiple reasoning steps
+            step_bonus = min(0.3, len(steps) * 0.1)
+            return min(1.0, base_score + step_bonus)
+        
+        return base_score
     
     def evaluate_consciousness_coherence(self, consciousness_signals):
         """Evaluate consciousness simulation coherence"""
@@ -449,6 +523,11 @@ class AGITrainer:
             
             print(f"  Average Loss: {avg_epoch_loss:.4f}")
             print(f"  Epoch Time: {epoch_time:.1f}s")
+            
+            # Save checkpoint every 10 epochs
+            if epoch % 10 == 0 and epoch > 0:
+                self.save_checkpoint(epoch, {"avg_loss": avg_epoch_loss})
+                logger.info(f"Periodic checkpoint saved at epoch {epoch}")
             
             # Validation
             if epoch % self.config.eval_interval == 0 or epoch == self.config.num_epochs - 1:

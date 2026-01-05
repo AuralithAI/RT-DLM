@@ -1,6 +1,17 @@
 """
 Unit tests for rtdlm_agi_complete.py AGI modules
 
+NOTE: Tests have been split into separate files for better organization:
+- test_consciousness.py: ConsciousnessSimulator tests
+- test_scientific.py: ScientificDiscoveryEngine tests  
+- test_creative.py: CreativeGenerationEngine tests
+- test_emotional.py: SocialEmotionalIntelligence tests
+- test_audio_emotion.py: AudioEmotionModule integration tests
+- test_integration.py: Integration tests
+- test_training.py: Training pipeline tests
+
+This file imports and runs all tests for backward compatibility.
+
 Tests the following classes:
 - ConsciousnessSimulator: RNN-based introspection and self-awareness
 - ScientificDiscoveryEngine: Do-intervention causal reasoning
