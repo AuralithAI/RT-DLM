@@ -1,13 +1,13 @@
 # RT-DLM AGI Requirements
-# Core ML/DL frameworks - JAX 0.6.x compatible versions
-dm_haiku==0.0.14
-jax==0.6.2
-jaxlib==0.6.2
-optax==0.2.4
+# Core ML/DL frameworks - Compatible with TensorFlow 2.18
+dm_haiku==0.0.13
+jax==0.4.35
+jaxlib==0.4.35
+optax==0.2.3
 
 # Data processing and ML utilities
 scikit-learn==1.6.1
-numpy==2.2.2
+numpy>=1.26,<2.1
 sentencepiece==0.2.0
 datasets==3.2.0
 tensorflow_datasets==4.9.7
@@ -71,19 +71,10 @@ lxml==5.3.0
 tiktoken==0.8.0
 
 # Scientific computing
-sympy==1.13.3
+sympy>=1.13.1
 
 # Compression support
 rarfile==4.2
-
-# Audio/video processing for multimodal
-librosa==0.10.2
-opencv-python==4.10.0.84
-pillow>=8.0,<11.0
-
-# Scientific computing
-scipy==1.14.1
-sympy==1.13.3
 
 # Knowledge graphs and reasoning
 networkx==3.4.2
