@@ -462,17 +462,25 @@ class MusicAnalysisModule(hk.Module):
 
 
 class AudioEmotionModule(hk.Module):
-    """Audio emotion recognition module"""
+    """Audio emotion recognition module with 14-emotion taxonomy"""
+    
+    # 14-emotion labels matching SocialEmotionalIntelligence
+    EMOTION_LABELS = [
+        "joy", "sadness", "anger", "fear", "disgust", 
+        "surprise", "neutral", "anticipation", "trust",
+        "love", "guilt", "pride", "confusion", "curiosity"
+    ]
+    NUM_EMOTIONS = 14
     
     def __init__(self, d_model: int, name=None):
         super().__init__(name=name)
         self.d_model = d_model
         
-        # Emotion classifier
+        # Emotion classifier with 14 emotions
         self.emotion_classifier = hk.Sequential([
             hk.Linear(d_model),
             jax.nn.silu,
-            hk.Linear(8),  # 8 basic emotions
+            hk.Linear(self.NUM_EMOTIONS),  # 14 emotions matching SocialEmotionalIntelligence
             jax.nn.softmax
         ], name="emotion_classifier")
         
@@ -493,17 +501,23 @@ class AudioEmotionModule(hk.Module):
         ], name="arousal_predictor")
     
     def __call__(self, audio_features: jnp.ndarray) -> Dict[str, Any]:
-        """Analyze emotional content"""
-        # Classify emotions
+        """Analyze emotional content with 14-emotion taxonomy"""
+        # Classify emotions (14 classes)
         emotion_probs = self.emotion_classifier(audio_features.mean(axis=1))
         
         # Predict valence and arousal
         valence = self.valence_predictor(audio_features.mean(axis=1))
         arousal = self.arousal_predictor(audio_features.mean(axis=1))
         
+        # Get dominant emotion index
+        dominant_emotion_idx = jnp.argmax(emotion_probs, axis=-1)
+        
         return {
             'features': audio_features,
             'emotion_probabilities': emotion_probs,
+            'emotion_labels': self.EMOTION_LABELS,
+            'num_emotions': self.NUM_EMOTIONS,
+            'dominant_emotion_idx': dominant_emotion_idx,
             'valence': valence,
             'arousal': arousal,
             'emotion_confidence': jnp.max(emotion_probs, axis=-1)
