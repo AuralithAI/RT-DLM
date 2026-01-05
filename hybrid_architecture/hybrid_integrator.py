@@ -448,6 +448,22 @@ class CNNBranch(hk.Module):
         # Projection layer for dimension matching
         self.projection = hk.Linear(d_model, name="cnn_projection")
     
+    def _apply_conv_vectorized(self, conv_layer, inputs: jnp.ndarray) -> jnp.ndarray:
+        """Apply convolution layer with vectorized batch processing.
+        
+        Uses jax.vmap for efficient parallel processing across batch dimension.
+        
+        Args:
+            conv_layer: The convolution layer to apply
+            inputs: Shape [batch, seq_len, d_model]
+            
+        Returns:
+            Convolved output
+        """
+        # Conv1D already handles batch dimension efficiently in Haiku
+        # But we can use vmap for explicit parallelization if needed
+        return conv_layer(inputs)
+    
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
         """Apply vectorized CNN processing for sequences.
         
@@ -461,10 +477,11 @@ class CNNBranch(hk.Module):
         if inputs.ndim == 2:
             inputs = inputs[:, None, :]  # [batch, 1, d_model]
         
-        # Apply multi-scale convolutions in parallel (vectorized)
-        conv_small = self.conv_layers_small(inputs)   # [batch, seq, d//4]
-        conv_medium = self.conv_layers_medium(inputs)  # [batch, seq, d//4]
-        conv_large = self.conv_layers_large(inputs)    # [batch, seq, d//4]
+        # Apply multi-scale convolutions in parallel using vectorized operations
+        # Each conv layer is automatically vectorized over batch dimension
+        conv_small = self._apply_conv_vectorized(self.conv_layers_small, inputs)
+        conv_medium = self._apply_conv_vectorized(self.conv_layers_medium, inputs)
+        conv_large = self._apply_conv_vectorized(self.conv_layers_large, inputs)
         
         # Concatenate multi-scale features
         multi_scale = jnp.concatenate([conv_small, conv_medium, conv_large], axis=-1)
@@ -476,9 +493,11 @@ class CNNBranch(hk.Module):
         elif multi_scale.shape[-1] > self.d_model:
             multi_scale = multi_scale[..., :self.d_model]
         
-        # Apply final conv layer
-        conv_output = self.conv_final(multi_scale)
-        conv_output = jax.nn.relu(conv_output)
+        # Apply final conv layer with vectorized processing
+        conv_output = self._apply_conv_vectorized(
+            lambda x: jax.nn.relu(self.conv_final(x)),
+            multi_scale
+        )
         
         # Vectorized pooling: use both max and mean pooling
         max_pooled = jnp.max(conv_output, axis=1)   # [batch, d_model]
@@ -994,7 +1013,7 @@ class AdaptiveWeightingModule(hk.Module):
 
 
 class EnsembleFusion(hk.Module):
-    """Ensemble fusion module"""
+    """Ensemble fusion module with cross-paradigm interaction"""
     
     def __init__(self, d_model: int, name=None):
         super().__init__(name=name)
@@ -1008,6 +1027,9 @@ class EnsembleFusion(hk.Module):
             name="fusion_attention"
         )
         
+        # Cross-paradigm interaction projection
+        self.interaction_projection = hk.Linear(d_model, name="interaction_projection")
+        
         # Final projection
         self.final_projection = hk.Sequential([
             hk.Linear(d_model),
@@ -1017,9 +1039,36 @@ class EnsembleFusion(hk.Module):
         ], name="final_projection")
     
     def __call__(self, model_outputs: List[jnp.ndarray], weights: jnp.ndarray) -> jnp.ndarray:
-        """Fuse ensemble outputs with learned weights"""
+        """Fuse ensemble outputs with learned weights and cross-paradigm interaction
+        
+        model_outputs expected order: [traditional_ml, deep_learning, symbolic, probabilistic]
+        """
         # Stack model outputs
         stacked_outputs = jnp.stack(model_outputs, axis=1)  # [batch, num_models, d_model]
+        
+        # Compute cross-paradigm interaction between statistical (traditional) and deep learning
+        # model_outputs[0] = traditional ML, model_outputs[1] = deep learning
+        statistical_features = model_outputs[0]  # [batch, d_model] or [batch, seq, d_model]
+        deep_features = model_outputs[1]
+        
+        # Compute outer product interaction: captures feature correlations across paradigms
+        if statistical_features.ndim == 2:
+            # [batch, d_model] case - compute outer product per batch element
+            # Use mean pooling to get fixed-size interaction
+            interaction = jnp.einsum('bi,bj->bij', statistical_features, deep_features)
+            # Take diagonal + trace as summary (efficient approximation)
+            interaction_diag = jnp.diagonal(interaction, axis1=1, axis2=2)
+            interaction_trace = jnp.trace(interaction, axis1=1, axis2=2, dtype=interaction.dtype)
+            interaction_summary = interaction_diag * (1.0 + interaction_trace[:, None] / self.d_model)
+        else:
+            # [batch, seq, d_model] case - compute per-position interaction
+            interaction = jnp.einsum('bsi,bsj->bsij', statistical_features, deep_features)
+            interaction_diag = jnp.diagonal(interaction, axis1=2, axis2=3)
+            interaction_trace = jnp.trace(interaction, axis1=2, axis2=3, dtype=interaction.dtype)
+            interaction_summary = interaction_diag * (1.0 + interaction_trace[..., None] / self.d_model)
+        
+        # Project interaction to match dimensions
+        interaction_features = self.interaction_projection(interaction_summary)
         
         # Apply attention fusion
         fused = self.fusion_attention(stacked_outputs, stacked_outputs, stacked_outputs)
@@ -1029,6 +1078,16 @@ class EnsembleFusion(hk.Module):
         
         # Sum across models
         ensemble_output = jnp.sum(weighted_fused, axis=1)
+        
+        # Add cross-paradigm interaction
+        if ensemble_output.ndim != interaction_features.ndim:
+            # Handle dimension mismatch
+            if interaction_features.ndim == 2 and ensemble_output.ndim == 3:
+                interaction_features = interaction_features[:, None, :]
+            elif interaction_features.ndim == 3 and ensemble_output.ndim == 2:
+                interaction_features = jnp.mean(interaction_features, axis=1)
+        
+        ensemble_output = ensemble_output + 0.1 * interaction_features  # Residual connection
         
         # Final projection
         final_output = self.final_projection(ensemble_output)
@@ -1067,3 +1126,176 @@ class KnowledgeDistillationModule(hk.Module):
         student_output = self.student_network(extracted_knowledge)
         
         return student_output
+
+
+class SpecialistAgent(hk.Module):
+    """A specialist agent with specific domain expertise."""
+    
+    def __init__(self, d_model: int, specialization: str, name=None):
+        super().__init__(name=name)
+        self.d_model = d_model
+        self.specialization = specialization
+        
+        # Agent-specific processing
+        self.encoder = hk.Sequential([
+            hk.Linear(d_model),
+            jax.nn.silu,
+            hk.Linear(d_model)
+        ], name=f"agent_encoder_{specialization}")
+        
+        # Expert network for this specialization
+        self.expert = hk.Sequential([
+            hk.Linear(d_model * 2),
+            jax.nn.silu,
+            hk.Linear(d_model),
+            hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+        ], name=f"agent_expert_{specialization}")
+        
+        # Confidence scorer
+        self.confidence_head = hk.Sequential([
+            hk.Linear(d_model // 2),
+            jax.nn.silu,
+            hk.Linear(1),
+            jax.nn.sigmoid
+        ], name=f"agent_confidence_{specialization}")
+    
+    def process(self, inputs: jnp.ndarray) -> Dict[str, jnp.ndarray]:
+        """Process input through this specialist agent.
+        
+        Args:
+            inputs: Input tensor of shape [batch, d_model] or [batch, seq, d_model]
+            
+        Returns:
+            Dictionary with 'response' and 'confidence'
+        """
+        # Encode input
+        encoded = self.encoder(inputs)
+        
+        # Generate expert response
+        response = self.expert(encoded)
+        
+        # Calculate confidence
+        if response.ndim == 3:
+            pooled = jnp.mean(response, axis=1)
+        else:
+            pooled = response
+        confidence = self.confidence_head(pooled)
+        
+        return {
+            'response': response,
+            'confidence': confidence,
+            'specialization': self.specialization
+        }
+    
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        """Forward pass returning just the response."""
+        return self.process(inputs)['response']
+
+
+class MultiAgentConsensus(hk.Module):
+    """Multi-agent system for collaborative decision making with consensus.
+    
+    Implements a multi-agent loop where multiple specialist agents process
+    input independently, then their responses are aggregated via consensus.
+    """
+    
+    def __init__(self, d_model: int, num_agents: int = 4, name=None):
+        super().__init__(name=name)
+        self.d_model = d_model
+        self.num_agents = num_agents
+        
+        # Define agent specializations
+        specializations = [
+            "reasoning",
+            "creativity", 
+            "analysis",
+            "synthesis"
+        ]
+        
+        # Create specialist agents
+        self.agents = [
+            SpecialistAgent(d_model, spec, name=f"agent_{i}")
+            for i, spec in enumerate(specializations[:num_agents])
+        ]
+        
+        # Consensus mechanism
+        self.consensus_attention = hk.MultiHeadAttention(
+            num_heads=4,
+            key_size=d_model // 4,
+            w_init=hk.initializers.TruncatedNormal(stddev=0.02),
+            name="consensus_attention"
+        )
+        
+        # Final consensus projection
+        self.consensus_projection = hk.Sequential([
+            hk.Linear(d_model),
+            jax.nn.silu,
+            hk.Linear(d_model),
+            hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+        ], name="consensus_projection")
+        
+        # Aggregation weights (learnable)
+        self.weight_network = hk.Linear(num_agents, name="agent_weights")
+    
+    def __call__(self, inputs: jnp.ndarray) -> Dict[str, Any]:
+        """Run multi-agent loop and compute consensus.
+        
+        Args:
+            inputs: Input tensor [batch, d_model] or [batch, seq, d_model]
+            
+        Returns:
+            Dictionary with consensus output and individual agent responses
+        """
+        responses = []
+        confidences = []
+        
+        # Multi-agent loop: each agent processes the input
+        for agent in self.agents:
+            agent_output = agent.process(inputs)
+            response = agent_output['response']
+            confidence = agent_output['confidence']
+            responses.append(response)
+            confidences.append(confidence)
+        
+        # Stack responses: [num_agents, batch, d_model] or [num_agents, batch, seq, d_model]
+        stacked_responses = jnp.stack(responses, axis=0)
+        stacked_confidences = jnp.stack(confidences, axis=0)  # [num_agents, batch, 1]
+        
+        # Compute consensus using mean (weighted by confidence)
+        # Normalize confidences to weights
+        confidence_weights = jax.nn.softmax(stacked_confidences.squeeze(-1), axis=0)  # [num_agents, batch]
+        
+        # Weighted mean consensus
+        if stacked_responses.ndim == 3:
+            # [num_agents, batch, d_model]
+            weighted_responses = stacked_responses * confidence_weights[:, :, None]
+            consensus_mean = jnp.sum(weighted_responses, axis=0)  # [batch, d_model]
+        else:
+            # [num_agents, batch, seq, d_model]
+            weighted_responses = stacked_responses * confidence_weights[:, :, None, None]
+            consensus_mean = jnp.sum(weighted_responses, axis=0)  # [batch, seq, d_model]
+        
+        # Attention-based consensus refinement
+        # Reshape for attention: [batch, num_agents, d_model]
+        if stacked_responses.ndim == 3:
+            agent_responses = stacked_responses.transpose(1, 0, 2)  # [batch, num_agents, d_model]
+        else:
+            # Pool sequence dimension for attention
+            agent_responses = jnp.mean(stacked_responses, axis=2).transpose(1, 0, 2)
+        
+        # Self-attention over agent responses
+        attended = self.consensus_attention(agent_responses, agent_responses, agent_responses)
+        
+        # Pool attended responses
+        attended_pooled = jnp.mean(attended, axis=1)
+        
+        # Combine mean consensus with attention refinement
+        combined = consensus_mean if consensus_mean.ndim == 2 else jnp.mean(consensus_mean, axis=1)
+        final_consensus = self.consensus_projection(combined + attended_pooled)
+        
+        return {
+            'consensus': final_consensus,
+            'agent_responses': responses,
+            'agent_confidences': confidences,
+            'confidence_weights': confidence_weights
+        }

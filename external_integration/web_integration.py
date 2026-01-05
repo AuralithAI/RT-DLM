@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class WebSearchModule(hk.Module):
     """Web search integration using multiple search engines with real embeddings"""
     
-    def __init__(self, d_model: int, max_results: int = 10, vocab_size: int = 8000, 
+    def __init__(self, d_model: int, max_results: int = 10, vocab_size: int = 50000, 
                  max_tokens: int = 128, tokenizer_path: Optional[str] = None, name=None):
         super().__init__(name=name)
         self.d_model = d_model
@@ -40,7 +40,8 @@ class WebSearchModule(hk.Module):
             except Exception as e:
                 logger.warning(f"Failed to load tokenizer: {e}")
         
-        # Text embedding layer for snippet encoding
+        # Real text embedding layer for snippet encoding with large vocabulary
+        # Uses hk.Embed for learnable token embeddings
         self.snippet_embedding = hk.Embed(
             vocab_size=vocab_size,
             embed_dim=d_model,
