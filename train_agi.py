@@ -156,7 +156,7 @@ class AGITrainer:
     
     @jax.jit
     def train_step(self, params, opt_state, batch, rng):
-        """Single training step with comprehensive loss"""
+        """Single training step with comprehensive loss and NaN handling"""
         
         def loss_fn(params, batch, rng):
             # Forward pass
@@ -181,6 +181,22 @@ class AGITrainer:
         (loss, model_output), grads = jax.value_and_grad(
             loss_fn, has_aux=True
         )(params, batch, rng)
+        
+        # NaN check for loss - replace with zero if NaN detected
+        loss = jax.lax.cond(
+            jnp.isnan(loss),
+            lambda _: jnp.float32(0.0),
+            lambda l: l,
+            loss
+        )
+        
+        # NaN check for gradients - zero out NaN gradients
+        def zero_nan_grads(g):
+            return jax.tree_util.tree_map(
+                lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x), 
+                g
+            )
+        grads = zero_nan_grads(grads)
         
         # Update parameters
         updates, new_opt_state = self.optimizer.update(grads, opt_state, params)

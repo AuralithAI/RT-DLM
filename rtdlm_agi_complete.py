@@ -6,9 +6,11 @@ import sys
 import os
 import logging
 from typing import Dict, List, Tuple, Optional, Any
+from pathlib import Path
 
-# Add paths for importing modules
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Add paths for importing modules using pathlib
+ROOT = Path(__file__).parent.resolve()
+sys.path.insert(0, str(ROOT))
 
 logger = logging.getLogger(__name__)
 
@@ -165,63 +167,104 @@ class ConsciousnessSimulator(hk.Module):
             external_input: Current input being processed
             previous_goals: Previous autonomous goals (optional)
         """
-        # Self-awareness: model understands its own processing
-        self_state = self.self_awareness(internal_state.mean(axis=1))
-        
-        # Recurrent introspection: deep self-reflection loop
-        recurrent_intro, _ = self._recurrent_introspection(
-            self_state, internal_state
-        )
-        
-        # Standard introspection: look at own thoughts
-        introspective_analysis = self.introspection(
-            internal_state, internal_state, internal_state
-        )
-        
-        # Goal formation based on current state and inputs
-        goal_input = jnp.concatenate([
-            self_state[:, None, :].repeat(external_input.shape[1], axis=1),
-            external_input
-        ], axis=-1)
-        
-        autonomous_goals = self.goal_setter(goal_input)
-        
-        # Metacognitive awareness - enhanced with recurrent introspection
-        meta_awareness = self.metacognition(
-            introspective_analysis.mean(axis=1) + recurrent_intro * 0.5
-        )
-        
-        # Deep multi-level introspection
-        deep_intro = self.deep_introspection(introspective_analysis.mean(axis=1))
-        
-        # Self-reflection on own cognitive processes
-        self_reflection = self.self_reflection(
-            internal_state, introspective_analysis, introspective_analysis
-        )
-        
-        # Goal revision based on reflection
-        if previous_goals is not None:
-            goal_revision_input = jnp.concatenate([
-                autonomous_goals.mean(axis=1),
-                previous_goals.mean(axis=1) if previous_goals.ndim > 1 else previous_goals,
-                meta_awareness
+        try:
+            # Validate input shapes
+            if internal_state.ndim < 2:
+                raise ValueError(f"internal_state must be at least 2D, got shape {internal_state.shape}")
+            if external_input.ndim < 2:
+                raise ValueError(f"external_input must be at least 2D, got shape {external_input.shape}")
+            
+            # Self-awareness: model understands its own processing
+            self_state = self.self_awareness(internal_state.mean(axis=1))
+            
+            # Recurrent introspection: deep self-reflection loop
+            recurrent_intro, _ = self._recurrent_introspection(
+                self_state, internal_state
+            )
+            
+            # Standard introspection: look at own thoughts
+            introspective_analysis = self.introspection(
+                internal_state, internal_state, internal_state
+            )
+            
+            # Goal formation based on current state and inputs
+            goal_input = jnp.concatenate([
+                self_state[:, None, :].repeat(external_input.shape[1], axis=1),
+                external_input
             ], axis=-1)
-            revised_goals = self.goal_revision(goal_revision_input)
-            autonomous_goals = autonomous_goals + revised_goals[:, None, :] * 0.3
-        
-        # Scale by consciousness level
-        consciousness_signal = {
-            "self_awareness": self_state * self.consciousness_level,
-            "introspection": introspective_analysis * self.consciousness_level,
-            "recurrent_introspection": recurrent_intro * self.consciousness_level,
-            "autonomous_goals": autonomous_goals * self.consciousness_level,
-            "meta_awareness": meta_awareness * self.consciousness_level,
-            "deep_introspection": deep_intro * self.consciousness_level,
-            "self_reflection": self_reflection * self.consciousness_level,
-            "introspection_depth": self.introspection_steps
-        }
-        
-        return consciousness_signal
+            
+            autonomous_goals = self.goal_setter(goal_input)
+            
+            # Metacognitive awareness - enhanced with recurrent introspection
+            meta_awareness = self.metacognition(
+                introspective_analysis.mean(axis=1) + recurrent_intro * 0.5
+            )
+            
+            # Deep multi-level introspection
+            deep_intro = self.deep_introspection(introspective_analysis.mean(axis=1))
+            
+            # Self-reflection on own cognitive processes
+            self_reflection = self.self_reflection(
+                internal_state, introspective_analysis, introspective_analysis
+            )
+            
+            # Goal revision based on reflection
+            if previous_goals is not None:
+                goal_revision_input = jnp.concatenate([
+                    autonomous_goals.mean(axis=1),
+                    previous_goals.mean(axis=1) if previous_goals.ndim > 1 else previous_goals,
+                    meta_awareness
+                ], axis=-1)
+                revised_goals = self.goal_revision(goal_revision_input)
+                autonomous_goals = autonomous_goals + revised_goals[:, None, :] * 0.3
+            
+            # Scale by consciousness level
+            consciousness_signal = {
+                "self_awareness": self_state * self.consciousness_level,
+                "introspection": introspective_analysis * self.consciousness_level,
+                "recurrent_introspection": recurrent_intro * self.consciousness_level,
+                "autonomous_goals": autonomous_goals * self.consciousness_level,
+                "meta_awareness": meta_awareness * self.consciousness_level,
+                "deep_introspection": deep_intro * self.consciousness_level,
+                "self_reflection": self_reflection * self.consciousness_level,
+                "introspection_depth": self.introspection_steps
+            }
+            
+            return consciousness_signal
+            
+        except ValueError as e:
+            logging.error(f"ConsciousnessSimulator shape mismatch: {e}")
+            # Return safe default values
+            batch_size = internal_state.shape[0] if internal_state.ndim >= 1 else 1
+            seq_len = external_input.shape[1] if external_input.ndim >= 2 else 1
+            default_state = jnp.zeros((batch_size, self.d_model))
+            default_seq = jnp.zeros((batch_size, seq_len, self.d_model))
+            return {
+                "self_awareness": default_state,
+                "introspection": default_seq,
+                "recurrent_introspection": default_state,
+                "autonomous_goals": default_seq,
+                "meta_awareness": default_state,
+                "deep_introspection": default_state,
+                "self_reflection": default_seq,
+                "introspection_depth": self.introspection_steps
+            }
+        except Exception as e:
+            logging.error(f"ConsciousnessSimulator unexpected error: {e}")
+            batch_size = 1
+            seq_len = 1
+            default_state = jnp.zeros((batch_size, self.d_model))
+            default_seq = jnp.zeros((batch_size, seq_len, self.d_model))
+            return {
+                "self_awareness": default_state,
+                "introspection": default_seq,
+                "recurrent_introspection": default_state,
+                "autonomous_goals": default_seq,
+                "meta_awareness": default_state,
+                "deep_introspection": default_state,
+                "self_reflection": default_seq,
+                "introspection_depth": self.introspection_steps
+            }
 
 class ScientificDiscoveryEngine(hk.Module):
     """Engine for autonomous scientific discovery and hypothesis generation"""

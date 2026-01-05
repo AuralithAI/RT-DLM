@@ -206,6 +206,12 @@ Examples:
         help="Verbose output"
     )
     
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Run all tests sequentially"
+    )
+    
     args = parser.parse_args()
     
     # Handle different commands
@@ -217,12 +223,43 @@ Examples:
         check_dependencies()
         return
     
+    # Handle --full mode: run all tests sequentially
+    if args.full:
+        logger.info("Running all tests sequentially (--full mode)")
+        all_tests = ["simple", "tokenizer", "validator", "system", "hybrid"]
+        results = {}
+        
+        for test_name in all_tests:
+            logger.info(f"\n{'='*50}")
+            logger.info(f"Running test: {test_name}")
+            logger.info(f"{'='*50}")
+            success = run_test(test_name, args.verbose)
+            results[test_name] = success
+        
+        # Print summary
+        logger.info("\n" + "="*50)
+        logger.info("TEST SUMMARY")
+        logger.info("="*50)
+        passed = sum(1 for v in results.values() if v)
+        failed = sum(1 for v in results.values() if not v)
+        
+        for test_name, success in results.items():
+            status = "PASSED" if success else "FAILED"
+            logger.info(f"  {test_name:15} - {status}")
+        
+        logger.info(f"\nTotal: {passed} passed, {failed} failed")
+        
+        if failed > 0:
+            sys.exit(1)
+        return
+    
     if not args.test:
         print("RT-DLM Test Runner")
         print("=" * 30)
         logger.info("No test specified. Use --list to see available tests.")
         print("\nQuick start:")
         print("  python test_runner.py simple    # Basic CPU test")
+        print("  python test_runner.py --full    # Run all tests")
         return
     
     # Run the specified test
