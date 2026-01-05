@@ -155,7 +155,6 @@ tramp
 
 # Text and markup files (large datasets)
 *.txt
-*.md
 *.rst
 *.tex
 *.html
