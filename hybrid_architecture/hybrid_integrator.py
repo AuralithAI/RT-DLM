@@ -148,11 +148,13 @@ class TraditionalMLBackbone(hk.Module):
 
 
 class SVMLikeClassifier(hk.Module):
-    """SVM-inspired classifier using neural networks"""
+    """SVM-inspired classifier using neural networks with RBF kernel"""
     
-    def __init__(self, d_model: int, name=None):
+    def __init__(self, d_model: int, num_support_vectors: int = 64, gamma: float = 0.1, name=None):
         super().__init__(name=name)
         self.d_model = d_model
+        self.num_support_vectors = num_support_vectors
+        self.gamma = gamma
         
         # Feature mapping (like kernel trick)
         self.feature_mapping = hk.Sequential([
@@ -164,10 +166,53 @@ class SVMLikeClassifier(hk.Module):
         # Decision boundary
         self.decision_boundary = hk.Linear(d_model, name="decision_boundary")
     
+    def _rbf_kernel(self, x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
+        """Compute RBF (Gaussian) kernel between x and y.
+        
+        RBF kernel: K(x, y) = exp(-gamma * ||x - y||^2)
+        
+        Args:
+            x: Input tensor of shape [..., d]
+            y: Support vectors of shape [num_sv, d]
+            
+        Returns:
+            Kernel matrix of shape [..., num_sv]
+        """
+        # Compute squared Euclidean distance
+        # ||x - y||^2 = ||x||^2 + ||y||^2 - 2 * x @ y^T
+        x_sq = jnp.sum(x ** 2, axis=-1, keepdims=True)  # [..., 1]
+        y_sq = jnp.sum(y ** 2, axis=-1)  # [num_sv]
+        xy = jnp.matmul(x, y.T)  # [..., num_sv]
+        
+        sq_dist = x_sq + y_sq - 2 * xy  # [..., num_sv]
+        
+        # Apply RBF kernel
+        kernel_output = jnp.exp(-self.gamma * sq_dist)
+        
+        return kernel_output
+    
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
-        """SVM-like classification"""
-        # Map to higher dimensional space
-        mapped_features = self.feature_mapping(inputs)
+        """SVM-like classification with RBF kernel"""
+        # Initialize learnable support vectors
+        support_vectors = hk.get_parameter(
+            "support_vectors",
+            shape=(self.num_support_vectors, inputs.shape[-1]),
+            init=hk.initializers.TruncatedNormal(stddev=0.02)
+        )
+        
+        # Compute RBF kernel similarity to support vectors
+        if inputs.ndim == 3:
+            # Handle sequence input: [batch, seq, d]
+            batch_size, seq_len, d = inputs.shape
+            inputs_flat = inputs.reshape(-1, d)
+            kernel_output = self._rbf_kernel(inputs_flat, support_vectors)
+            kernel_output = kernel_output.reshape(batch_size, seq_len, -1)
+        else:
+            # Handle 2D input: [batch, d]
+            kernel_output = self._rbf_kernel(inputs, support_vectors)
+        
+        # Map kernel output to higher dimensional space
+        mapped_features = self.feature_mapping(kernel_output)
         
         # Find decision boundary
         decision_scores = self.decision_boundary(mapped_features)
@@ -282,15 +327,30 @@ class FeatureEngineeringModule(hk.Module):
         # Create polynomial-like features
         poly_features = self.polynomial_features(inputs * inputs)
         
-        # Create interaction features
-        interaction_input = inputs.reshape(inputs.shape[0], -1, 1) * inputs.reshape(inputs.shape[0], 1, -1)
-        interaction_input = interaction_input.reshape(inputs.shape[0], -1)
+        # Create interaction features using outer product
+        # For 3D inputs: (batch, seq, d_model), compute outer product per position
+        if inputs.ndim == 3:
+            batch_size, seq_len, d = inputs.shape
+            # Compute outer product between feature dimensions: [batch, seq, d, d]
+            outer_product = jnp.einsum('bsi,bsj->bsij', inputs, inputs)
+            # Extract upper triangle (unique interactions) and flatten
+            triu_indices = jnp.triu_indices(d, k=1)
+            # Vectorized extraction of upper triangle for all batch/seq
+            interaction_input = outer_product[:, :, triu_indices[0], triu_indices[1]]
+        else:
+            # For 2D inputs: (batch, d_model)
+            batch_size, d = inputs.shape
+            outer_product = jnp.einsum('bi,bj->bij', inputs, inputs)
+            triu_indices = jnp.triu_indices(d, k=1)
+            interaction_input = outer_product[:, triu_indices[0], triu_indices[1]]
         
-        # Truncate or pad to expected size
+        # Project to target dimension
         if interaction_input.shape[-1] > self.d_model:
             interaction_input = interaction_input[..., :self.d_model]
         elif interaction_input.shape[-1] < self.d_model:
-            padding = jnp.zeros((inputs.shape[0], self.d_model - interaction_input.shape[-1]))
+            pad_shape = list(interaction_input.shape)
+            pad_shape[-1] = self.d_model - interaction_input.shape[-1]
+            padding = jnp.zeros(pad_shape)
             interaction_input = jnp.concatenate([interaction_input, padding], axis=-1)
         
         interaction_features = self.interaction_features(interaction_input)
@@ -357,32 +417,80 @@ class DeepLearningBackbone(hk.Module):
 
 
 class CNNBranch(hk.Module):
-    """CNN branch for local pattern detection"""
+    """CNN branch for local pattern detection with vectorized sequence processing"""
     
-    def __init__(self, d_model: int, name=None):
+    def __init__(self, d_model: int, kernel_sizes: tuple = (3, 5, 7), name=None):
         super().__init__(name=name)
         self.d_model = d_model
+        self.kernel_sizes = kernel_sizes
         
-        # 1D convolutions for sequence data
-        self.conv_layers = hk.Sequential([
-            hk.Conv1D(output_channels=d_model//2, kernel_shape=3, padding='SAME'),
+        # Multi-scale 1D convolutions for sequence data
+        self.conv_layers_small = hk.Sequential([
+            hk.Conv1D(output_channels=d_model//4, kernel_shape=3, padding='SAME'),
             jax.nn.relu,
-            hk.Conv1D(output_channels=d_model, kernel_shape=3, padding='SAME'),
-            jax.nn.relu
-        ], name="conv_layers")
+        ], name="conv_small")
         
-        # Global pooling
-        self.global_pool = lambda x: jnp.mean(x, axis=1)
+        self.conv_layers_medium = hk.Sequential([
+            hk.Conv1D(output_channels=d_model//4, kernel_shape=5, padding='SAME'),
+            jax.nn.relu,
+        ], name="conv_medium")
+        
+        self.conv_layers_large = hk.Sequential([
+            hk.Conv1D(output_channels=d_model//4, kernel_shape=7, padding='SAME'),
+            jax.nn.relu,
+        ], name="conv_large")
+        
+        # Second layer convolutions
+        self.conv_final = hk.Conv1D(
+            output_channels=d_model, kernel_shape=3, padding='SAME', name="conv_final"
+        )
+        
+        # Projection layer for dimension matching
+        self.projection = hk.Linear(d_model, name="cnn_projection")
     
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
-        """Apply CNN processing"""
-        # Apply convolutions
-        conv_output = self.conv_layers(inputs)
+        """Apply vectorized CNN processing for sequences.
         
-        # Global pooling
-        pooled_output = self.global_pool(conv_output)
+        Args:
+            inputs: Shape [batch, seq_len, d_model] or [batch, d_model]
+            
+        Returns:
+            Processed output with shape [batch, d_model]
+        """
+        # Handle 2D inputs by adding sequence dimension
+        if inputs.ndim == 2:
+            inputs = inputs[:, None, :]  # [batch, 1, d_model]
         
-        return pooled_output
+        # Apply multi-scale convolutions in parallel (vectorized)
+        conv_small = self.conv_layers_small(inputs)   # [batch, seq, d//4]
+        conv_medium = self.conv_layers_medium(inputs)  # [batch, seq, d//4]
+        conv_large = self.conv_layers_large(inputs)    # [batch, seq, d//4]
+        
+        # Concatenate multi-scale features
+        multi_scale = jnp.concatenate([conv_small, conv_medium, conv_large], axis=-1)
+        
+        # Pad to match d_model if needed
+        if multi_scale.shape[-1] < self.d_model:
+            padding = jnp.zeros((*multi_scale.shape[:-1], self.d_model - multi_scale.shape[-1]))
+            multi_scale = jnp.concatenate([multi_scale, padding], axis=-1)
+        elif multi_scale.shape[-1] > self.d_model:
+            multi_scale = multi_scale[..., :self.d_model]
+        
+        # Apply final conv layer
+        conv_output = self.conv_final(multi_scale)
+        conv_output = jax.nn.relu(conv_output)
+        
+        # Vectorized pooling: use both max and mean pooling
+        max_pooled = jnp.max(conv_output, axis=1)   # [batch, d_model]
+        mean_pooled = jnp.mean(conv_output, axis=1)  # [batch, d_model]
+        
+        # Combine pooled features
+        pooled_output = (max_pooled + mean_pooled) / 2
+        
+        # Project to output dimension
+        output = self.projection(pooled_output)
+        
+        return output
 
 
 class RNNBranch(hk.Module):
