@@ -22,7 +22,9 @@ from quantum.quantum_readiness import (
     QubitAssistedOptimization, 
     SelfEvolvingArchitecture, 
     AutonomousScientificDiscovery, 
-    AutonomousMultiAgentSystem
+    AutonomousMultiAgentSystem,
+    VariationalQuantumCircuit,
+    QuantumSimulator
 )
 from config.agi_config import AGIConfig
 from external_integration.web_integration import HybridKnowledgeIntegration
@@ -908,6 +910,23 @@ class RTDLMAGISystem(hk.Module):
         # Quantum optimization capabilities
         self.quantum_optimization = QubitAssistedOptimization(config.d_model)
         
+        # Variational Quantum Circuit for feature optimization
+        # Use 6 qubits and 3 layers for balanced expressibility and efficiency
+        self.vqc = VariationalQuantumCircuit(
+            num_qubits=min(6, config.quantum_layers + 4), 
+            num_layers=config.quantum_layers
+        )
+        
+        # VQC projection layers
+        self.vqc_input_projection = hk.Linear(
+            2 ** min(6, config.quantum_layers + 4), 
+            name="vqc_input_projection"
+        )
+        self.vqc_output_projection = hk.Linear(
+            config.d_model, 
+            name="vqc_output_projection"
+        )
+        
         # Self-evolving architecture
         self.self_evolution = SelfEvolvingArchitecture(config.d_model)
         
@@ -999,15 +1018,23 @@ class RTDLMAGISystem(hk.Module):
         # Final AGI integration
         integrated_features = self.agi_integrator(all_features)
         
-        # Quantum optimization processing
+        # Quantum optimization processing with Variational Quantum Circuit
         quantum_results = None
         try:
+            # Standard quantum-assisted optimization
             quantum_optimal_decision, quantum_search_probs = self.quantum_optimization(
                 hybrid_features, reasoning_result
             )
+            
+            # Enhanced VQC-based optimization for feature refinement
+            vqc_enhanced_features = self._apply_vqc_optimization(
+                integrated_features, quantum_search_probs
+            )
+            
             quantum_results = {
                 "optimal_decision": quantum_optimal_decision,
-                "search_probabilities": quantum_search_probs
+                "search_probabilities": quantum_search_probs,
+                "vqc_enhanced_features": vqc_enhanced_features
             }
         except Exception as e:
             logger.warning(f"Quantum processing failed: {e}")
@@ -1113,6 +1140,63 @@ class RTDLMAGISystem(hk.Module):
         
         # Concatenate all features
         return jnp.concatenate(features_list, axis=-1)
+    
+    def _apply_vqc_optimization(self, features: jnp.ndarray, 
+                                quantum_probs: jnp.ndarray) -> jnp.ndarray:
+        """Apply Variational Quantum Circuit optimization to features.
+        
+        Uses the VQC to find quantum-enhanced feature representations that
+        optimize decision boundaries and improve pattern recognition.
+        
+        Args:
+            features: Input features [batch, seq_len, d_model]
+            quantum_probs: Quantum search probabilities from initial optimization
+            
+        Returns:
+            VQC-enhanced features [batch, seq_len, d_model]
+        """
+        batch_size = features.shape[0]
+        seq_len = features.shape[1] if features.ndim > 2 else 1
+        
+        # Flatten features for VQC input
+        if features.ndim == 3:
+            features_flat = features.reshape(batch_size * seq_len, -1)
+        else:
+            features_flat = features
+        
+        # Project to VQC input size (2^num_qubits)
+        vqc_input = self.vqc_input_projection(features_flat)
+        
+        # Normalize to valid quantum amplitude range [-pi, pi]
+        vqc_input = jnp.tanh(vqc_input) * jnp.pi
+        
+        # Apply VQC to each feature vector
+        rng_key = hk.next_rng_key()
+        rng_keys = jax.random.split(rng_key, features_flat.shape[0])
+        
+        def apply_vqc_single(inputs_and_key):
+            x, key = inputs_and_key
+            return self.vqc(x, key)
+        
+        # Use vmap for efficient batch processing
+        vqc_outputs = jax.vmap(apply_vqc_single)((vqc_input, rng_keys))
+        
+        # Project VQC output back to d_model dimension
+        enhanced_features = self.vqc_output_projection(vqc_outputs)
+        
+        # Reshape back to original feature shape
+        if features.ndim == 3:
+            enhanced_features = enhanced_features.reshape(batch_size, seq_len, -1)
+        
+        # Combine with original features using quantum-weighted residual
+        # Use quantum probabilities to weight the enhancement
+        quantum_weight = jnp.mean(quantum_probs) if quantum_probs is not None else 0.1
+        quantum_weight = jnp.clip(quantum_weight, 0.05, 0.5)  # Bounded weighting
+        
+        # Residual connection with quantum weighting
+        output = features + quantum_weight * enhanced_features
+        
+        return output
     
     def _build_output_dict(self, logits, hybrid_result, reasoning_result, return_reasoning):
         """Build comprehensive output dictionary"""

@@ -153,8 +153,31 @@ class QuantumSimulator:
             return self._apply_rotation_y(state, gate.qubits[0], gate.parameters[0] if gate.parameters else 0.0, num_qubits)
         elif gate.gate_type == QuantumGateType.ROTATION_Z:
             return self._apply_rotation_z(state, gate.qubits[0], gate.parameters[0] if gate.parameters else 0.0, num_qubits)
+        elif gate.gate_type == QuantumGateType.PHASE:
+            return self._apply_phase(state, gate.qubits[0], gate.parameters[0] if gate.parameters else 0.0, num_qubits)
         else:
             raise NotImplementedError(f"Gate {gate.gate_type} not implemented")
+    
+    def _apply_phase(self, state: jnp.ndarray, qubit: int, angle: float, num_qubits: int) -> jnp.ndarray:
+        """Apply PHASE gate: |0⟩ → |0⟩, |1⟩ → e^(iφ)|1⟩.
+        
+        The phase gate adds a phase to the |1⟩ component:
+        P(φ) = [[1, 0], [0, e^(iφ)]]
+        
+        Args:
+            state: Current quantum state vector
+            qubit: Target qubit index
+            angle: Phase angle φ in radians
+            num_qubits: Total number of qubits
+            
+        Returns:
+            New state vector after applying PHASE gate
+        """
+        phase_matrix = jnp.array([
+            [1, 0],
+            [0, jnp.exp(1j * angle)]
+        ], dtype=jnp.complex64)
+        return self._apply_single_qubit_gate(state, phase_matrix, qubit, num_qubits)
             
     def _apply_hadamard(self, state: jnp.ndarray, qubit: int, num_qubits: int) -> jnp.ndarray:
         """Apply Hadamard gate to a qubit."""
@@ -201,24 +224,71 @@ class QuantumSimulator:
         return self._apply_single_qubit_gate(state, rz_matrix, qubit, num_qubits)
         
     def _apply_cnot(self, state: jnp.ndarray, control: int, target: int, num_qubits: int) -> jnp.ndarray:
-        """Apply CNOT gate."""
-        state_size = 2 ** num_qubits
-        new_state = jnp.zeros_like(state)
+        """Apply CNOT gate using vectorized operations.
         
-        for i in range(state_size):
-            # Extract bit values
-            control_bit = (i >> (num_qubits - 1 - control)) & 1
-            target_bit = (i >> (num_qubits - 1 - target)) & 1
+        Vectorized implementation using JAX operations instead of Python loops.
+        Supports batch processing when state has shape [batch, state_size].
+        
+        Args:
+            state: Quantum state vector [state_size] or [batch, state_size]
+            control: Control qubit index
+            target: Target qubit index
+            num_qubits: Total number of qubits
             
-            if control_bit == 1:
-                # Flip target bit
-                new_target_bit = 1 - target_bit
-                new_i = i ^ (1 << (num_qubits - 1 - target))
-                new_state = new_state.at[new_i].add(state[i])
-            else:
-                new_state = new_state.at[i].add(state[i])
-                
+        Returns:
+            New state after applying CNOT gate
+        """
+        state_size = 2 ** num_qubits
+        
+        # Handle batch dimension
+        is_batched = state.ndim == 2
+        if not is_batched:
+            state = state[None, :]  # Add batch dimension
+        
+        # Create index array for all basis states
+        indices = jnp.arange(state_size)
+        
+        # Extract control and target bits for all indices (vectorized)
+        control_bits = (indices >> (num_qubits - 1 - control)) & 1
+        
+        # Compute new indices: flip target bit where control bit is 1
+        flip_mask = 1 << (num_qubits - 1 - target)
+        new_indices = jnp.where(control_bits == 1, indices ^ flip_mask, indices)
+        
+        # Apply CNOT by reordering state amplitudes (vectorized gather)
+        # For each batch, gather from new_indices
+        def apply_cnot_single(single_state: jnp.ndarray) -> jnp.ndarray:
+            """Apply CNOT to a single state vector."""
+            return single_state[new_indices]
+        
+        # Use vmap for batch processing
+        new_state = jax.vmap(apply_cnot_single)(state)
+        
+        # Remove batch dimension if input wasn't batched
+        if not is_batched:
+            new_state = new_state[0]
+        
         return new_state
+    
+    def _apply_cnot_batched(self, states: jnp.ndarray, control: int, target: int, 
+                           num_qubits: int) -> jnp.ndarray:
+        """Apply CNOT gate to a batch of states using vmap.
+        
+        Args:
+            states: Batch of quantum state vectors [batch_size, state_size]
+            control: Control qubit index
+            target: Target qubit index
+            num_qubits: Total number of qubits
+            
+        Returns:
+            Batch of new states [batch_size, state_size]
+        """
+        # Define single-state CNOT application
+        def single_cnot(state: jnp.ndarray) -> jnp.ndarray:
+            return self._apply_cnot(state, control, target, num_qubits)
+        
+        # Apply vmap for efficient batch processing
+        return jax.vmap(single_cnot)(states)
         
     def _apply_single_qubit_gate(self, state: jnp.ndarray, gate_matrix: jnp.ndarray, 
                                 qubit: int, num_qubits: int) -> jnp.ndarray:
@@ -254,16 +324,101 @@ class QuantumSimulator:
         return state, measurement_results
         
     def run_circuit(self, circuit: QuantumCircuit, rng_key: jax.random.PRNGKey) -> Tuple[jnp.ndarray, List[int]]:
-        """Run a complete quantum circuit."""
-        state = self.initialize_state(circuit.num_qubits)
+        """Run a complete quantum circuit with comprehensive error handling.
         
-        # Apply all gates
-        for gate in circuit.gates:
-            state = self.apply_gate(state, gate, circuit.num_qubits)
+        Args:
+            circuit: QuantumCircuit to execute
+            rng_key: JAX random key for measurements
             
-        # Perform measurements
+        Returns:
+            Tuple of (final_state, measurement_results)
+            
+        Raises:
+            ValueError: If circuit has too many qubits or invalid gate configurations
+            RuntimeError: If circuit execution fails
+        """
+        # Error handling: Check qubit count overflow
+        if circuit.num_qubits > self.max_qubits:
+            raise ValueError(
+                f"Circuit requires {circuit.num_qubits} qubits, but simulator "
+                f"supports maximum {self.max_qubits} qubits. "
+                f"State vector size would be 2^{circuit.num_qubits} = {2**circuit.num_qubits} "
+                f"which exceeds memory limits."
+            )
+        
+        if circuit.num_qubits <= 0:
+            raise ValueError(f"Circuit must have at least 1 qubit, got {circuit.num_qubits}")
+        
+        # Validate all gates before execution
+        for gate_idx, gate in enumerate(circuit.gates):
+            # Check qubit indices are valid
+            for qubit in gate.qubits:
+                if qubit < 0 or qubit >= circuit.num_qubits:
+                    raise ValueError(
+                        f"Gate {gate_idx} ({gate.gate_type.value}) references qubit {qubit}, "
+                        f"but circuit only has {circuit.num_qubits} qubits (indices 0-{circuit.num_qubits-1})"
+                    )
+            
+            # Check two-qubit gates have correct qubit count
+            if gate.gate_type == QuantumGateType.CNOT:
+                if len(gate.qubits) != 2:
+                    raise ValueError(
+                        f"CNOT gate {gate_idx} requires exactly 2 qubits, got {len(gate.qubits)}"
+                    )
+                if gate.qubits[0] == gate.qubits[1]:
+                    raise ValueError(
+                        f"CNOT gate {gate_idx} has same control and target qubit: {gate.qubits[0]}"
+                    )
+            
+            # Check parameterized gates have parameters
+            parameterized_gates = {
+                QuantumGateType.ROTATION_X, QuantumGateType.ROTATION_Y, 
+                QuantumGateType.ROTATION_Z, QuantumGateType.PHASE
+            }
+            if gate.gate_type in parameterized_gates:
+                if not gate.parameters or len(gate.parameters) < 1:
+                    logger.warning(
+                        f"Gate {gate_idx} ({gate.gate_type.value}) has no parameters, using default 0.0"
+                    )
+        
+        # Initialize state
+        try:
+            state = self.initialize_state(circuit.num_qubits)
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize quantum state: {e}")
+        
+        # Apply all gates with error handling
+        for gate_idx, gate in enumerate(circuit.gates):
+            try:
+                state = self.apply_gate(state, gate, circuit.num_qubits)
+                
+                # Validate state after each gate (check for NaN/Inf)
+                if jnp.any(jnp.isnan(state)) or jnp.any(jnp.isinf(state)):
+                    raise RuntimeError(
+                        f"Numerical instability detected after gate {gate_idx} "
+                        f"({gate.gate_type.value}): state contains NaN or Inf values"
+                    )
+            except NotImplementedError:
+                raise
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to apply gate {gate_idx} ({gate.gate_type.value}): {e}"
+                )
+        
+        # Validate measurement qubits
         measurements_list = circuit.measurements if circuit.measurements is not None else list(range(circuit.num_qubits))
-        state, measurements = self.measure(state, measurements_list, circuit.num_qubits, rng_key)
+        for meas_qubit in measurements_list:
+            if meas_qubit < 0 or meas_qubit >= circuit.num_qubits:
+                raise ValueError(
+                    f"Measurement qubit {meas_qubit} is out of range for "
+                    f"{circuit.num_qubits}-qubit circuit"
+                )
+        
+        # Perform measurements
+        try:
+            state, measurements = self.measure(state, measurements_list, circuit.num_qubits, rng_key)
+        except Exception as e:
+            raise RuntimeError(f"Measurement failed: {e}")
         
         return state, measurements
 
@@ -271,7 +426,7 @@ class QuantumSimulator:
 class VariationalQuantumCircuit(hk.Module):
     """
     Variational Quantum Circuit (VQC) for quantum machine learning.
-    Uses parameterized quantum gates for optimization.
+    Uses parameterized quantum gates for optimization with layer-wise parameters.
     """
     
     def __init__(self, num_qubits: int, num_layers: int, name=None):
@@ -280,60 +435,143 @@ class VariationalQuantumCircuit(hk.Module):
         self.num_layers = num_layers
         self.simulator = QuantumSimulator(max_qubits=num_qubits)
         
-    def create_ansatz_circuit(self, parameters: jnp.ndarray) -> QuantumCircuit:
-        """Create parameterized ansatz circuit."""
+        # Calculate parameters per layer: 3 rotations (RX, RY, RZ) per qubit
+        self.params_per_qubit = 3
+        self.params_per_layer = self.num_qubits * self.params_per_qubit
+        self.total_params = self.num_layers * self.params_per_layer
+        
+    def create_ansatz_circuit(self, parameters: jnp.ndarray, layer_weights: jnp.ndarray) -> QuantumCircuit:
+        """Create parameterized ansatz circuit with layer-specific weights.
+        
+        Args:
+            parameters: Base rotation parameters [total_params]
+            layer_weights: Per-layer scaling weights [num_layers]
+            
+        Returns:
+            QuantumCircuit with parameterized gates
+        """
         gates = []
         param_idx = 0
         
-        for _ in range(self.num_layers):
-            # Single-qubit rotations
+        for layer_idx in range(self.num_layers):
+            # Get layer-specific weight for scaling
+            layer_weight = layer_weights[layer_idx]
+            
+            # Layer 1: RX rotations with layer-weighted parameters
             for qubit in range(self.num_qubits):
+                rx_param = parameters[param_idx] * layer_weight
+                gates.append(QuantumGate(
+                    QuantumGateType.ROTATION_X,
+                    [qubit],
+                    [float(rx_param)]
+                ))
+                param_idx += 1
+            
+            # Layer 2: RY rotations with layer-weighted parameters
+            for qubit in range(self.num_qubits):
+                ry_param = parameters[param_idx] * layer_weight
                 gates.append(QuantumGate(
                     QuantumGateType.ROTATION_Y,
                     [qubit],
-                    [float(parameters[param_idx])]
+                    [float(ry_param)]
                 ))
                 param_idx += 1
-                
+            
+            # Layer 3: RZ rotations with layer-weighted parameters
+            for qubit in range(self.num_qubits):
+                rz_param = parameters[param_idx] * layer_weight
                 gates.append(QuantumGate(
                     QuantumGateType.ROTATION_Z,
                     [qubit],
-                    [float(parameters[param_idx])]
+                    [float(rz_param)]
                 ))
                 param_idx += 1
                 
-            # Entangling gates
+            # Entangling layer: CNOT chain
             for qubit in range(self.num_qubits - 1):
                 gates.append(QuantumGate(
                     QuantumGateType.CNOT,
                     [qubit, qubit + 1]
                 ))
+            
+            # Circular entanglement: connect last to first qubit
+            if self.num_qubits > 2:
+                gates.append(QuantumGate(
+                    QuantumGateType.CNOT,
+                    [self.num_qubits - 1, 0]
+                ))
+            
+            # Add PHASE gate for additional expressibility
+            for qubit in range(self.num_qubits):
+                # Use phase based on averaged layer parameters
+                phase_angle = (parameters[layer_idx * self.params_per_layer + qubit] + 
+                              parameters[layer_idx * self.params_per_layer + qubit + self.num_qubits]) / 2
+                gates.append(QuantumGate(
+                    QuantumGateType.PHASE,
+                    [qubit],
+                    [float(phase_angle * layer_weight)]
+                ))
                 
         return QuantumCircuit(self.num_qubits, gates)
         
     def __call__(self, x: jnp.ndarray, rng_key: jax.random.PRNGKey) -> jnp.ndarray:
-        """Execute VQC and return measurement probabilities."""
-        # Initialize parameters
-        num_params = self.num_layers * self.num_qubits * 2
-        parameters = hk.get_parameter(
-            "circuit_params",
-            shape=(num_params,),
+        """Execute VQC and return measurement probabilities.
+        
+        Args:
+            x: Input features to encode
+            rng_key: JAX random key for measurements
+            
+        Returns:
+            Measurement probabilities as output
+        """
+        # Initialize layer-wise rotation parameters
+        rotation_params = hk.get_parameter(
+            "rotation_params",
+            shape=(self.total_params,),
             init=hk.initializers.RandomUniform(minval=0, maxval=2*jnp.pi)
         )
         
-        # Encode input data (simplified encoding)
-        encoded_params = parameters + 0.1 * jnp.tile(x, num_params // len(x) + 1)[:num_params]
+        # Initialize per-layer scaling weights (learnable)
+        layer_weights = hk.get_parameter(
+            "layer_weights",
+            shape=(self.num_layers,),
+            init=hk.initializers.Constant(1.0)
+        )
         
-        # Create and run circuit
-        circuit = self.create_ansatz_circuit(encoded_params)
+        # Apply softmax to layer weights for normalization
+        normalized_layer_weights = jax.nn.softmax(layer_weights) * self.num_layers
+        
+        # Input encoding: embed classical data into quantum parameters
+        # Use amplitude encoding with input scaling
+        input_encoding_scale = hk.get_parameter(
+            "input_encoding_scale",
+            shape=(1,),
+            init=hk.initializers.Constant(0.5)
+        )
+        
+        # Tile input to match parameter count and apply encoding
+        x_tiled = jnp.tile(x.flatten(), self.total_params // max(1, len(x.flatten())) + 1)[:self.total_params]
+        encoded_params = rotation_params + input_encoding_scale[0] * x_tiled * jnp.pi
+        
+        # Create and run circuit with layer-weighted parameters
+        circuit = self.create_ansatz_circuit(encoded_params, normalized_layer_weights)
         final_state, _ = self.simulator.run_circuit(circuit, rng_key)
         
         # Return measurement probabilities
         probabilities = jnp.abs(final_state) ** 2
         
-        # Aggregate to desired output size (e.g., for classification)
-        output_size = min(len(probabilities), 2 ** self.num_qubits)
-        return probabilities[:output_size]
+        # Output projection: learnable transformation of probabilities
+        output_weights = hk.get_parameter(
+            "output_weights",
+            shape=(len(probabilities),),
+            init=hk.initializers.Constant(1.0 / len(probabilities))
+        )
+        weighted_probabilities = probabilities * jax.nn.softmax(output_weights)
+        
+        # Normalize to valid probability distribution
+        output = weighted_probabilities / (jnp.sum(weighted_probabilities) + 1e-8)
+        
+        return output
 
 
 class QuantumAttentionMechanism(hk.Module):
