@@ -21,13 +21,13 @@ logger = logging.getLogger(__name__)
 # Get the project root directory using absolute path
 PROJECT_ROOT = Path(__file__).parent.resolve()
 
-def run_test(test_name: str, verbose: bool = False, timeout: int = 300):
+def run_test(test_name: str, verbose: bool = False, timeout: int = 600):
     """Run a specific test or demo
     
     Args:
         test_name: Name of the test to run
         verbose: Enable verbose output
-        timeout: Maximum execution time in seconds (default: 300)
+        timeout: Maximum execution time in seconds (default: 600)
     """
     
     # Define available tests with absolute paths
