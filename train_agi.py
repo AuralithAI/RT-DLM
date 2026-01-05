@@ -3,21 +3,41 @@ import jax.numpy as jnp
 import haiku as hk
 import optax
 import numpy as np
+import re
 from typing import Dict, List, Tuple, Optional
 import matplotlib.pyplot as plt
 import time
 import os
 import sys
+import logging
+from pathlib import Path
 
-# Add project paths
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(levelname)s] %(asctime)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+# Add project paths using absolute path
+PROJECT_ROOT = Path(__file__).parent.resolve()
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from rtdlm_agi_complete import (
-    RT_DLM_AGI, create_rtdlm_agi, create_agi_optimizer, 
+    create_rtdlm_agi, create_agi_optimizer, 
     compute_agi_loss
 )
 from config.agi_config import AGIConfig
 from data_processing.data_utils import DataProcessor, load_data, create_batches
+
+def cosine_similarity(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
+    """Compute cosine similarity between two vectors"""
+    a_flat = a.flatten()
+    b_flat = b.flatten()
+    norm_a = jnp.linalg.norm(a_flat) + 1e-8
+    norm_b = jnp.linalg.norm(b_flat) + 1e-8
+    return jnp.sum(a_flat * b_flat) / (norm_a * norm_b)
 
 class AGITrainer:
     """Advanced trainer for RT-DLM AGI with comprehensive capabilities"""
@@ -245,11 +265,9 @@ class AGITrainer:
         # Check for consistency between steps
         consistency_score = 0.0
         for i in range(len(reasoning_chain) - 1):
-            step_similarity = jnp.mean(
-                jax.nn.cosine_similarity(
-                    reasoning_chain[i].flatten(),
-                    reasoning_chain[i+1].flatten()
-                )
+            step_similarity = cosine_similarity(
+                reasoning_chain[i],
+                reasoning_chain[i+1]
             )
             consistency_score += float(step_similarity)
         
@@ -265,10 +283,10 @@ class AGITrainer:
         
         # Check alignment between self-awareness and introspection
         if "self_awareness" in consciousness_signals and "introspection" in consciousness_signals:
-            alignment = jnp.mean(jax.nn.cosine_similarity(
-                consciousness_signals["self_awareness"].flatten(),
-                consciousness_signals["introspection"].mean(axis=1).flatten()
-            ))
+            alignment = cosine_similarity(
+                consciousness_signals["self_awareness"],
+                consciousness_signals["introspection"].mean(axis=1)
+            )
             coherence += float(alignment)
             count += 1
         
@@ -351,6 +369,7 @@ class AGITrainer:
         plt.tight_layout()
         plt.savefig("agi_training_metrics.png", dpi=300, bbox_inches='tight')
         plt.show()
+        plt.close(fig)  # Clean up figure resources
     
     def train(self, train_data: List[str], val_data: List[str]):
         """Complete training loop for RT-DLM AGI"""
@@ -392,7 +411,14 @@ class AGITrainer:
                 self.rng, train_rng = jax.random.split(self.rng)
                 self.params, self.opt_state, loss, model_output = self.train_step(
                     self.params, self.opt_state, batch, train_rng
-                )\n                \n                epoch_losses.append(float(loss))
+                )
+                
+                # NaN check for loss
+                if jnp.isnan(loss) or jnp.isinf(loss):
+                    logger.warning(f"NaN/Inf loss detected at batch {batch_idx}, skipping...")
+                    continue
+                
+                epoch_losses.append(float(loss))
                 self.training_losses.append(float(loss))
                 self.step_count += 1
                 

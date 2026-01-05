@@ -8,16 +8,48 @@ from typing import Dict, List, Optional, Any
 import logging
 from urllib.parse import quote
 import re
+from pathlib import Path
+
+# Try to import sentencepiece for text tokenization
+try:
+    import sentencepiece as spm
+    SENTENCEPIECE_AVAILABLE = True
+except ImportError:
+    SENTENCEPIECE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
 class WebSearchModule(hk.Module):
-    """Web search integration using multiple search engines"""
+    """Web search integration using multiple search engines with real embeddings"""
     
-    def __init__(self, d_model: int, max_results: int = 10, name=None):
+    def __init__(self, d_model: int, max_results: int = 10, vocab_size: int = 8000, 
+                 max_tokens: int = 128, tokenizer_path: Optional[str] = None, name=None):
         super().__init__(name=name)
         self.d_model = d_model
         self.max_results = max_results
+        self.vocab_size = vocab_size
+        self.max_tokens = max_tokens
+        
+        # Load sentencepiece tokenizer if available
+        self.tokenizer = None
+        if SENTENCEPIECE_AVAILABLE and tokenizer_path:
+            try:
+                self.tokenizer = spm.SentencePieceProcessor()
+                self.tokenizer.load(tokenizer_path)
+                logger.info(f"Loaded tokenizer from {tokenizer_path}")
+            except Exception as e:
+                logger.warning(f"Failed to load tokenizer: {e}")
+        
+        # Text embedding layer for snippet encoding
+        self.snippet_embedding = hk.Embed(
+            vocab_size=vocab_size,
+            embed_dim=d_model,
+            w_init=hk.initializers.TruncatedNormal(stddev=0.02),
+            name="snippet_embed"
+        )
+        
+        # Embedding projection layer
+        self.embed_projection = hk.Linear(d_model, name="embed_projection")
         
         # Search result encoder
         self.result_encoder = hk.Sequential([
@@ -128,8 +160,75 @@ class WebSearchModule(hk.Module):
         
         return []
     
+    def _tokenize_text(self, text: str) -> jnp.ndarray:
+        """Tokenize text using sentencepiece or fallback to character-level.
+        
+        Args:
+            text: Input text to tokenize
+            
+        Returns:
+            Token IDs array of shape [max_tokens]
+        """
+        if self.tokenizer is not None:
+            try:
+                token_ids = self.tokenizer.encode(text)
+            except Exception:
+                # Fallback to character-level
+                token_ids = [ord(c) % self.vocab_size for c in text]
+        else:
+            # Fallback: simple hash-based tokenization
+            words = text.lower().split()
+            token_ids = [hash(w) % self.vocab_size for w in words]
+        
+        # Pad or truncate to max_tokens
+        if len(token_ids) > self.max_tokens:
+            token_ids = token_ids[:self.max_tokens]
+        else:
+            token_ids = token_ids + [0] * (self.max_tokens - len(token_ids))
+        
+        return jnp.array(token_ids, dtype=jnp.int32)
+    
+    def _embed_snippets(self, search_results: List[Dict[str, str]], batch_size: int) -> jnp.ndarray:
+        """Embed search result snippets using hk.Embed and linear projection.
+        
+        Args:
+            search_results: List of search result dictionaries with 'snippet' keys
+            batch_size: Batch size for output
+            
+        Returns:
+            Embedded snippets of shape [batch_size, num_results, d_model]
+        """
+        num_results = min(len(search_results), self.max_results)
+        
+        # Tokenize all snippets
+        all_tokens = []
+        for result in search_results[:num_results]:
+            snippet = result.get('snippet', '') + ' ' + result.get('title', '')
+            tokens = self._tokenize_text(snippet)
+            all_tokens.append(tokens)
+        
+        # Stack into array: [num_results, max_tokens]
+        token_array = jnp.stack(all_tokens, axis=0)
+        
+        # Embed tokens: [num_results, max_tokens, d_model]
+        embedded = self.snippet_embedding(token_array)
+        
+        # Mean pooling over tokens: [num_results, d_model]
+        pooled = jnp.mean(embedded, axis=1)
+        
+        # Project to final dimension
+        projected = self.embed_projection(pooled)
+        
+        # Expand for batch dimension: [batch_size, num_results, d_model]
+        result_embeddings = jnp.broadcast_to(
+            projected[None, :, :], 
+            (batch_size, num_results, self.d_model)
+        )
+        
+        return result_embeddings
+    
     def __call__(self, query_embedding: jnp.ndarray, query_text: str) -> Dict[str, Any]:
-        """Perform web search and encode results"""
+        """Perform web search and encode results with real embeddings"""
         # Perform actual web searches
         search_results = []
         search_results.extend(self.search_duckduckgo(query_text))
@@ -143,21 +242,20 @@ class WebSearchModule(hk.Module):
                 'synthesis': jnp.zeros((1, self.d_model))
             }
         
-        # Create mock encodings for search results (in real implementation, use proper text encoder)
         batch_size = query_embedding.shape[0]
         num_results = min(len(search_results), self.max_results)
         
-        # Simulate encoding search results
-        result_embeddings = jax.random.normal(
-            jax.random.PRNGKey(42), 
-            (batch_size, num_results, self.d_model)
-        ) * 0.1
+        # Create real embeddings using sentencepiece tokenization and hk.Embed
+        result_embeddings = self._embed_snippets(search_results, batch_size)
         
-        # Encode results
+        # Encode results through the encoder network
         encoded_results = self.result_encoder(result_embeddings)
         
         # Calculate relevance scores
-        query_expanded = query_embedding.repeat(num_results, axis=1).reshape(batch_size, num_results, self.d_model)
+        query_expanded = jnp.broadcast_to(
+            query_embedding[:, None, :], 
+            (batch_size, num_results, self.d_model)
+        )
         relevance_input = jnp.concatenate([query_expanded, encoded_results], axis=-1)
         relevance_scores = self.relevance_scorer(relevance_input).squeeze(-1)
         

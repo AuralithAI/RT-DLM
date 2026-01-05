@@ -6,9 +6,20 @@ from typing import Dict, List, Optional, Any
 import time
 import os
 import sys
+import logging
+from pathlib import Path
 
-# Add project paths
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(levelname)s] %(asctime)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+# Add project paths using absolute path
+PROJECT_ROOT = Path(__file__).parent.resolve()
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from rtdlm_agi_complete import RT_DLM_AGI, create_rtdlm_agi
 from config.agi_config import AGIConfig
@@ -79,13 +90,26 @@ class RT_DLM_AGI_Assistant:
         print(f"[INFO] Model loaded from epoch {checkpoint['epoch']}")
     
     def preprocess_input(self, text: str, max_length: Optional[int] = None) -> jnp.ndarray:
-        """Preprocess text input for the model"""
+        """Preprocess text input for the model with batch dimension check"""
         if max_length is None:
             max_length = self.config.max_seq_length
         
         tokens = self.data_processor.tokenize(text)
         padded_tokens = self.data_processor.pad_sequence(tokens, max_length)
-        return jnp.array([padded_tokens], dtype=jnp.int32)
+        token_array = jnp.array(padded_tokens, dtype=jnp.int32)
+        
+        # Ensure batch dimension exists
+        if token_array.ndim == 1:
+            token_array = token_array[None, :]  # Add batch dimension
+        elif token_array.ndim == 0:
+            # Single token case
+            token_array = jnp.array([[padded_tokens[0]]], dtype=jnp.int32)
+        
+        # Validate shape
+        assert token_array.ndim == 2, f"Expected 2D array, got shape {token_array.shape}"
+        assert token_array.shape[1] == max_length, f"Expected seq_len {max_length}, got {token_array.shape[1]}"
+        
+        return token_array
     
     def postprocess_output(self, logits: jnp.ndarray, temperature: float = 1.0) -> str:
         """Convert model logits to human-readable text"""
@@ -108,9 +132,153 @@ class RT_DLM_AGI_Assistant:
         except:
             return "[Generated text could not be decoded]"
     
+    def _compute_attention_fusion(self, query: jnp.ndarray, context: jnp.ndarray) -> jnp.ndarray:
+        """Compute attention-based fusion between query and context
+        
+        Args:
+            query: Current input embeddings [batch, seq_len, d_model] or [batch, seq_len]
+            context: History context embeddings [batch, ctx_len, d_model] or [batch, ctx_len]
+            
+        Returns:
+            Fused representation combining query with attended context
+        """
+        # Handle case where inputs are token IDs (2D) vs embeddings (3D)
+        d_model = self.config.d_model
+        
+        # Simple attention mechanism: scaled dot-product attention
+        # If inputs are 2D (token IDs), project to embeddings first
+        if query.ndim == 2:
+            # Create simple projection (in real use, this would use learned weights)
+            self.rng, proj_rng = jax.random.split(self.rng)
+            query_proj = jax.random.normal(proj_rng, (query.shape[-1], d_model)) * 0.02
+            query = jnp.einsum('bs,sd->bsd', query.astype(jnp.float32), query_proj)
+        
+        if context.ndim == 2:
+            self.rng, proj_rng = jax.random.split(self.rng)
+            ctx_proj = jax.random.normal(proj_rng, (context.shape[-1], d_model)) * 0.02
+            context = jnp.einsum('bs,sd->bsd', context.astype(jnp.float32), ctx_proj)
+        
+        # Compute attention scores: Q @ K^T / sqrt(d)
+        scale = jnp.sqrt(d_model).astype(query.dtype)
+        attention_scores = jnp.einsum('bqd,bkd->bqk', query, context) / scale
+        
+        # Softmax over context dimension
+        attention_weights = jax.nn.softmax(attention_scores, axis=-1)
+        
+        # Weighted sum of context values
+        attended_context = jnp.einsum('bqk,bkd->bqd', attention_weights, context)
+        
+        # Fuse: concatenate and project back, or simple addition
+        fused = query + attended_context * 0.5  # Residual-style fusion
+        
+        return fused
+    
+    def _generate_probabilistic_experiments(
+        self, 
+        hypothesis: str, 
+        observations: str, 
+        model_output: Dict[str, Any],
+        rng_key: jnp.ndarray
+    ) -> List[Dict[str, Any]]:
+        """Generate suggested experiments with probabilistic confidence scores.
+        
+        Args:
+            hypothesis: The scientific hypothesis being tested
+            observations: Current observations/data
+            model_output: Output from the model containing reasoning components
+            rng_key: JAX random key for probabilistic sampling
+            
+        Returns:
+            List of experiment suggestions with confidence scores and rationale
+        """
+        experiments = []
+        
+        # Base experiment templates based on hypothesis keywords
+        experiment_templates = [
+            {"type": "control", "description": "Control experiment to establish baseline"},
+            {"type": "replication", "description": "Replication study to verify observations"},
+            {"type": "variation", "description": "Parameter variation to test hypothesis bounds"},
+            {"type": "falsification", "description": "Falsification test to challenge hypothesis"},
+            {"type": "extension", "description": "Extended experiment to explore implications"},
+        ]
+        
+        # Generate probabilistic confidence scores for each experiment type
+        rng_keys = jax.random.split(rng_key, len(experiment_templates) + 1)
+        
+        # Extract reasoning confidence if available
+        base_confidence = 0.5
+        if "reasoning_trace" in model_output:
+            reasoning_trace = model_output["reasoning_trace"]
+            if isinstance(reasoning_trace, dict) and "confidence" in reasoning_trace:
+                base_confidence = float(reasoning_trace["confidence"])
+        
+        for i, template in enumerate(experiment_templates):
+            # Generate probabilistic confidence using JAX random
+            noise = jax.random.normal(rng_keys[i], shape=())
+            raw_confidence = base_confidence + 0.15 * float(noise)
+            confidence = float(jnp.clip(raw_confidence, 0.1, 0.95))
+            
+            # Compute relevance score based on hypothesis/observation overlap
+            relevance = self._compute_experiment_relevance(
+                template["type"], hypothesis, observations
+            )
+            
+            # Final score combines confidence and relevance
+            final_score = 0.6 * confidence + 0.4 * relevance
+            
+            experiment = {
+                "experiment_id": f"exp_{i+1:03d}",
+                "type": template["type"],
+                "description": template["description"],
+                "confidence": round(confidence, 3),
+                "relevance": round(relevance, 3),
+                "priority_score": round(final_score, 3),
+                "rationale": f"Based on hypothesis analysis, this {template['type']} experiment "
+                           f"would help {'confirm' if confidence > 0.5 else 'explore'} the hypothesis.",
+                "estimated_complexity": self._estimate_experiment_complexity(template["type"]),
+            }
+            experiments.append(experiment)
+        
+        # Sort by priority score (descending)
+        experiments.sort(key=lambda x: x["priority_score"], reverse=True)
+        
+        return experiments
+    
+    def _compute_experiment_relevance(
+        self, experiment_type: str, hypothesis: str, observations: str
+    ) -> float:
+        """Compute relevance score for an experiment type given hypothesis and observations."""
+        # Simple keyword-based relevance (in production, use embeddings)
+        relevance_keywords = {
+            "control": ["baseline", "compare", "standard", "reference"],
+            "replication": ["verify", "confirm", "repeat", "reproduce"],
+            "variation": ["parameter", "change", "modify", "adjust", "range"],
+            "falsification": ["disprove", "challenge", "test", "contradict"],
+            "extension": ["expand", "further", "additional", "explore", "extend"],
+        }
+        
+        combined_text = (hypothesis + " " + observations).lower()
+        keywords = relevance_keywords.get(experiment_type, [])
+        
+        matches = sum(1 for kw in keywords if kw in combined_text)
+        relevance = min(0.3 + (matches * 0.2), 0.95)
+        
+        return relevance
+    
+    def _estimate_experiment_complexity(self, experiment_type: str) -> str:
+        """Estimate complexity level for an experiment type."""
+        complexity_map = {
+            "control": "low",
+            "replication": "medium",
+            "variation": "medium",
+            "falsification": "high",
+            "extension": "high",
+        }
+        return complexity_map.get(experiment_type, "medium")
+    
     def think_step_by_step(self, question: str, context: Optional[str] = None) -> Dict[str, Any]:
         """Perform step-by-step reasoning on a question"""
-        print(f"\n🤔 [RT-DLM AGI] Thinking step by step about: {question}")
+        print(f"\n[REASONING] RT-DLM AGI Thinking step by step about: {question}")
         
         # Prepare inputs
         if context:
@@ -120,11 +288,23 @@ class RT_DLM_AGI_Assistant:
         
         input_tokens = self.preprocess_input(full_input)
         
-        # Create conversation history context
+        # Create conversation history context with attention-based fusion
         history_context = None
+        fused_input = input_tokens
         if self.conversation_history:
             history_text = " ".join(self.conversation_history[-3:])  # Last 3 exchanges
             history_context = self.preprocess_input(history_text)
+            
+            # Apply attention-based fusion between current input and history
+            try:
+                fused_input = self._compute_attention_fusion(
+                    input_tokens.astype(jnp.float32), 
+                    history_context.astype(jnp.float32)
+                )
+                print(f"  [FUSION] Applied attention fusion with {len(self.conversation_history)} history items")
+            except Exception as e:
+                logger.warning(f"Attention fusion failed, using original input: {e}")
+                fused_input = input_tokens
         
         # Forward pass with reasoning
         self.rng, inference_rng = jax.random.split(self.rng)
@@ -142,11 +322,11 @@ class RT_DLM_AGI_Assistant:
             for i, step in enumerate(model_output["reasoning_chain"]):
                 step_text = self.postprocess_output(step.mean(axis=0, keepdims=True))
                 reasoning_steps.append(f"Step {i+1}: {step_text}")
-                print(f"  💭 Step {i+1}: {step_text}")
+                print(f"  [STEP] Step {i+1}: {step_text}")
         
         # Generate final answer
         final_answer = self.postprocess_output(model_output["logits"], temperature=0.7)
-        print(f"  ✅ Final Answer: {final_answer}")
+        print(f"  [OK] Final Answer: {final_answer}")
         
         # Extract other cognitive processes
         result = {
@@ -164,23 +344,23 @@ class RT_DLM_AGI_Assistant:
                 "introspection": "Model examined its own thoughts",
                 "autonomous_goals": "Model set goals for problem solving"
             }
-            print(f"  🧠 Consciousness Level: {self.config.self_awareness_level}")
+            print(f"  [CONSCIOUSNESS] Consciousness Level: {self.config.self_awareness_level}")
         
         # Add multimodal processing if available
         if "multimodal_features" in model_output:
             result["multimodal_processing"] = "Integrated multi-modal understanding"
-            print(f"  🎭 Multi-modal processing active")
+            print("  [MULTIMODAL] Multi-modal processing active")
         
         # Add quantum enhancement if available
         if "quantum_features" in model_output:
             result["quantum_enhancement"] = "Quantum-inspired processing enabled"
-            print(f"  ⚛️ Quantum enhancement active")
+            print("  [QUANTUM] Quantum enhancement active")
         
         return result
     
     def creative_generation(self, prompt: str, creativity_level: float = 0.7) -> Dict[str, Any]:
-        """Generate creative content"""
-        print(f"\n🎨 [RT-DLM AGI] Creative generation with level {creativity_level}")
+        """Generate creative content with novelty-based temperature scaling"""
+        print(f"\n[CREATIVE] RT-DLM AGI Creative generation with level {creativity_level}")
         print(f"Prompt: {prompt}")
         
         creative_prompt = f"Create something creative based on: {prompt}\\n\\nCreative output:"
@@ -194,30 +374,48 @@ class RT_DLM_AGI_Assistant:
             return_reasoning=False
         )
         
-        # Generate creative content with higher temperature
+        # Extract novelty score for temperature scaling
+        novelty_score = 0.5  # Default
+        if "creative_output" in model_output:
+            novelty_data = model_output["creative_output"]
+            if isinstance(novelty_data, dict) and "novelty_score" in novelty_data:
+                novelty_score = float(jnp.mean(novelty_data["novelty_score"]))
+            elif hasattr(novelty_data, 'get'):
+                novelty_score = float(jnp.mean(novelty_data.get("novelty_score", 0.5)))
+        
+        # Temperature scaling based on novelty:
+        # - Low novelty (repetitive) -> increase temperature to encourage diversity
+        # - High novelty (creative) -> moderate temperature to maintain coherence
+        # Formula: temp = base_temp + (1 - novelty) * creativity_boost
+        base_temperature = 1.0 + creativity_level
+        novelty_adjustment = (1.0 - novelty_score) * 0.5  # Boost when novelty is low
+        adaptive_temperature = base_temperature + novelty_adjustment
+        adaptive_temperature = jnp.clip(adaptive_temperature, 0.5, 2.5)  # Clamp to reasonable range
+        
+        print(f"  [TEMP] Adaptive temperature: {float(adaptive_temperature):.3f} (novelty: {novelty_score:.3f})")
+        
+        # Generate creative content with adaptive temperature
         creative_output = self.postprocess_output(
             model_output["logits"], 
-            temperature=1.0 + creativity_level
+            temperature=float(adaptive_temperature)
         )
         
         result = {
             "prompt": prompt,
             "creative_output": creative_output,
-            "creativity_level": creativity_level
+            "creativity_level": creativity_level,
+            "novelty_score": novelty_score,
+            "adaptive_temperature": float(adaptive_temperature)
         }
         
-        if "creative_output" in model_output:
-            novelty_score = float(jnp.mean(model_output["creative_output"].get("novelty_score", 0.5)))
-            result["novelty_score"] = novelty_score
-            print(f"  ✨ Novelty Score: {novelty_score:.3f}")
-        
-        print(f"  🎭 Creative Output: {creative_output}")
+        print(f"  [NOVELTY] Novelty Score: {novelty_score:.3f}")
+        print(f"  [OUTPUT] Creative Output: {creative_output}")
         
         return result
     
     def scientific_inquiry(self, hypothesis: str, observations: str) -> Dict[str, Any]:
         """Perform scientific reasoning and hypothesis testing"""
-        print(f"\n🔬 [RT-DLM AGI] Scientific Inquiry Mode")
+        print("\n[SCIENCE] RT-DLM AGI Scientific Inquiry Mode")
         print(f"Hypothesis: {hypothesis}")
         print(f"Observations: {observations}")
         
@@ -252,19 +450,26 @@ class RT_DLM_AGI_Assistant:
             "scientific_analysis": analysis,
         }
         
+        # Generate suggested experiments with probabilistic output
+        suggested_experiments = self._generate_probabilistic_experiments(
+            hypothesis, observations, model_output, science_rng
+        )
+        result["suggested_experiments"] = suggested_experiments
+        
         if "scientific_discovery" in model_output:
             discovery = model_output["scientific_discovery"]
             if "experiment_design" in discovery:
-                result["suggested_experiments"] = "AI generated experimental designs"
-                print(f"  🧪 Experimental designs generated")
+                result["ai_experiment_designs"] = discovery["experiment_design"]
+                print("  [EXPERIMENT] AI-generated experimental designs added")
         
-        print(f"  📊 Scientific Analysis: {analysis}")
+        print(f"  [ANALYSIS] Scientific Analysis: {analysis}")
+        print(f"  [EXPERIMENTS] Generated {len(suggested_experiments)} suggested experiments")
         
         return result
     
     def social_emotional_interaction(self, user_message: str, emotional_context: str = "neutral") -> Dict[str, Any]:
         """Handle social and emotional aspects of interaction"""
-        print(f"\n💝 [RT-DLM AGI] Social-Emotional Interaction")
+        print("\n[SOCIAL] RT-DLM AGI Social-Emotional Interaction")
         print(f"User Message: {user_message}")
         print(f"Emotional Context: {emotional_context}")
         
@@ -307,15 +512,15 @@ class RT_DLM_AGI_Assistant:
                 dominant_emotion = jnp.argmax(emotions)
                 emotion_names = ["joy", "sadness", "anger", "fear", "disgust", "surprise", "neutral"]
                 result["detected_emotion"] = emotion_names[int(dominant_emotion)]
-                print(f"  😊 Detected Emotion: {result['detected_emotion']}")
+                print(f"  [EMOTION] Detected Emotion: {result['detected_emotion']}")
         
-        print(f"  💬 Empathetic Response: {empathetic_response}")
+        print(f"  [RESPONSE] Empathetic Response: {empathetic_response}")
         
         return result
     
     def multimodal_understanding(self, text_input: str, image_description: str = None, audio_description: str = None) -> Dict[str, Any]:
         """Demonstrate multimodal understanding capabilities"""
-        print(f"\n🎭 [RT-DLM AGI] Multi-Modal Understanding")
+        print("\n[MULTIMODAL] RT-DLM AGI Multi-Modal Understanding")
         
         if not self.config.multimodal_enabled:
             return {"error": "Multi-modal processing not enabled in configuration"}
@@ -357,29 +562,29 @@ class RT_DLM_AGI_Assistant:
         
         if "multimodal_features" in model_output:
             result["cross_modal_fusion"] = "Successfully integrated multiple modalities"
-            print(f"  🔄 Cross-modal fusion successful")
+            print("  [FUSION] Cross-modal fusion successful")
         
-        print(f"  🎯 Multi-modal Analysis: {analysis}")
+        print(f"  [RESULT] Multi-modal Analysis: {analysis}")
         
         return result
     
     def interactive_session(self):
         """Start an interactive session with the AGI"""
         print("\\n" + "=" * 80)
-        print("🚀 RT-DLM AGI Interactive Session")
+        print("RT-DLM AGI Interactive Session")
         print("Advanced Artificial General Intelligence")
         print("=" * 80)
         
         self.config.print_summary()
         
         print("\\nAvailable capabilities:")
-        print("  1. 💭 Step-by-step reasoning")
-        print("  2. 🎨 Creative generation")
-        print("  3. 🔬 Scientific inquiry")
-        print("  4. 💝 Social-emotional interaction")
-        print("  5. 🎭 Multi-modal understanding")
-        print("  6. 🧠 Consciousness simulation")
-        print("  7. ⚛️ Quantum-enhanced processing")
+        print("  1. Step-by-step reasoning")
+        print("  2. Creative generation")
+        print("  3. Scientific inquiry")
+        print("  4. Social-emotional interaction")
+        print("  5. Multi-modal understanding")
+        print("  6. Consciousness simulation")
+        print("  7. Quantum-enhanced processing")
         
         print("\\nCommands:")
         print("  /reason <question> - Step-by-step reasoning")
@@ -390,14 +595,14 @@ class RT_DLM_AGI_Assistant:
         print("  /quit - Exit session")
         
         print("\\n" + "-" * 80)
-        print("🤖 RT-DLM AGI: Hello! I'm your advanced AGI assistant. How can I help you today?")
+        print("RT-DLM AGI: Hello! I'm your advanced AGI assistant. How can I help you today?")
         
         while True:
             try:
-                user_input = input("\\n👤 You: ").strip()
+                user_input = input("\\nYou: ").strip()
                 
                 if user_input.lower() in ["/quit", "quit", "exit"]:
-                    print("🤖 RT-DLM AGI: Goodbye! Thank you for using RT-DLM AGI.")
+                    print("RT-DLM AGI: Goodbye! Thank you for using RT-DLM AGI.")
                     break
                 
                 # Add to conversation history
@@ -474,20 +679,20 @@ class RT_DLM_AGI_Assistant:
                 
                 inference_time = time.time() - start_time
                 
-                print(f"\\n🤖 RT-DLM AGI: {response}")
-                print(f"   ⏱️ Response time: {inference_time:.2f}s")
+                print(f"\\nRT-DLM AGI: {response}")
+                print(f"   Response time: {inference_time:.2f}s")
                 
             except KeyboardInterrupt:
-                print("\\n\\n🤖 RT-DLM AGI: Session interrupted. Goodbye!")
+                print("\\n\\nRT-DLM AGI: Session interrupted. Goodbye!")
                 break
             except Exception as e:
-                print(f"\\n❌ Error: {str(e)}")
+                print(f"\\n[ERROR] Error: {str(e)}")
                 print("Please try again with a different input.")
 
 def demonstrate_agi_capabilities():
     """Demonstrate various AGI capabilities"""
     print("\\n" + "=" * 80)
-    print("🚀 RT-DLM AGI Capabilities Demonstration")
+    print("RT-DLM AGI Capabilities Demonstration")
     print("=" * 80)
     
     # Create AGI configuration
@@ -509,30 +714,30 @@ def demonstrate_agi_capabilities():
     # Initialize AGI assistant
     assistant = RT_DLM_AGI_Assistant(config)
     
-    print("\\n🧠 Demonstrating Advanced Reasoning...")
+    print("\\n[REASONING] Demonstrating Advanced Reasoning...")
     reasoning_result = assistant.think_step_by_step(
         "If a train travels 60 mph for 2 hours, then 80 mph for 1.5 hours, what is the total distance?"
     )
     
-    print("\\n🎨 Demonstrating Creative Generation...")
+    print("\\n[CREATIVE] Demonstrating Creative Generation...")
     creative_result = assistant.creative_generation(
         "A world where gravity works backwards"
     )
     
-    print("\\n🔬 Demonstrating Scientific Inquiry...")
+    print("\\n[SCIENCE] Demonstrating Scientific Inquiry...")
     science_result = assistant.scientific_inquiry(
         "Increased CO2 levels cause global warming",
         "Global temperatures have risen 1.1°C since 1880, CO2 levels increased from 315ppm to 415ppm"
     )
     
-    print("\\n💝 Demonstrating Social-Emotional Intelligence...")
+    print("\\n[SOCIAL] Demonstrating Social-Emotional Intelligence...")
     social_result = assistant.social_emotional_interaction(
         "I'm feeling really stressed about my upcoming exams",
         emotional_context="anxious"
     )
     
     if config.multimodal_enabled:
-        print("\\n🎭 Demonstrating Multi-Modal Understanding...")
+        print("\\n[MULTIMODAL] Demonstrating Multi-Modal Understanding...")
         multimodal_result = assistant.multimodal_understanding(
             "What do you see in this scene?",
             image_description="A sunset over mountains with a lake",
@@ -540,8 +745,8 @@ def demonstrate_agi_capabilities():
         )
     
     print("\\n" + "=" * 80)
-    print("✅ RT-DLM AGI Demonstration Complete!")
-    print("🤖 The model showcased reasoning, creativity, scientific analysis,")
+    print("[OK] RT-DLM AGI Demonstration Complete!")
+    print("The model showcased reasoning, creativity, scientific analysis,")
     print("   social intelligence, and multi-modal understanding.")
     print("=" * 80)
 

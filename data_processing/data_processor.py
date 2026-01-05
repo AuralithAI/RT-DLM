@@ -44,21 +44,29 @@ class DataProcessor:
         tokenizer_path = "tokenizers/agi_text_model"
         
         if not os.path.exists(f"{tokenizer_path}.model"):
-            print("🔧 Training text tokenizer for AGI...")
+            print("[INFO] Training text tokenizer for AGI...")
             
             # Create sample training data
             sample_texts = self._get_sample_training_texts()
             
             # Train tokenizer
             self.tokenizer.train_text_tokenizer(sample_texts, tokenizer_path)
-            print("✅ Text tokenizer training complete!")
+            print("[OK] Text tokenizer training complete!")
         else:
             # Load existing tokenizer
             self.tokenizer.load_text_tokenizer(tokenizer_path)
-            print("✅ Text tokenizer loaded successfully!")
+            print("[OK] Text tokenizer loaded successfully!")
     
-    def _get_sample_training_texts(self) -> List[str]:
-        """Get sample texts for training the tokenizer."""
+    def _get_sample_training_texts(self, max_samples: int = 10000, use_redpajama: bool = True) -> List[str]:
+        """Get sample texts for training the tokenizer.
+        
+        Args:
+            max_samples: Maximum number of samples to collect
+            use_redpajama: Whether to try loading from RedPajama dataset
+        
+        Returns:
+            List of training texts
+        """
         sample_texts = [
             "The RT-DLM AGI system processes multiple data modalities simultaneously.",
             "Advanced artificial intelligence requires understanding of text, images, audio, and video.",
@@ -91,6 +99,34 @@ class DataProcessor:
             "Efficient AI optimizes performance while minimizing resource usage.",
             "Distributed AI coordinates multiple agents for complex tasks."
         ]
+        
+        # Try to load from RedPajama dataset
+        if use_redpajama and len(sample_texts) < max_samples:
+            try:
+                from datasets import load_dataset
+                print(f"[INFO] Loading RedPajama dataset (up to {max_samples} samples)...")
+                
+                # Load a small subset of RedPajama-Data-1T-Sample
+                dataset = load_dataset(
+                    "togethercomputer/RedPajama-Data-1T-Sample",
+                    split=f"train[:{max_samples}]",
+                    trust_remote_code=True
+                )
+                
+                for item in dataset:
+                    if "text" in item and item["text"]:
+                        text = item["text"].strip()
+                        # Filter for reasonable length texts
+                        if 50 < len(text) < 5000:
+                            sample_texts.append(text)
+                            if len(sample_texts) >= max_samples:
+                                break
+                
+                print(f"[OK] Loaded {len(sample_texts)} samples from RedPajama")
+            except ImportError:
+                print("[WARN] 'datasets' library not installed. Run: pip install datasets")
+            except Exception as e:
+                print(f"[WARN] Could not load RedPajama: {e}. Using local data.")
         
         # Load additional texts from data files if they exist
         data_files = [
@@ -445,4 +481,4 @@ if __name__ == "__main__":
         print(f"Sample input tokens: {batch['inputs'][0][:10]}")
     
     print(f"\nTotal vocabulary size: {processor.get_vocab_size():,}")
-    print("✅ Data processor testing complete!")
+    print("[OK] Data processor testing complete!")

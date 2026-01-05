@@ -8,84 +8,110 @@ import sys
 import os
 import argparse
 import subprocess
+import logging
 from pathlib import Path
 
-def run_test(test_name: str, verbose: bool = False):
-    """Run a specific test or demo"""
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(levelname)s] %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Get the project root directory using absolute path
+PROJECT_ROOT = Path(__file__).parent.resolve()
+
+def run_test(test_name: str, verbose: bool = False, timeout: int = 600):
+    """Run a specific test or demo
     
-    # Define available tests
+    Args:
+        test_name: Name of the test to run
+        verbose: Enable verbose output
+        timeout: Maximum execution time in seconds (default: 600)
+    """
+    
+    # Define available tests with absolute paths
     tests = {
         "simple": {
-            "file": "tests/demo/simple_cpu_demo.py",
+            "file": PROJECT_ROOT / "tests" / "demo" / "simple_cpu_demo.py",
             "description": "Basic CPU-only component test",
             "requirements": ["jax", "haiku"]
         },
         "hybrid": {
-            "file": "tests/demo/hybrid_demo.py", 
+            "file": PROJECT_ROOT / "tests" / "demo" / "hybrid_demo.py", 
             "description": "Full hybrid AGI system demo (requires GPU/TPU)",
             "requirements": ["jax", "haiku", "requests", "beautifulsoup4"]
         },
         "system": {
-            "file": "tests/demo/system_demo.py",
+            "file": PROJECT_ROOT / "tests" / "demo" / "system_demo.py",
             "description": "Production system demonstration",
             "requirements": ["jax", "haiku"]
         },
         "validator": {
-            "file": "tests/system_validator.py",
+            "file": PROJECT_ROOT / "tests" / "system_validator.py",
             "description": "System validation and readiness check",
             "requirements": ["jax", "haiku"]
         },
         "tokenizer": {
-            "file": "tests/test_tokenizer.py",
+            "file": PROJECT_ROOT / "tests" / "test_tokenizer.py",
             "description": "Multi-modal tokenizer test",
             "requirements": ["sentencepiece"]
         }
     }
     
     if test_name not in tests:
-        print(f"[ERROR] Test '{test_name}' not found.")
-        print("Available tests:")
+        logger.error(f"Test '{test_name}' not found.")
+        logger.info("Available tests:")
         for name, info in tests.items():
-            print(f"  - {name}: {info['description']}")
+            logger.info(f"  - {name}: {info['description']}")
         return False
     
     test_info = tests[test_name]
     test_file = test_info["file"]
     
     # Check if file exists
-    if not os.path.exists(test_file):
-        print(f"[ERROR] Test file not found: {test_file}")
+    if not test_file.exists():
+        logger.error(f"Test file not found: {test_file}")
         return False
     
-    print(f"[INFO] Running test: {test_name}")
-    print(f"[INFO] Description: {test_info['description']}")
-    print(f"[INFO] File: {test_file}")
+    logger.info(f"Running test: {test_name}")
+    logger.info(f"Description: {test_info['description']}")
+    logger.info(f"File: {test_file}")
     
     # Check requirements
-    print(f"[INFO] Required packages: {', '.join(test_info['requirements'])}")
+    logger.info(f"Required packages: {', '.join(test_info['requirements'])}")
     
     try:
-        # Run the test
-        cmd = [sys.executable, test_file]
+        # Run the test with timeout
+        cmd = [sys.executable, str(test_file)]
         if verbose:
-            print(f"[INFO] Command: {' '.join(cmd)}")
+            logger.info(f"Command: {' '.join(cmd)}")
         
-        result = subprocess.run(cmd, capture_output=False, text=True)
+        result = subprocess.run(
+            cmd, 
+            capture_output=False, 
+            text=True,
+            timeout=timeout,
+            cwd=PROJECT_ROOT
+        )
         
         if result.returncode == 0:
-            print(f"\\n[SUCCESS] Test '{test_name}' completed successfully!")
+            logger.info(f"Test '{test_name}' completed successfully!")
             return True
         else:
-            print(f"\\n[ERROR] Test '{test_name}' failed with return code {result.returncode}")
+            logger.error(f"Test '{test_name}' failed with return code {result.returncode}")
             return False
-            
+    
+    except subprocess.TimeoutExpired:
+        logger.error(f"Test '{test_name}' timed out after {timeout} seconds")
+        return False
     except Exception as e:
-        print(f"[ERROR] Failed to run test '{test_name}': {e}")
+        logger.error(f"Failed to run test '{test_name}': {e}")
         return False
 
 def list_tests():
     """List all available tests"""
-    print("Available RT-DLM Tests:")
+    logger.info("Available RT-DLM Tests:")
     print("=" * 50)
     
     tests = {
@@ -99,7 +125,7 @@ def list_tests():
     for name, description in tests.items():
         print(f"  {name:12} - {description}")
     
-    print("\\nUsage:")
+    print("\nUsage:")
     print("  python test_runner.py simple      # Run basic CPU test")
     print("  python test_runner.py hybrid      # Run full hybrid demo")
     print("  python test_runner.py validator   # Run system validation")
@@ -107,7 +133,7 @@ def list_tests():
 
 def check_dependencies():
     """Check if required dependencies are installed"""
-    print("Checking dependencies...")
+    logger.info("Checking dependencies...")
     
     required_packages = {
         "jax": "JAX numerical computing library",
@@ -118,25 +144,29 @@ def check_dependencies():
     
     optional_packages = {
         "requests": "HTTP requests (for web integration)",
-        "beautifulsoup4": "HTML parsing (for web scraping)",
+        "bs4": "HTML parsing (for web scraping)",
         "sentencepiece": "SentencePiece tokenizer"
     }
     
-    print("\\nRequired packages:")
+    print("\nRequired packages:")
+    all_required_found = True
     for package, description in required_packages.items():
         try:
             __import__(package)
             print(f"  [OK] {package:15} - {description}")
         except ImportError:
             print(f"  [MISSING] {package:15} - {description}")
+            all_required_found = False
     
-    print("\\nOptional packages:")
+    print("\nOptional packages:")
     for package, description in optional_packages.items():
         try:
             __import__(package)
             print(f"  [OK] {package:15} - {description}")
         except ImportError:
             print(f"  [MISSING] {package:15} - {description}")
+    
+    return all_required_found
 
 def main():
     """Main entry point"""
@@ -190,8 +220,8 @@ Examples:
     if not args.test:
         print("RT-DLM Test Runner")
         print("=" * 30)
-        print("No test specified. Use --list to see available tests.")
-        print("\\nQuick start:")
+        logger.info("No test specified. Use --list to see available tests.")
+        print("\nQuick start:")
         print("  python test_runner.py simple    # Basic CPU test")
         return
     
