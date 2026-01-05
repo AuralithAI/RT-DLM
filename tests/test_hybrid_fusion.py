@@ -230,9 +230,69 @@ def test_ensemble_fusion_basic():
     print("[PASS] test_ensemble_fusion_basic")
 
 
+def test_multi_agent_consensus():
+    """Test multi-agent system with consensus loop"""
+    from hybrid_architecture.hybrid_integrator import MultiAgentConsensus
+    
+    def forward(inputs):
+        mac = MultiAgentConsensus(d_model=32, num_agents=4)
+        return mac(inputs)
+    
+    model = hk.transform(forward)
+    rng = jax.random.PRNGKey(0)
+    
+    batch_size = 2
+    d_model = 32
+    inputs = jax.random.normal(rng, (batch_size, d_model))
+    
+    params = model.init(rng, inputs)
+    output = model.apply(params, rng, inputs)
+    
+    # Check output structure
+    assert isinstance(output, dict)
+    assert 'consensus' in output
+    assert 'agent_responses' in output
+    assert 'agent_confidences' in output
+    assert 'confidence_weights' in output
+    
+    # Check shapes
+    assert output['consensus'].shape == (batch_size, d_model)
+    assert len(output['agent_responses']) == 4
+    assert len(output['agent_confidences']) == 4
+    
+    print("[PASS] test_multi_agent_consensus")
+
+
+def test_specialist_agent():
+    """Test individual specialist agent"""
+    from hybrid_architecture.hybrid_integrator import SpecialistAgent
+    
+    def forward(inputs):
+        agent = SpecialistAgent(d_model=32, specialization="reasoning")
+        return agent.process(inputs)
+    
+    model = hk.transform(forward)
+    rng = jax.random.PRNGKey(0)
+    
+    batch_size = 2
+    d_model = 32
+    inputs = jax.random.normal(rng, (batch_size, d_model))
+    
+    params = model.init(rng, inputs)
+    output = model.apply(params, rng, inputs)
+    
+    assert 'response' in output
+    assert 'confidence' in output
+    assert output['response'].shape == (batch_size, d_model)
+    
+    print("[PASS] test_specialist_agent")
+
+
 if __name__ == "__main__":
     # Run basic tests
     test_ensemble_fusion_basic()
+    test_multi_agent_consensus()
+    test_specialist_agent()
     
     # Run pytest tests
     pytest.main([__file__, "-v"])

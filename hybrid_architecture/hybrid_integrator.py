@@ -1126,3 +1126,176 @@ class KnowledgeDistillationModule(hk.Module):
         student_output = self.student_network(extracted_knowledge)
         
         return student_output
+
+
+class SpecialistAgent(hk.Module):
+    """A specialist agent with specific domain expertise."""
+    
+    def __init__(self, d_model: int, specialization: str, name=None):
+        super().__init__(name=name)
+        self.d_model = d_model
+        self.specialization = specialization
+        
+        # Agent-specific processing
+        self.encoder = hk.Sequential([
+            hk.Linear(d_model),
+            jax.nn.silu,
+            hk.Linear(d_model)
+        ], name=f"agent_encoder_{specialization}")
+        
+        # Expert network for this specialization
+        self.expert = hk.Sequential([
+            hk.Linear(d_model * 2),
+            jax.nn.silu,
+            hk.Linear(d_model),
+            hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+        ], name=f"agent_expert_{specialization}")
+        
+        # Confidence scorer
+        self.confidence_head = hk.Sequential([
+            hk.Linear(d_model // 2),
+            jax.nn.silu,
+            hk.Linear(1),
+            jax.nn.sigmoid
+        ], name=f"agent_confidence_{specialization}")
+    
+    def process(self, inputs: jnp.ndarray) -> Dict[str, jnp.ndarray]:
+        """Process input through this specialist agent.
+        
+        Args:
+            inputs: Input tensor of shape [batch, d_model] or [batch, seq, d_model]
+            
+        Returns:
+            Dictionary with 'response' and 'confidence'
+        """
+        # Encode input
+        encoded = self.encoder(inputs)
+        
+        # Generate expert response
+        response = self.expert(encoded)
+        
+        # Calculate confidence
+        if response.ndim == 3:
+            pooled = jnp.mean(response, axis=1)
+        else:
+            pooled = response
+        confidence = self.confidence_head(pooled)
+        
+        return {
+            'response': response,
+            'confidence': confidence,
+            'specialization': self.specialization
+        }
+    
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        """Forward pass returning just the response."""
+        return self.process(inputs)['response']
+
+
+class MultiAgentConsensus(hk.Module):
+    """Multi-agent system for collaborative decision making with consensus.
+    
+    Implements a multi-agent loop where multiple specialist agents process
+    input independently, then their responses are aggregated via consensus.
+    """
+    
+    def __init__(self, d_model: int, num_agents: int = 4, name=None):
+        super().__init__(name=name)
+        self.d_model = d_model
+        self.num_agents = num_agents
+        
+        # Define agent specializations
+        specializations = [
+            "reasoning",
+            "creativity", 
+            "analysis",
+            "synthesis"
+        ]
+        
+        # Create specialist agents
+        self.agents = [
+            SpecialistAgent(d_model, spec, name=f"agent_{i}")
+            for i, spec in enumerate(specializations[:num_agents])
+        ]
+        
+        # Consensus mechanism
+        self.consensus_attention = hk.MultiHeadAttention(
+            num_heads=4,
+            key_size=d_model // 4,
+            w_init=hk.initializers.TruncatedNormal(stddev=0.02),
+            name="consensus_attention"
+        )
+        
+        # Final consensus projection
+        self.consensus_projection = hk.Sequential([
+            hk.Linear(d_model),
+            jax.nn.silu,
+            hk.Linear(d_model),
+            hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+        ], name="consensus_projection")
+        
+        # Aggregation weights (learnable)
+        self.weight_network = hk.Linear(num_agents, name="agent_weights")
+    
+    def __call__(self, inputs: jnp.ndarray) -> Dict[str, Any]:
+        """Run multi-agent loop and compute consensus.
+        
+        Args:
+            inputs: Input tensor [batch, d_model] or [batch, seq, d_model]
+            
+        Returns:
+            Dictionary with consensus output and individual agent responses
+        """
+        responses = []
+        confidences = []
+        
+        # Multi-agent loop: each agent processes the input
+        for agent in self.agents:
+            agent_output = agent.process(inputs)
+            response = agent_output['response']
+            confidence = agent_output['confidence']
+            responses.append(response)
+            confidences.append(confidence)
+        
+        # Stack responses: [num_agents, batch, d_model] or [num_agents, batch, seq, d_model]
+        stacked_responses = jnp.stack(responses, axis=0)
+        stacked_confidences = jnp.stack(confidences, axis=0)  # [num_agents, batch, 1]
+        
+        # Compute consensus using mean (weighted by confidence)
+        # Normalize confidences to weights
+        confidence_weights = jax.nn.softmax(stacked_confidences.squeeze(-1), axis=0)  # [num_agents, batch]
+        
+        # Weighted mean consensus
+        if stacked_responses.ndim == 3:
+            # [num_agents, batch, d_model]
+            weighted_responses = stacked_responses * confidence_weights[:, :, None]
+            consensus_mean = jnp.sum(weighted_responses, axis=0)  # [batch, d_model]
+        else:
+            # [num_agents, batch, seq, d_model]
+            weighted_responses = stacked_responses * confidence_weights[:, :, None, None]
+            consensus_mean = jnp.sum(weighted_responses, axis=0)  # [batch, seq, d_model]
+        
+        # Attention-based consensus refinement
+        # Reshape for attention: [batch, num_agents, d_model]
+        if stacked_responses.ndim == 3:
+            agent_responses = stacked_responses.transpose(1, 0, 2)  # [batch, num_agents, d_model]
+        else:
+            # Pool sequence dimension for attention
+            agent_responses = jnp.mean(stacked_responses, axis=2).transpose(1, 0, 2)
+        
+        # Self-attention over agent responses
+        attended = self.consensus_attention(agent_responses, agent_responses, agent_responses)
+        
+        # Pool attended responses
+        attended_pooled = jnp.mean(attended, axis=1)
+        
+        # Combine mean consensus with attention refinement
+        combined = consensus_mean if consensus_mean.ndim == 2 else jnp.mean(consensus_mean, axis=1)
+        final_consensus = self.consensus_projection(combined + attended_pooled)
+        
+        return {
+            'consensus': final_consensus,
+            'agent_responses': responses,
+            'agent_confidences': confidences,
+            'confidence_weights': confidence_weights
+        }

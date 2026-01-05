@@ -337,7 +337,15 @@ class QuantumSimulator:
             ValueError: If circuit has too many qubits or invalid gate configurations
             RuntimeError: If circuit execution fails
         """
-        # Error handling: Check qubit count overflow
+        # Hard limit: 32 qubits maximum (2^32 state vector would overflow memory)
+        if circuit.num_qubits > 32:
+            raise ValueError(
+                f"Overflow: Circuit requires {circuit.num_qubits} qubits which exceeds "
+                f"the maximum supported (32 qubits). State vector size 2^{circuit.num_qubits} "
+                f"would cause memory overflow."
+            )
+        
+        # Error handling: Check qubit count against simulator limit
         if circuit.num_qubits > self.max_qubits:
             raise ValueError(
                 f"Circuit requires {circuit.num_qubits} qubits, but simulator "
@@ -439,6 +447,78 @@ class VariationalQuantumCircuit(hk.Module):
         self.params_per_qubit = 3
         self.params_per_layer = self.num_qubits * self.params_per_qubit
         self.total_params = self.num_layers * self.params_per_layer
+    
+    def build_layers(self, params: jnp.ndarray) -> List[Dict[str, Any]]:
+        """Build the layer structure from parameters.
+        
+        Creates a structured representation of all layers with their
+        rotation and entanglement configurations.
+        
+        Args:
+            params: Parameter array of shape [total_params] or default
+            
+        Returns:
+            List of layer dictionaries with gate configurations
+        """
+        # Default initialization if params not provided
+        if params is None:
+            params = jnp.array([0.5] * self.total_params)
+        
+        layers = []
+        param_idx = 0
+        
+        for layer_idx in range(self.num_layers):
+            layer_config = {
+                'layer_idx': layer_idx,
+                'rx_params': [],
+                'ry_params': [],
+                'rz_params': [],
+                'entanglement': [],
+                'phase_params': []
+            }
+            
+            # Extract RX parameters
+            for qubit in range(self.num_qubits):
+                layer_config['rx_params'].append({
+                    'qubit': qubit,
+                    'param': float(params[param_idx])
+                })
+                param_idx += 1
+            
+            # Extract RY parameters
+            for qubit in range(self.num_qubits):
+                layer_config['ry_params'].append({
+                    'qubit': qubit,
+                    'param': float(params[param_idx])
+                })
+                param_idx += 1
+            
+            # Extract RZ parameters
+            for qubit in range(self.num_qubits):
+                layer_config['rz_params'].append({
+                    'qubit': qubit,
+                    'param': float(params[param_idx])
+                })
+                param_idx += 1
+            
+            # Define entanglement pattern (CNOT chain + circular)
+            for qubit in range(self.num_qubits - 1):
+                layer_config['entanglement'].append((qubit, qubit + 1))
+            if self.num_qubits > 2:
+                layer_config['entanglement'].append((self.num_qubits - 1, 0))
+            
+            # Define phase parameters
+            for qubit in range(self.num_qubits):
+                phase_angle = (params[layer_idx * self.params_per_layer + qubit] + 
+                              params[layer_idx * self.params_per_layer + qubit + self.num_qubits]) / 2
+                layer_config['phase_params'].append({
+                    'qubit': qubit,
+                    'param': float(phase_angle)
+                })
+            
+            layers.append(layer_config)
+        
+        return layers
         
     def create_ansatz_circuit(self, parameters: jnp.ndarray, layer_weights: jnp.ndarray) -> QuantumCircuit:
         """Create parameterized ansatz circuit with layer-specific weights.
