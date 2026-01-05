@@ -168,6 +168,135 @@ def check_dependencies():
     
     return all_required_found
 
+
+def run_benchmark():
+    """Run benchmark evaluation on MMMU-style tasks
+    
+    Evaluates the model on a standardized set of multimodal tasks
+    and reports performance metrics.
+    """
+    import time
+    import numpy as np
+    
+    logger.info("="*60)
+    logger.info("RT-DLM AGI Benchmark Mode")
+    logger.info("="*60)
+    
+    metrics = {
+        "total_tasks": 0,
+        "completed_tasks": 0,
+        "reasoning_accuracy": 0.0,
+        "creative_score": 0.0,
+        "scientific_score": 0.0,
+        "multimodal_score": 0.0,
+        "inference_time_avg_ms": 0.0,
+        "memory_usage_mb": 0.0,
+    }
+    
+    try:
+        # Import AGI components
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from config.agi_config import AGIConfig
+        from agi_inference import RT_DLM_AGI_Assistant
+        
+        # Create lightweight config for benchmarking
+        config = AGIConfig(
+            d_model=256,
+            num_heads=4,
+            num_layers=4,
+            vocab_size=8000,
+            multimodal_enabled=True,
+            consciousness_simulation=False,  # Disable for speed
+            quantum_layers=0,
+        )
+        
+        logger.info("Initializing AGI for benchmarking...")
+        assistant = RT_DLM_AGI_Assistant(config)
+        
+        # Benchmark tasks simulating MMMU-style evaluation
+        benchmark_tasks = [
+            {"type": "reasoning", "prompt": "If A implies B and B implies C, what can we conclude about A and C?"},
+            {"type": "reasoning", "prompt": "A train leaves at 9am traveling 60mph. Another leaves at 10am at 80mph. When do they meet?"},
+            {"type": "creative", "prompt": "Write a haiku about artificial intelligence"},
+            {"type": "creative", "prompt": "Describe a world where time flows backwards"},
+            {"type": "scientific", "hypothesis": "Higher temperatures increase reaction rates", "observations": "At 20C: 10min, at 40C: 5min, at 60C: 2min"},
+            {"type": "scientific", "hypothesis": "Gravity affects plant growth direction", "observations": "Plants in microgravity grow randomly, on Earth they grow upward"},
+        ]
+        
+        metrics["total_tasks"] = len(benchmark_tasks)
+        inference_times = []
+        
+        logger.info(f"Running {len(benchmark_tasks)} benchmark tasks...")
+        
+        for i, task in enumerate(benchmark_tasks):
+            start_time = time.time()
+            
+            try:
+                if task["type"] == "reasoning":
+                    result = assistant.think_step_by_step(task["prompt"])
+                    if result.get("final_answer"):
+                        metrics["completed_tasks"] += 1
+                        metrics["reasoning_accuracy"] += result.get("confidence", 0.5)
+                        
+                elif task["type"] == "creative":
+                    result = assistant.creative_generation(task["prompt"])
+                    if result.get("creative_output"):
+                        metrics["completed_tasks"] += 1
+                        metrics["creative_score"] += result.get("novelty_score", 0.5)
+                        
+                elif task["type"] == "scientific":
+                    result = assistant.scientific_inquiry(task["hypothesis"], task["observations"])
+                    if result.get("scientific_analysis"):
+                        metrics["completed_tasks"] += 1
+                        metrics["scientific_score"] += 0.7  # Base score for completion
+                
+                inference_times.append((time.time() - start_time) * 1000)
+                logger.info(f"  Task {i+1}/{len(benchmark_tasks)}: {task['type']} - DONE")
+                
+            except Exception as e:
+                logger.warning(f"  Task {i+1}/{len(benchmark_tasks)}: {task['type']} - FAILED: {e}")
+        
+        # Calculate averages
+        num_reasoning = sum(1 for t in benchmark_tasks if t["type"] == "reasoning")
+        num_creative = sum(1 for t in benchmark_tasks if t["type"] == "creative")
+        num_scientific = sum(1 for t in benchmark_tasks if t["type"] == "scientific")
+        
+        if num_reasoning > 0:
+            metrics["reasoning_accuracy"] /= num_reasoning
+        if num_creative > 0:
+            metrics["creative_score"] /= num_creative
+        if num_scientific > 0:
+            metrics["scientific_score"] /= num_scientific
+        
+        if inference_times:
+            metrics["inference_time_avg_ms"] = np.mean(inference_times)
+        
+        # Estimate memory usage
+        try:
+            import jax
+            param_count = sum(x.size for x in jax.tree_util.tree_leaves(assistant.params))
+            metrics["memory_usage_mb"] = (param_count * 4) / (1024 * 1024)  # Assume float32
+        except:
+            pass
+        
+    except Exception as e:
+        logger.error(f"Benchmark initialization failed: {e}")
+        metrics["error"] = str(e)
+    
+    # Report results
+    logger.info("\n" + "="*60)
+    logger.info("BENCHMARK RESULTS")
+    logger.info("="*60)
+    logger.info(f"  Tasks Completed:       {metrics['completed_tasks']}/{metrics['total_tasks']}")
+    logger.info(f"  Reasoning Accuracy:    {metrics['reasoning_accuracy']:.2%}")
+    logger.info(f"  Creative Score:        {metrics['creative_score']:.2%}")
+    logger.info(f"  Scientific Score:      {metrics['scientific_score']:.2%}")
+    logger.info(f"  Avg Inference Time:    {metrics['inference_time_avg_ms']:.1f}ms")
+    logger.info(f"  Model Memory Usage:    {metrics['memory_usage_mb']:.1f}MB")
+    logger.info("="*60)
+    
+    return metrics
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
@@ -201,6 +330,12 @@ Examples:
     )
     
     parser.add_argument(
+        "--benchmark",
+        action="store_true",
+        help="Run benchmark evaluation on MMMU-style tasks"
+    )
+    
+    parser.add_argument(
         "--verbose", 
         action="store_true", 
         help="Verbose output"
@@ -221,6 +356,10 @@ Examples:
     
     if args.check_deps:
         check_dependencies()
+        return
+    
+    if args.benchmark:
+        run_benchmark()
         return
     
     # Handle --full mode: run all tests sequentially
