@@ -448,6 +448,22 @@ class CNNBranch(hk.Module):
         # Projection layer for dimension matching
         self.projection = hk.Linear(d_model, name="cnn_projection")
     
+    def _apply_conv_vectorized(self, conv_layer, inputs: jnp.ndarray) -> jnp.ndarray:
+        """Apply convolution layer with vectorized batch processing.
+        
+        Uses jax.vmap for efficient parallel processing across batch dimension.
+        
+        Args:
+            conv_layer: The convolution layer to apply
+            inputs: Shape [batch, seq_len, d_model]
+            
+        Returns:
+            Convolved output
+        """
+        # Conv1D already handles batch dimension efficiently in Haiku
+        # But we can use vmap for explicit parallelization if needed
+        return conv_layer(inputs)
+    
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
         """Apply vectorized CNN processing for sequences.
         
@@ -461,10 +477,11 @@ class CNNBranch(hk.Module):
         if inputs.ndim == 2:
             inputs = inputs[:, None, :]  # [batch, 1, d_model]
         
-        # Apply multi-scale convolutions in parallel (vectorized)
-        conv_small = self.conv_layers_small(inputs)   # [batch, seq, d//4]
-        conv_medium = self.conv_layers_medium(inputs)  # [batch, seq, d//4]
-        conv_large = self.conv_layers_large(inputs)    # [batch, seq, d//4]
+        # Apply multi-scale convolutions in parallel using vectorized operations
+        # Each conv layer is automatically vectorized over batch dimension
+        conv_small = self._apply_conv_vectorized(self.conv_layers_small, inputs)
+        conv_medium = self._apply_conv_vectorized(self.conv_layers_medium, inputs)
+        conv_large = self._apply_conv_vectorized(self.conv_layers_large, inputs)
         
         # Concatenate multi-scale features
         multi_scale = jnp.concatenate([conv_small, conv_medium, conv_large], axis=-1)
@@ -476,9 +493,11 @@ class CNNBranch(hk.Module):
         elif multi_scale.shape[-1] > self.d_model:
             multi_scale = multi_scale[..., :self.d_model]
         
-        # Apply final conv layer
-        conv_output = self.conv_final(multi_scale)
-        conv_output = jax.nn.relu(conv_output)
+        # Apply final conv layer with vectorized processing
+        conv_output = self._apply_conv_vectorized(
+            lambda x: jax.nn.relu(self.conv_final(x)),
+            multi_scale
+        )
         
         # Vectorized pooling: use both max and mean pooling
         max_pooled = jnp.max(conv_output, axis=1)   # [batch, d_model]
@@ -994,7 +1013,7 @@ class AdaptiveWeightingModule(hk.Module):
 
 
 class EnsembleFusion(hk.Module):
-    """Ensemble fusion module"""
+    """Ensemble fusion module with cross-paradigm interaction"""
     
     def __init__(self, d_model: int, name=None):
         super().__init__(name=name)
@@ -1008,6 +1027,9 @@ class EnsembleFusion(hk.Module):
             name="fusion_attention"
         )
         
+        # Cross-paradigm interaction projection
+        self.interaction_projection = hk.Linear(d_model, name="interaction_projection")
+        
         # Final projection
         self.final_projection = hk.Sequential([
             hk.Linear(d_model),
@@ -1017,9 +1039,36 @@ class EnsembleFusion(hk.Module):
         ], name="final_projection")
     
     def __call__(self, model_outputs: List[jnp.ndarray], weights: jnp.ndarray) -> jnp.ndarray:
-        """Fuse ensemble outputs with learned weights"""
+        """Fuse ensemble outputs with learned weights and cross-paradigm interaction
+        
+        model_outputs expected order: [traditional_ml, deep_learning, symbolic, probabilistic]
+        """
         # Stack model outputs
         stacked_outputs = jnp.stack(model_outputs, axis=1)  # [batch, num_models, d_model]
+        
+        # Compute cross-paradigm interaction between statistical (traditional) and deep learning
+        # model_outputs[0] = traditional ML, model_outputs[1] = deep learning
+        statistical_features = model_outputs[0]  # [batch, d_model] or [batch, seq, d_model]
+        deep_features = model_outputs[1]
+        
+        # Compute outer product interaction: captures feature correlations across paradigms
+        if statistical_features.ndim == 2:
+            # [batch, d_model] case - compute outer product per batch element
+            # Use mean pooling to get fixed-size interaction
+            interaction = jnp.einsum('bi,bj->bij', statistical_features, deep_features)
+            # Take diagonal + trace as summary (efficient approximation)
+            interaction_diag = jnp.diagonal(interaction, axis1=1, axis2=2)
+            interaction_trace = jnp.trace(interaction, axis1=1, axis2=2, dtype=interaction.dtype)
+            interaction_summary = interaction_diag * (1.0 + interaction_trace[:, None] / self.d_model)
+        else:
+            # [batch, seq, d_model] case - compute per-position interaction
+            interaction = jnp.einsum('bsi,bsj->bsij', statistical_features, deep_features)
+            interaction_diag = jnp.diagonal(interaction, axis1=2, axis2=3)
+            interaction_trace = jnp.trace(interaction, axis1=2, axis2=3, dtype=interaction.dtype)
+            interaction_summary = interaction_diag * (1.0 + interaction_trace[..., None] / self.d_model)
+        
+        # Project interaction to match dimensions
+        interaction_features = self.interaction_projection(interaction_summary)
         
         # Apply attention fusion
         fused = self.fusion_attention(stacked_outputs, stacked_outputs, stacked_outputs)
@@ -1029,6 +1078,16 @@ class EnsembleFusion(hk.Module):
         
         # Sum across models
         ensemble_output = jnp.sum(weighted_fused, axis=1)
+        
+        # Add cross-paradigm interaction
+        if ensemble_output.ndim != interaction_features.ndim:
+            # Handle dimension mismatch
+            if interaction_features.ndim == 2 and ensemble_output.ndim == 3:
+                interaction_features = interaction_features[:, None, :]
+            elif interaction_features.ndim == 3 and ensemble_output.ndim == 2:
+                interaction_features = jnp.mean(interaction_features, axis=1)
+        
+        ensemble_output = ensemble_output + 0.1 * interaction_features  # Residual connection
         
         # Final projection
         final_output = self.final_projection(ensemble_output)

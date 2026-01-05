@@ -64,6 +64,8 @@ def run_tests():
         "test_audio_emotion.py",
         "test_integration.py",
         "test_training.py",
+        # Hybrid fusion tests
+        "test_hybrid_fusion.py",
         # Tokenizer test
         "test_tokenizer.py",
         # Example tests
