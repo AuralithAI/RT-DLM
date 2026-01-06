@@ -30,6 +30,9 @@ from rtdlm_agi_complete import (
 )
 from config.agi_config import AGIConfig
 from data_processing.data_utils import DataProcessor, load_data, create_batches
+from advanced_learning.advanced_algorithms import (
+    ContinualLearner, TaskMemory, compute_ewc_loss, compute_fisher_information
+)
 
 def cosine_similarity(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
     """Compute cosine similarity between two vectors"""
@@ -63,6 +66,12 @@ class AGITrainer:
         self.reasoning_accuracies = []
         self.consciousness_coherence = []
         self.multimodal_alignment = []
+        
+        # Continual learning state
+        self.task_memories: List[TaskMemory] = []
+        self.current_task_id = "task_0"
+        self.lambda_ewc = 1000.0  # EWC regularization strength
+        self.enable_continual_learning = True
         
         # Data processor
         self.data_processor = DataProcessor(
@@ -98,6 +107,72 @@ class AGITrainer:
         
         return self.params, self.opt_state
     
+    def consolidate_task(self, task_id: str, data_samples: jnp.ndarray, targets: jnp.ndarray):
+        """
+        Consolidate knowledge for a completed task using EWC.
+        
+        Computes Fisher information and stores task memory for future
+        regularization to prevent catastrophic forgetting.
+        
+        Args:
+            task_id: Unique identifier for the task
+            data_samples: Representative data samples from the task
+            targets: Corresponding targets
+        """
+        if not self.enable_continual_learning or self.params is None:
+            return
+            
+        print(f"[INFO] Consolidating task {task_id} with EWC...")
+        
+        # Compute Fisher information for current task
+        self.rng, fisher_rng = jax.random.split(self.rng)
+        fisher_matrix = compute_fisher_information(
+            model_fn=self.model.apply,
+            params=self.params,
+            data_samples=data_samples,
+            targets=targets,
+            rng=fisher_rng,
+            num_samples=min(100, len(data_samples))
+        )
+        
+        # Create task memory
+        task_memory = TaskMemory(
+            task_id=task_id,
+            params_snapshot=jax.tree_util.tree_map(lambda x: x.copy(), self.params),
+            fisher_matrix=fisher_matrix,
+            importance_weights=fisher_matrix,  # Use Fisher as importance for SI
+            performance_metrics={"final_loss": float(self.training_losses[-1]) if self.training_losses else 0.0},
+            num_samples=len(data_samples)
+        )
+        
+        self.task_memories.append(task_memory)
+        print(f"[INFO] Task {task_id} consolidated. Total task memories: {len(self.task_memories)}")
+    
+    def compute_ewc_regularization(self, params: Dict) -> jnp.ndarray:
+        """
+        Compute EWC regularization loss from all previous task memories.
+        
+        Args:
+            params: Current model parameters
+            
+        Returns:
+            EWC regularization loss
+        """
+        if not self.task_memories:
+            return jnp.float32(0.0)
+        
+        total_ewc_loss = jnp.float32(0.0)
+        for memory in self.task_memories:
+            ewc_loss = compute_ewc_loss(
+                params=params,
+                params_star=memory.params_snapshot,
+                fisher_matrix=memory.fisher_matrix,
+                lambda_ewc=self.lambda_ewc
+            )
+            total_ewc_loss += ewc_loss
+        
+        return total_ewc_loss
+
     def create_training_batch(self, texts: List[str], include_multimodal: bool = False,
                                images: Optional[np.ndarray] = None,
                                audio: Optional[np.ndarray] = None):
@@ -248,6 +323,82 @@ class AGITrainer:
         
         return new_params, new_opt_state, loss, model_output
     
+    def train_step_with_ewc(self, params, opt_state, batch, rng, 
+                            task_memories: List[TaskMemory], lambda_ewc: float = 1000.0):
+        """
+        Training step with EWC regularization for continual learning.
+        
+        Adds EWC loss to prevent catastrophic forgetting of previous tasks.
+        
+        Args:
+            params: Model parameters
+            opt_state: Optimizer state
+            batch: Training batch
+            rng: Random key
+            task_memories: List of previous task memories
+            lambda_ewc: EWC regularization strength
+            
+        Returns:
+            Updated params, optimizer state, total loss, EWC loss component
+        """
+        def loss_fn_with_ewc(params, batch, rng):
+            # Forward pass
+            model_output = self.model.apply(
+                params, rng,
+                inputs={"text": batch["input_ids"]},
+                multimodal_inputs=batch.get("multimodal_inputs"),
+                return_reasoning=True
+            )
+            
+            # Compute base AGI loss
+            base_loss = compute_agi_loss(
+                model_output["logits"],
+                batch["targets"],
+                aux_outputs=model_output,
+                config=self.config
+            )
+            
+            # Compute EWC regularization loss
+            ewc_loss = jnp.float32(0.0)
+            for memory in task_memories:
+                ewc_loss += compute_ewc_loss(
+                    params=params,
+                    params_star=memory.params_snapshot,
+                    fisher_matrix=memory.fisher_matrix,
+                    lambda_ewc=lambda_ewc
+                )
+            
+            total_loss = base_loss + ewc_loss
+            
+            return total_loss, (model_output, base_loss, ewc_loss)
+        
+        # Compute gradients
+        (total_loss, (model_output, base_loss, ewc_loss)), grads = jax.value_and_grad(
+            loss_fn_with_ewc, has_aux=True
+        )(params, batch, rng)
+        
+        # NaN check for loss
+        total_loss = jax.lax.cond(
+            jnp.isnan(total_loss),
+            lambda _: jnp.float32(0.0),
+            lambda l: l,
+            total_loss
+        )
+        
+        # NaN check for gradients
+        def zero_nan_grads(g):
+            return jax.tree_util.tree_map(
+                lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x), 
+                g
+            )
+        grads = zero_nan_grads(grads)
+        
+        # Update parameters
+        updates, new_opt_state = self.optimizer.update(grads, opt_state, params)
+        new_params = optax.apply_updates(params, updates)
+        
+        return new_params, new_opt_state, total_loss, base_loss, ewc_loss
+
     def evaluate_model(self, eval_data: List[str], num_samples: int = 100):
         """Comprehensive model evaluation"""
         print("[INFO] Evaluating model...")
