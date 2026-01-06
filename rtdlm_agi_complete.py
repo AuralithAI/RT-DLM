@@ -31,6 +31,7 @@ from quantum.quantum_readiness import (
 from config.agi_config import AGIConfig
 from external_integration.web_integration import HybridKnowledgeIntegration
 from hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
+from advanced_learning.advanced_algorithms import ContinualLearner
 
 class ConsciousnessSimulator(hk.Module):
     """Simulates aspects of consciousness including self-awareness and introspection"""
@@ -998,6 +999,17 @@ class RTDLMAGISystem(hk.Module):
             hk.Linear(config.d_model),
             hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         ], name="agi_integrator")
+        
+        # Continual learning module for preventing catastrophic forgetting
+        # Enables adaptive learning for long-term human-centric tasks
+        if config.continual_learning:
+            self.continual_learner = ContinualLearner(
+                d_model=config.d_model,
+                lambda_ewc=1000.0,
+                lambda_si=1.0,
+                use_progressive=False,
+                max_tasks=10
+            )
         
         # Final output projection
         self.output_head = hk.Linear(config.vocab_size, name="output_head")
