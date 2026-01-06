@@ -562,6 +562,128 @@ class TestAudioEmotionIntegration(unittest.TestCase):
         self.assertTrue(jnp.all(result["dominant_emotion_idx"] < 14))
 
 
+class TestContinualLearning(unittest.TestCase):
+    """Test continual learning algorithms for loss stability"""
+    
+    def setUp(self):
+        """Set up test fixtures"""
+        self.rng = jax.random.PRNGKey(42)
+        
+    def test_ewc_loss_computation(self):
+        """Test EWC loss is computed correctly and is non-negative"""
+        from advanced_learning.advanced_algorithms import compute_ewc_loss
+        
+        # Create mock parameters
+        params = {
+            "layer1": {"w": jnp.ones((64, 64))},
+            "layer2": {"w": jnp.ones((64, 32))}
+        }
+        
+        # Create slightly different previous parameters
+        params_star = {
+            "layer1": {"w": jnp.ones((64, 64)) * 0.9},
+            "layer2": {"w": jnp.ones((64, 32)) * 0.95}
+        }
+        
+        # Create Fisher information (importance weights)
+        fisher_matrix = {
+            "layer1": {"w": jnp.ones((64, 64)) * 0.5},
+            "layer2": {"w": jnp.ones((64, 32)) * 0.3}
+        }
+        
+        # Compute EWC loss
+        ewc_loss = compute_ewc_loss(
+            params=params,
+            params_star=params_star,
+            fisher_matrix=fisher_matrix,
+            lambda_ewc=1000.0
+        )
+        
+        # EWC loss should be non-negative
+        self.assertGreaterEqual(float(ewc_loss), 0.0)
+        
+        # EWC loss should be greater than 0 since params differ from params_star
+        self.assertGreater(float(ewc_loss), 0.0)
+        
+        # With identical params, EWC loss should be 0
+        ewc_loss_identical = compute_ewc_loss(
+            params=params,
+            params_star=params,
+            fisher_matrix=fisher_matrix,
+            lambda_ewc=1000.0
+        )
+        self.assertAlmostEqual(float(ewc_loss_identical), 0.0, places=5)
+        
+    def test_ewc_loss_stability_across_tasks(self):
+        """Test EWC maintains loss stability when learning multiple tasks"""
+        from advanced_learning.advanced_algorithms import (
+            compute_ewc_loss, ContinualLearner
+        )
+        
+        def forward_fn(features):
+            model = ContinualLearner(d_model=D_MODEL)
+            return model(features)
+        
+        transformed = hk.transform(forward_fn)
+        
+        # Task 1 features
+        task1_features = jax.random.normal(self.rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        
+        # Initialize with task 1
+        params_task1 = transformed.init(self.rng, task1_features)
+        result_task1 = transformed.apply(params_task1, self.rng, task1_features)
+        
+        # Verify ContinualLearner output structure
+        self.assertIn("features", result_task1)
+        self.assertIn("importance", result_task1)
+        self.assertIn("importance_weights", result_task1)
+        
+        # Task 2 features (different distribution)
+        rng2 = jax.random.PRNGKey(123)
+        task2_features = jax.random.normal(rng2, (BATCH_SIZE, SEQ_LEN, D_MODEL)) * 2.0
+        
+        # Process task 2 with same params
+        result_task2 = transformed.apply(params_task1, rng2, task2_features)
+        
+        # Both tasks should produce valid outputs
+        self.assertEqual(result_task1["features"].shape, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        self.assertEqual(result_task2["features"].shape, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        
+        # Create simulated "task 2 trained" params (slightly modified)
+        params_task2 = jax.tree_util.tree_map(
+            lambda x: x + jax.random.normal(rng2, x.shape) * 0.01,
+            params_task1
+        )
+        
+        # Fisher matrix from task 1 (simulate importance estimation)
+        fisher_task1 = jax.tree_util.tree_map(
+            lambda x: jnp.abs(jax.random.normal(self.rng, x.shape)) * 0.1,
+            params_task1
+        )
+        
+        # Compute EWC loss to protect task 1 knowledge
+        ewc_loss = compute_ewc_loss(
+            params=params_task2,
+            params_star=params_task1,
+            fisher_matrix=fisher_task1,
+            lambda_ewc=1000.0
+        )
+        
+        # EWC loss should be finite and reasonable
+        self.assertTrue(jnp.isfinite(ewc_loss))
+        self.assertGreater(float(ewc_loss), 0.0)
+        
+        # Higher lambda should give higher loss
+        ewc_loss_high_lambda = compute_ewc_loss(
+            params=params_task2,
+            params_star=params_task1,
+            fisher_matrix=fisher_task1,
+            lambda_ewc=10000.0
+        )
+        
+        self.assertGreater(float(ewc_loss_high_lambda), float(ewc_loss))
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)
