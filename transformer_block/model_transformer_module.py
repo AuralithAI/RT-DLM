@@ -1,6 +1,14 @@
 import haiku as hk
 import jax
 import jax.numpy as jnp
+import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Import shared spiking/pruning utilities from reusable components
+from core.components.reusable_components import SpikingMechanism, PruningManager
+
 
 class TransformerBlock(hk.Module):
     def __init__(self, d_model, num_heads, dropout_rate=0.2, name=None):
@@ -23,38 +31,48 @@ class TransformerBlock(hk.Module):
         self.dropout_rate = dropout_rate
         self.head_usage = hk.get_state("head_usage", [num_heads], dtype=jnp.float32, init=jnp.zeros)
         self.ffn_usage = hk.get_state("ffn_usage", [d_model], dtype=jnp.float32, init=jnp.zeros)
+        
+        # Shared spiking mechanism from reusable_components
+        self._spiking = SpikingMechanism(spike_threshold=0.1, epsilon=1e-8)
+        
+        # Shared pruning manager for usage tracking
+        self._pruning_manager = PruningManager(
+            num_heads=num_heads,
+            d_model=d_model,
+            head_threshold=0.01,
+            ffn_threshold=0.01
+        )
 
     def apply_spiking_attention(self, scores, spike_threshold, epsilon):
         """
         Apply Spiking Attention by thresholding attention scores.
+        
+        Delegates to shared SpikingMechanism from core.components.reusable_components.
         """
+        # Validate parameters (maintains backward compatibility)
         if spike_threshold is None or epsilon is None or not 0 <= spike_threshold <= 1:
             return scores
-        spiking_mask = scores > spike_threshold
-        spiked_scores = jnp.where(spiking_mask, scores, 0.0)
-        return spiked_scores / (jnp.sum(spiked_scores, axis=-1, keepdims=True) + epsilon)
+        
+        # Update shared mechanism with current parameters
+        self._spiking.spike_threshold = spike_threshold
+        self._spiking.epsilon = epsilon
+        
+        return self._spiking.apply(scores)
     
     def update_usage(self, attn_weights, ffn_out):
         """
         Update usage statistics for attention heads and FFN neurons.
+        
+        Delegates usage computation to shared PruningManager from 
+        core.components.reusable_components for consistency.
         """
-        if attn_weights.ndim == 3:
-            batch_size, seq_length, _ = attn_weights.shape
-            head_dim = self.d_model // self.num_heads
-            head_usage_update = jnp.zeros((self.num_heads,))
-            for head in range(self.num_heads):
-                head_start = head * head_dim
-                head_end = head_start + head_dim
-                head_weights = attn_weights[:, :, head_start:head_end]
-                head_usage = jnp.mean(jnp.abs(head_weights))
-                head_usage_update = head_usage_update.at[head].set(head_usage)
-        elif attn_weights.ndim == 4:
-            head_usage_update = jnp.mean(jnp.abs(attn_weights), axis=(0, 2, 3))
-        else:
-            raise ValueError(f"Unexpected attn_weights shape: {attn_weights.shape}")
+        # Use shared PruningManager for head usage computation
+        head_usage_update = self._pruning_manager.compute_head_usage(attn_weights)
+        
+        # Use shared PruningManager for FFN usage computation
+        ffn_usage_update = self._pruning_manager.compute_ffn_usage(ffn_out)
 
-        ffn_usage_update = jnp.mean(jnp.abs(ffn_out), axis=(0, 1))
-
+        # Accumulate to Haiku state
         current_head_usage = hk.get_state("head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros)
         current_ffn_usage = hk.get_state("ffn_usage", [self.d_model], dtype=jnp.float32, init=jnp.zeros)
         hk.set_state("head_usage", current_head_usage + head_usage_update)
@@ -64,11 +82,18 @@ class TransformerBlock(hk.Module):
         """
         Prune underutilized attention heads and FFN neurons, with weight interpolation for better performance.
         Returns a new model with pruned components or updates in-place.
+        
+        Uses shared PruningManager from core.components.reusable_components
+        for mask generation while keeping model-specific instantiation.
         """
-        active_heads = self.head_usage > head_threshold
-        active_ffn = self.ffn_usage > ffn_threshold
-        if jnp.sum(active_heads) < 1 or jnp.sum(active_ffn) < 1:
-            raise ValueError("Cannot prune all heads or FFN neurons.")
+        # Get usage statistics from Haiku state
+        usage_heads = hk.get_state("head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros)
+        usage_ffn = hk.get_state("ffn_usage", [self.d_model], dtype=jnp.float32, init=jnp.zeros)
+        
+        # Update pruning manager thresholds and get masks
+        self._pruning_manager.head_threshold = head_threshold
+        self._pruning_manager.ffn_threshold = ffn_threshold
+        active_heads, active_ffn = self._pruning_manager.get_pruning_mask(usage_heads, usage_ffn)
 
         new_num_heads = int(jnp.sum(active_heads))
         new_d_model = int(jnp.sum(active_ffn))
