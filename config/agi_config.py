@@ -66,6 +66,12 @@ class AGIConfig:
         self.working_memory_capacity = kwargs.get("working_memory_capacity", 7)  # Working memory slots
         self.memory_consolidation = kwargs.get("memory_consolidation", True)  # Memory consolidation
         
+        # --- Continual Learning Parameters ---
+        self.continual_learning = kwargs.get("continual_learning", True)  # Enable continual learning (EWC)
+        self.lambda_ewc = kwargs.get("lambda_ewc", 1000.0)  # EWC regularization strength
+        self.lambda_si = kwargs.get("lambda_si", 1.0)  # Synaptic Intelligence strength
+        self.max_task_memories = kwargs.get("max_task_memories", 10)  # Max tasks to remember
+        
         # --- Consciousness Simulation Parameters ---
         self.consciousness_simulation = kwargs.get("consciousness_simulation", False)  # Simulate consciousness
         self.self_awareness_level = kwargs.get("self_awareness_level", 0.3)  # Self-awareness simulation

@@ -7,6 +7,8 @@ import sys
 
 import optax
 
+from typing import Optional
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from self_attention.model_module_self_attention import SelfAttentionModel
@@ -15,13 +17,40 @@ from ethics.reward_model import EthicalRewardModel
 from moe_block.sparse_moe import SparseMoE
 from TMS_block.memory_bank import MemoryBank
 
+# Import reusable components for shared spiking/pruning utilities
+from core.components.reusable_components import (
+    SpikingMechanism,
+    PruningManager,
+    apply_shared_spiking,
+    AttentionConfig,
+)
+
 class TMSModel(hk.Module):
     """
     Transformer + MoE + Self-Attention (TMS) Model
+    
+    This model integrates self-attention, transformer layers, and mixture-of-experts
+    with shared spiking/pruning mechanisms from core.components.reusable_components.
+    
+    The SpikingMechanism and PruningManager from reusable_components provide
+    centralized utilities that can be used to:
+    - Apply consistent spiking thresholds across all attention layers
+    - Track and prune underutilized attention heads and FFN neurons
+    - Compute compression ratios for model efficiency analysis
+    
+    Example usage with shared spiking:
+        # Use shared spiking utility for custom attention scores
+        spiked_scores = apply_shared_spiking(scores, spike_threshold=0.1)
+        
+        # Or use SpikingMechanism for more control
+        spiking = SpikingMechanism(spike_threshold=0.1, epsilon=1e-8)
+        spiked = spiking.apply(attention_scores)
     """
     def __init__(self, d_model: int, num_heads: int, num_layers: int, vocab_size: int, max_seq_length: int, 
                  moe_experts: int, moe_top_k: int, memory_size: int, retrieval_k: int, ltm_weight: float, stm_weight: float, mtm_weight: float, name=None):
         super().__init__(name=name)
+        self.d_model = d_model
+        self.num_heads = num_heads
         self.embedding = hk.Embed(vocab_size, d_model)
         self.position_enc = hk.Embed(max_seq_length, d_model)
         self.self_attention = SelfAttentionModel(d_model, num_heads, vocab_size, max_seq_length)
@@ -39,6 +68,67 @@ class TMSModel(hk.Module):
         self.mtm_weight = mtm_weight
         self.reward_model = EthicalRewardModel(d_model, vocab_size, max_seq_length * 2)
         self.ethics_weight = hk.get_parameter("ethics_weight", [], init=jnp.ones) * 0.1
+        
+        # Shared spiking mechanism for consistent behavior across layers
+        self._spiking = SpikingMechanism(spike_threshold=0.1, epsilon=1e-8)
+        
+        # Pruning manager for attention head analysis
+        self._pruning_manager = PruningManager(
+            num_heads=num_heads,
+            d_model=d_model,
+            head_threshold=0.01,
+            ffn_threshold=0.01
+        )
+    
+    def get_attention_config(self) -> AttentionConfig:
+        """Get attention configuration for this model."""
+        return AttentionConfig(
+            d_model=self.d_model,
+            num_heads=self.num_heads,
+            spike_threshold=self._spiking.spike_threshold,
+            epsilon=self._spiking.epsilon
+        )
+    
+    def apply_shared_spiking(self, scores: jnp.ndarray, spike_threshold: Optional[float] = None) -> jnp.ndarray:
+        """
+        Apply shared spiking mechanism to attention scores.
+        
+        This uses the centralized SpikingMechanism from reusable_components
+        to ensure consistent spiking behavior across all model layers.
+        
+        Args:
+            scores: Attention scores to apply spiking to
+            spike_threshold: Optional override for spike threshold
+            
+        Returns:
+            Spiked attention scores
+        """
+        if spike_threshold is not None:
+            self._spiking.update_threshold(spike_threshold)
+        return self._spiking.apply(scores)
+    
+    def analyze_head_usage(self, attn_weights: jnp.ndarray) -> dict:
+        """
+        Analyze attention head usage for pruning decisions.
+        
+        Uses the centralized PruningManager to compute head usage
+        statistics and pruning recommendations.
+        
+        Args:
+            attn_weights: Attention weights from forward pass
+            
+        Returns:
+            Dictionary with usage statistics and pruning masks
+        """
+        head_usage = self._pruning_manager.compute_head_usage(attn_weights)
+        ffn_usage = jnp.ones(self.d_model) * 0.1  # Placeholder, would use actual FFN output
+        active_heads, active_ffn = self._pruning_manager.get_pruning_mask(head_usage, ffn_usage)
+        compression = self._pruning_manager.compute_compression_ratio(active_heads, active_ffn)
+        return {
+            'head_usage': head_usage,
+            'active_heads': active_heads,
+            'compression': compression
+        }
 
     def __call__(self, inputs, rng=None, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold=None, epsilon=None, outputs=None, feedback_score=None):
         inputs = jnp.asarray(inputs, dtype=jnp.int32, copy=True)

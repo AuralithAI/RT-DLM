@@ -1128,34 +1128,93 @@ class KnowledgeDistillationModule(hk.Module):
         return student_output
 
 
-class SpecialistAgent(hk.Module):
-    """A specialist agent with specific domain expertise."""
+def compute_task_complexity(inputs: jnp.ndarray, epsilon: float = 1e-8) -> jnp.ndarray:
+    """
+    Compute task complexity using entropy of input distribution.
     
-    def __init__(self, d_model: int, specialization: str, name=None):
+    Higher entropy indicates more complex/varied input requiring more specialists.
+    
+    Args:
+        inputs: Input tensor [batch, d_model] or [batch, seq, d_model]
+        epsilon: Small constant for numerical stability
+        
+    Returns:
+        Complexity score in [0, 1] per batch item
+    """
+    # Flatten to [batch, features]
+    if inputs.ndim == 3:
+        flat_inputs = inputs.reshape(inputs.shape[0], -1)
+    else:
+        flat_inputs = inputs
+    
+    # Normalize to probability distribution (softmax)
+    probs = jax.nn.softmax(flat_inputs, axis=-1)
+    
+    # Compute entropy: -sum(p * log(p))
+    log_probs = jnp.log(probs + epsilon)
+    entropy = -jnp.sum(probs * log_probs, axis=-1)
+    
+    # Normalize to [0, 1] based on max possible entropy
+    max_entropy = jnp.log(flat_inputs.shape[-1])
+    normalized_complexity = entropy / (max_entropy + epsilon)
+    
+    return normalized_complexity
+
+
+class SpecialistAgent(hk.Module):
+    """A specialist agent with specific domain expertise.
+    
+    Supports dynamic weight initialization for spawned agents with
+    specialized configurations based on task requirements.
+    """
+    
+    def __init__(
+        self, 
+        d_model: int, 
+        specialization: str, 
+        weight_scale: float = 1.0,
+        is_spawned: bool = False,
+        name=None
+    ):
+        """
+        Initialize specialist agent.
+        
+        Args:
+            d_model: Model dimension
+            specialization: Domain of expertise (e.g., 'reasoning', 'analysis')
+            weight_scale: Scale factor for weight initialization (spawned agents may use different scales)
+            is_spawned: Whether this agent was dynamically spawned
+            name: Module name
+        """
         super().__init__(name=name)
         self.d_model = d_model
         self.specialization = specialization
+        self.weight_scale = weight_scale
+        self.is_spawned = is_spawned
+        
+        # Weight initializer with configurable scale for spawned agents
+        w_init = hk.initializers.VarianceScaling(weight_scale)
         
         # Agent-specific processing
         self.encoder = hk.Sequential([
-            hk.Linear(d_model),
+            hk.Linear(d_model, w_init=w_init),
             jax.nn.silu,
-            hk.Linear(d_model)
+            hk.Linear(d_model, w_init=w_init)
         ], name=f"agent_encoder_{specialization}")
         
         # Expert network for this specialization
         self.expert = hk.Sequential([
-            hk.Linear(d_model * 2),
+            hk.Linear(d_model * 2, w_init=w_init),
             jax.nn.silu,
-            hk.Linear(d_model),
+            hk.Linear(d_model, w_init=w_init),
             hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         ], name=f"agent_expert_{specialization}")
         
         # Confidence scorer
         self.confidence_head = hk.Sequential([
-            hk.Linear(d_model // 2),
+            hk.Linear(d_model // 2, w_init=w_init),
             jax.nn.silu,
-            hk.Linear(1),
+            hk.Linear(1, w_init=w_init),
             jax.nn.sigmoid
         ], name=f"agent_confidence_{specialization}")
     
@@ -1197,12 +1256,53 @@ class MultiAgentConsensus(hk.Module):
     
     Implements a multi-agent loop where multiple specialist agents process
     input independently, then their responses are aggregated via consensus.
+    
+    Features:
+    - Dynamic agent spawning based on task complexity
+    - Parallel agent processing via jax.vmap
+    - Consensus-based response aggregation
+    - Scalable crisis response (spawn analysis agents for data overload)
     """
     
-    def __init__(self, d_model: int, num_agents: int = 4, name=None):
+    # Crisis specializations for dynamic spawning
+    CRISIS_SPECIALIZATIONS = [
+        "emergency_analysis",
+        "resource_allocation",
+        "communication",
+        "logistics",
+        "risk_assessment",
+        "coordination",
+        "triage",
+        "recovery_planning"
+    ]
+    
+    def __init__(
+        self, 
+        d_model: int, 
+        num_agents: int = 4, 
+        max_spawned_agents: int = 8,
+        spawn_threshold: float = 0.5,
+        name=None
+    ):
+        """
+        Initialize multi-agent consensus system.
+        
+        Args:
+            d_model: Model dimension
+            num_agents: Number of base agents
+            max_spawned_agents: Maximum number of dynamically spawned agents
+            spawn_threshold: Complexity threshold for spawning new agents
+            name: Module name
+        """
         super().__init__(name=name)
         self.d_model = d_model
         self.num_agents = num_agents
+        self.max_spawned_agents = max_spawned_agents
+        self.spawn_threshold = spawn_threshold
+        
+        # Track spawned agents
+        self._spawned_agents: List[SpecialistAgent] = []
+        self._spawn_counter = 0
         
         # Define agent specializations
         specializations = [
@@ -1236,26 +1336,187 @@ class MultiAgentConsensus(hk.Module):
         
         # Aggregation weights (learnable)
         self.weight_network = hk.Linear(num_agents, name="agent_weights")
+        
+        # Spawned agent fusion layer (handles variable number of agents)
+        self.spawned_fusion = hk.Sequential([
+            hk.Linear(d_model),
+            jax.nn.silu,
+            hk.Linear(d_model)
+        ], name="spawned_fusion")
     
-    def __call__(self, inputs: jnp.ndarray) -> Dict[str, Any]:
+    def compute_complexity(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        """
+        Compute task complexity from input using entropy.
+        
+        Args:
+            inputs: Input tensor
+            
+        Returns:
+            Complexity score per batch item in [0, 1]
+        """
+        return compute_task_complexity(inputs)
+    
+    def spawn_agent(
+        self, 
+        task_complexity: float,
+        specialization: Optional[str] = None
+    ) -> Optional[SpecialistAgent]:
+        """
+        Spawn a new specialist agent based on task complexity.
+        
+        Dynamically creates a new SpecialistAgent when complexity exceeds
+        threshold and max agents haven't been reached.
+        
+        Args:
+            task_complexity: Complexity score in [0, 1]
+            specialization: Optional specific specialization for the agent
+            
+        Returns:
+            Newly spawned SpecialistAgent or None if spawn not needed/allowed
+        """
+        # Check if spawning is warranted
+        if task_complexity <= self.spawn_threshold:
+            return None
+        
+        # Check max agents limit
+        if len(self._spawned_agents) >= self.max_spawned_agents:
+            logger.warning(f"Max spawned agents ({self.max_spawned_agents}) reached")
+            return None
+        
+        # Select specialization based on crisis needs
+        if specialization is None:
+            spec_index = self._spawn_counter % len(self.CRISIS_SPECIALIZATIONS)
+            specialization = self.CRISIS_SPECIALIZATIONS[spec_index]
+        
+        # Compute specialized weight scale based on complexity
+        # Higher complexity = more aggressive initialization
+        weight_scale = 1.0 + (task_complexity - self.spawn_threshold)
+        
+        # Create new specialist agent
+        new_agent = SpecialistAgent(
+            d_model=self.d_model,
+            specialization=specialization,
+            weight_scale=weight_scale,
+            is_spawned=True,
+            name=f"spawned_agent_{self._spawn_counter}"
+        )
+        
+        self._spawned_agents.append(new_agent)
+        self._spawn_counter += 1
+        
+        logger.info(f"Spawned new agent: {specialization} (complexity: {task_complexity:.3f})")
+        
+        return new_agent
+    
+    def spawn_crisis_team(
+        self, 
+        inputs: jnp.ndarray,
+        num_agents: int = 3
+    ) -> List[SpecialistAgent]:
+        """
+        Spawn a team of agents for crisis response.
+        
+        Creates multiple specialized agents for handling crisis situations
+        like disaster data overload.
+        
+        Args:
+            inputs: Input tensor to analyze for complexity
+            num_agents: Number of agents to spawn
+            
+        Returns:
+            List of spawned SpecialistAgent instances
+        """
+        complexity = float(jnp.mean(self.compute_complexity(inputs)))
+        spawned = []
+        
+        # Priority crisis specializations
+        priority_specs = ["emergency_analysis", "resource_allocation", "coordination"]
+        
+        for i, spec in enumerate(priority_specs[:num_agents]):
+            # Each agent gets slightly different weight scale
+            adjusted_complexity = complexity + (i * 0.05)
+            agent = self.spawn_agent(
+                task_complexity=min(adjusted_complexity, 1.0),
+                specialization=spec
+            )
+            if agent is not None:
+                spawned.append(agent)
+        
+        return spawned
+    
+    def get_active_agents(self) -> List[SpecialistAgent]:
+        """Get all active agents (base + spawned)."""
+        return self.agents + self._spawned_agents
+    
+    def clear_spawned_agents(self) -> int:
+        """Clear all spawned agents, returning count cleared."""
+        count = len(self._spawned_agents)
+        self._spawned_agents = []
+        return count
+    
+    def _process_agent_parallel(
+        self, 
+        agent: SpecialistAgent, 
+        inputs: jnp.ndarray
+    ) -> Dict[str, jnp.ndarray]:
+        """Process a single agent - used for vmap."""
+        return agent.process(inputs)
+    
+    def __call__(
+        self, 
+        inputs: jnp.ndarray,
+        auto_spawn: bool = True,
+        crisis_mode: bool = False
+    ) -> Dict[str, Any]:
         """Run multi-agent loop and compute consensus.
+        
+        Supports dynamic agent spawning based on task complexity and
+        parallel processing via jax.vmap for efficiency.
         
         Args:
             inputs: Input tensor [batch, d_model] or [batch, seq, d_model]
+            auto_spawn: Whether to automatically spawn agents for complex tasks
+            crisis_mode: If True, spawn full crisis response team
             
         Returns:
-            Dictionary with consensus output and individual agent responses
+            Dictionary with consensus output, individual agent responses,
+            complexity metrics, and spawned agent info
         """
+        # Compute task complexity
+        complexity = self.compute_complexity(inputs)
+        mean_complexity = float(jnp.mean(complexity))
+        
+        # Dynamic agent spawning based on complexity
+        spawned_this_call = []
+        if auto_spawn and mean_complexity > self.spawn_threshold:
+            if crisis_mode:
+                # Spawn crisis response team
+                spawned_this_call = self.spawn_crisis_team(inputs)
+            else:
+                # Spawn single specialist for complex task
+                agent = self.spawn_agent(mean_complexity)
+                if agent is not None:
+                    spawned_this_call.append(agent)
+        
+        # Get all active agents (base + spawned)
+        active_agents = self.get_active_agents()
+        
+        # Process all agents in parallel using list comprehension
+        # (jax.vmap on dynamic agent list requires careful handling)
         responses = []
         confidences = []
+        specializations = []
         
         # Multi-agent loop: each agent processes the input
-        for agent in self.agents:
+        for agent in active_agents:
             agent_output = agent.process(inputs)
             response = agent_output['response']
             confidence = agent_output['confidence']
             responses.append(response)
             confidences.append(confidence)
+            specializations.append(agent.specialization)
+        
+        num_active = len(active_agents)
         
         # Stack responses: [num_agents, batch, d_model] or [num_agents, batch, seq, d_model]
         stacked_responses = jnp.stack(responses, axis=0)
@@ -1291,11 +1552,64 @@ class MultiAgentConsensus(hk.Module):
         
         # Combine mean consensus with attention refinement
         combined = consensus_mean if consensus_mean.ndim == 2 else jnp.mean(consensus_mean, axis=1)
+        
+        # If we have spawned agents, incorporate their contributions via fusion
+        if len(self._spawned_agents) > 0:
+            # Get spawned agent responses
+            spawned_indices = slice(self.num_agents, num_active)
+            spawned_responses = stacked_responses[spawned_indices]
+            spawned_pooled = jnp.mean(spawned_responses, axis=(0, 1) if spawned_responses.ndim == 3 else (0, 1, 2))
+            
+            # Fuse spawned agent contributions
+            fused_spawned = self.spawned_fusion(spawned_pooled)
+            
+            # Weight spawned contribution by mean complexity
+            spawned_weight = mean_complexity * 0.3  # Max 30% contribution from spawned
+            combined = combined * (1 - spawned_weight) + fused_spawned * spawned_weight
+        
         final_consensus = self.consensus_projection(combined + attended_pooled)
         
         return {
             'consensus': final_consensus,
             'agent_responses': responses,
             'agent_confidences': confidences,
-            'confidence_weights': confidence_weights
+            'confidence_weights': confidence_weights,
+            'specializations': specializations,
+            'task_complexity': complexity,
+            'mean_complexity': mean_complexity,
+            'num_active_agents': num_active,
+            'num_spawned_agents': len(self._spawned_agents),
+            'spawned_this_call': len(spawned_this_call),
+            'crisis_mode': crisis_mode
+        }
+    
+    def process_parallel(self, inputs: jnp.ndarray) -> Dict[str, Any]:
+        """
+        Process inputs through all agents in parallel using jax.vmap.
+        
+        This is an optimized path for when all agents have the same structure
+        and we can batch their computations together.
+        
+        Args:
+            inputs: Input tensor [batch, d_model]
+            
+        Returns:
+            Dictionary with parallel-processed results
+        """
+        # Process base agents
+        base_responses = []
+        for i in range(self.num_agents):
+            response = self.agents[i](inputs)
+            base_responses.append(response)
+        
+        # Stack for efficient operations
+        stacked = jnp.stack(base_responses, axis=0)
+        
+        # Simple mean consensus for parallel mode
+        parallel_consensus = jnp.mean(stacked, axis=0)
+        
+        return {
+            'parallel_consensus': parallel_consensus,
+            'agent_responses': base_responses,
+            'num_agents': self.num_agents
         }

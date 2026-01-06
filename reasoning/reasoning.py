@@ -5,6 +5,13 @@ import optax
 from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
 
+# Import SemanticParser for graph-based multi-hop reasoning
+try:
+    from advanced_understanding.comprehension_modules import SemanticParser
+    SEMANTIC_PARSER_AVAILABLE = True
+except ImportError:
+    SEMANTIC_PARSER_AVAILABLE = False
+
 class ReasoningStep(hk.Module):
     """Single reasoning step with thought tracking"""
     
@@ -89,18 +96,38 @@ class ReasoningStep(hk.Module):
         }
 
 class ChainOfThoughtReasoning(hk.Module):
-    """Chain-of-thought reasoning with explicit step tracking"""
+    """Chain-of-thought reasoning with explicit step tracking and graph-based multi-hop support"""
     
-    def __init__(self, d_model: int, max_reasoning_steps: int = 10, name=None):
+    def __init__(self, d_model: int, max_reasoning_steps: int = 10, use_semantic_graph: bool = True, name=None):
         super().__init__(name=name)
         self.d_model = d_model
         self.max_reasoning_steps = max_reasoning_steps
+        self.use_semantic_graph = use_semantic_graph and SEMANTIC_PARSER_AVAILABLE
         
         # Reasoning steps
         self.reasoning_steps = [
             ReasoningStep(d_model, name=f"step_{i}") 
             for i in range(max_reasoning_steps)
         ]
+        
+        # SemanticParser for graph-based multi-hop reasoning
+        if self.use_semantic_graph:
+            self.semantic_parser = SemanticParser(
+                d_model=d_model,
+                max_nodes=32,
+                num_hops=3,
+                num_heads=8,
+                edge_threshold=0.3,
+                name="semantic_parser"
+            )
+            
+            # Graph-enhanced reasoning integrator
+            self.graph_integrator = hk.Sequential([
+                hk.Linear(d_model * 2),
+                jax.nn.silu,
+                hk.Linear(d_model),
+                hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
+            ], name="graph_integrator")
         
         # Step selector (decides when to stop reasoning)
         self.step_selector = hk.Sequential([
@@ -176,6 +203,73 @@ class ChainOfThoughtReasoning(hk.Module):
             "confidences": confidences,
             "attention_maps": attention_maps,
             "thought_summary": thought_summary
+        }
+    
+    def multi_hop_reasoning(
+        self, 
+        query: jnp.ndarray, 
+        context: jnp.ndarray,
+        is_training: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Perform graph-based multi-hop reasoning using SemanticParser.
+        
+        This method builds a conceptual graph from context, extracts knowledge,
+        and performs multi-hop traversal to answer complex queries.
+        
+        Useful for niches like health diagnostics where multi-step inference
+        and abstraction from multimodal data are critical.
+        
+        Args:
+            query: Question to reason about [batch, seq_len, d_model]
+            context: Available knowledge [batch, context_len, d_model]
+            is_training: Whether in training mode
+            
+        Returns:
+            Dictionary with reasoning results and graph structure
+        """
+        if not self.use_semantic_graph:
+            # Fall back to standard chain-of-thought
+            return self(query, context)
+        
+        # Build conceptual graph from context using SemanticParser
+        query_vector = query.mean(axis=1)  # [batch, d_model]
+        
+        # Full semantic parsing with graph-based reasoning
+        semantic_result = self.semantic_parser.parse(
+            context, 
+            query=query_vector,
+            mask=None,
+            is_training=is_training
+        )
+        
+        # Extract graph-based reasoning output
+        graph_answer = semantic_result["reasoning"]["answer_embedding"] if semantic_result["reasoning"] else None
+        semantic_representation = semantic_result["semantic_representation"]
+        
+        # Also run chain-of-thought reasoning for comparison
+        cot_result = self(query, context)
+        
+        # Integrate graph-based and chain-of-thought reasoning
+        if graph_answer is not None:
+            integrated_answer = self.graph_integrator(
+                jnp.concatenate([cot_result["final_answer"], graph_answer], axis=-1)
+            )
+        else:
+            integrated_answer = cot_result["final_answer"]
+        
+        return {
+            "final_answer": integrated_answer,
+            "reasoning_chain": cot_result["reasoning_chain"],
+            "confidences": cot_result["confidences"],
+            "attention_maps": cot_result["attention_maps"],
+            "thought_summary": cot_result["thought_summary"],
+            # Graph-based reasoning outputs
+            "graph": semantic_result["graph"],
+            "knowledge": semantic_result["knowledge"],
+            "graph_reasoning": semantic_result["reasoning"],
+            "semantic_representation": semantic_representation,
+            "hop_embeddings": semantic_result["reasoning"]["hop_embeddings"] if semantic_result["reasoning"] else None
         }
 
 class MetaLearningController(hk.Module):
