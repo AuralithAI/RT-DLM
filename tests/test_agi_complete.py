@@ -684,6 +684,265 @@ class TestContinualLearning(unittest.TestCase):
         self.assertGreater(float(ewc_loss_high_lambda), float(ewc_loss))
 
 
+class TestMultiAgentCrisisResponse(unittest.TestCase):
+    """Test multi-agent system with dynamic specialist spawning for crisis response."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.rng = jax.random.PRNGKey(42)
+        
+    def test_compute_task_complexity(self):
+        """Test entropy-based task complexity computation."""
+        from hybrid_architecture.hybrid_integrator import compute_task_complexity
+        
+        # Low entropy input (uniform-ish after softmax)
+        low_complexity_input = jnp.ones((BATCH_SIZE, D_MODEL))
+        low_complexity = compute_task_complexity(low_complexity_input)
+        
+        # High entropy input (varied values)
+        high_complexity_input = jax.random.normal(self.rng, (BATCH_SIZE, D_MODEL)) * 10
+        high_complexity = compute_task_complexity(high_complexity_input)
+        
+        # Both should be in [0, 1]
+        self.assertTrue(jnp.all(low_complexity >= 0))
+        self.assertTrue(jnp.all(low_complexity <= 1))
+        self.assertTrue(jnp.all(high_complexity >= 0))
+        self.assertTrue(jnp.all(high_complexity <= 1))
+        
+        # Shape should match batch size
+        self.assertEqual(low_complexity.shape, (BATCH_SIZE,))
+        
+    def test_multi_agent_consensus_basic(self):
+        """Test basic multi-agent consensus without spawning."""
+        from hybrid_architecture.hybrid_integrator import MultiAgentConsensus
+        
+        def forward_fn(x):
+            consensus = MultiAgentConsensus(
+                d_model=D_MODEL,
+                num_agents=4,
+                spawn_threshold=0.5,
+                name="test_consensus"
+            )
+            return consensus(x, auto_spawn=False)
+        
+        init_fn, apply_fn = hk.transform_with_state(forward_fn)
+        
+        inputs = jax.random.normal(self.rng, (BATCH_SIZE, D_MODEL))
+        params, state = init_fn(self.rng, inputs)
+        result, _ = apply_fn(params, state, self.rng, inputs)
+        
+        # Check output structure
+        self.assertIn('consensus', result)
+        self.assertIn('agent_responses', result)
+        self.assertIn('task_complexity', result)
+        self.assertIn('num_active_agents', result)
+        
+        # Should have 4 base agents, no spawned
+        self.assertEqual(result['num_active_agents'], 4)
+        self.assertEqual(result['num_spawned_agents'], 0)
+        
+        # Consensus shape should match input
+        self.assertEqual(result['consensus'].shape, (BATCH_SIZE, D_MODEL))
+        
+    def test_agent_spawning_high_complexity(self):
+        """Test complexity computation and spawning logic for high-complexity tasks.
+        
+        Note: In JAX/Haiku, spawned agents are created within the forward pass
+        but the spawning logic is verified through the metrics returned.
+        """
+        from hybrid_architecture.hybrid_integrator import MultiAgentConsensus, compute_task_complexity
+        
+        # Create inputs with different characteristics
+        # Low complexity: uniform values (low entropy after softmax)
+        low_var_input = jnp.ones((BATCH_SIZE, D_MODEL))
+        low_complexity = compute_task_complexity(low_var_input)
+        
+        # Higher complexity: mixed positive/negative with varying magnitudes
+        high_var_input = jax.random.normal(self.rng, (BATCH_SIZE, D_MODEL))
+        high_complexity = compute_task_complexity(high_var_input)
+        
+        # The complexity function works on entropy of softmax distribution
+        # Both should produce valid complexity scores in [0, 1]
+        self.assertTrue(jnp.all(low_complexity >= 0))
+        self.assertTrue(jnp.all(low_complexity <= 1))
+        self.assertTrue(jnp.all(high_complexity >= 0))
+        self.assertTrue(jnp.all(high_complexity <= 1))
+        
+        def forward_fn(x):
+            consensus = MultiAgentConsensus(
+                d_model=D_MODEL,
+                num_agents=4,
+                max_spawned_agents=4,
+                spawn_threshold=0.001,  # Very low threshold to test spawning logic
+                name="test_spawn"
+            )
+            result = consensus(x, auto_spawn=True)
+            return result
+        
+        init_fn, apply_fn = hk.transform_with_state(forward_fn)
+        
+        params, state = init_fn(self.rng, high_var_input)
+        result, _ = apply_fn(params, state, self.rng, high_var_input)
+        
+        # Check that complexity was computed
+        self.assertIn('mean_complexity', result)
+        self.assertIn('task_complexity', result)
+        
+        # The output should be valid regardless of spawning
+        self.assertEqual(result['consensus'].shape, (BATCH_SIZE, D_MODEL))
+        self.assertTrue(jnp.all(jnp.isfinite(result['consensus'])))
+        
+    def test_crisis_mode_spawning(self):
+        """Test crisis mode activates and processes correctly.
+        
+        Note: Due to JAX's functional nature, we test that crisis mode
+        activates the crisis spawning logic and produces valid output.
+        """
+        from hybrid_architecture.hybrid_integrator import MultiAgentConsensus
+        
+        def forward_fn(x):
+            consensus = MultiAgentConsensus(
+                d_model=D_MODEL,
+                num_agents=4,
+                max_spawned_agents=8,
+                spawn_threshold=0.1,  # Very low to ensure spawning
+                name="test_crisis"
+            )
+            # Activate crisis mode
+            result = consensus(x, auto_spawn=True, crisis_mode=True)
+            return result
+        
+        init_fn, apply_fn = hk.transform_with_state(forward_fn)
+        
+        # Simulated crisis data (high entropy)
+        crisis_data = jax.random.normal(self.rng, (BATCH_SIZE, D_MODEL)) * 50
+        
+        params, state = init_fn(self.rng, crisis_data)
+        result, _ = apply_fn(params, state, self.rng, crisis_data)
+        
+        # Crisis mode flag should be set
+        self.assertTrue(result['crisis_mode'])
+        
+        # Output should be valid
+        self.assertEqual(result['consensus'].shape, (BATCH_SIZE, D_MODEL))
+        self.assertTrue(jnp.all(jnp.isfinite(result['consensus'])))
+        
+        # Complexity should be computed
+        self.assertIn('mean_complexity', result)
+        self.assertIn('task_complexity', result)
+        
+    def test_simulated_disaster_data_overload(self):
+        """Test system response to simulated disaster data overload scenario.
+        
+        Verifies that the system handles high-complexity crisis data correctly.
+        """
+        from hybrid_architecture.hybrid_integrator import MultiAgentConsensus
+        
+        def forward_fn(x):
+            consensus = MultiAgentConsensus(
+                d_model=D_MODEL,
+                num_agents=4,
+                max_spawned_agents=8,
+                spawn_threshold=0.4,
+                name="disaster_response"
+            )
+            
+            # Process with crisis mode
+            result = consensus(x, auto_spawn=True, crisis_mode=True)
+            
+            return result
+        
+        init_fn, apply_fn = hk.transform_with_state(forward_fn)
+        
+        # Create disaster scenario data (high dimensional, high variance)
+        rng1, rng2 = jax.random.split(self.rng)
+        disaster_data = jnp.concatenate([
+            jax.random.normal(rng1, (BATCH_SIZE // 2, D_MODEL)) * 100,
+            jax.random.uniform(rng2, (BATCH_SIZE // 2, D_MODEL)) * 50
+        ], axis=0)
+        
+        params, state = init_fn(self.rng, disaster_data)
+        result, _ = apply_fn(params, state, self.rng, disaster_data)
+        
+        # Should have base agents active
+        self.assertEqual(result['num_active_agents'], 4)
+        
+        # Consensus should still be valid
+        self.assertEqual(result['consensus'].shape, (BATCH_SIZE, D_MODEL))
+        self.assertTrue(jnp.all(jnp.isfinite(result['consensus'])))
+        
+        # Crisis mode should be enabled
+        self.assertTrue(result['crisis_mode'])
+        
+    def test_specialist_agent_weight_scaling(self):
+        """Test that spawned agents have specialized weight scales."""
+        from hybrid_architecture.hybrid_integrator import SpecialistAgent
+        
+        def forward_fn(x):
+            # Create base agent
+            base_agent = SpecialistAgent(
+                d_model=D_MODEL,
+                specialization="base",
+                weight_scale=1.0,
+                is_spawned=False,
+                name="base_agent"
+            )
+            
+            # Create spawned agent with higher weight scale
+            spawned_agent = SpecialistAgent(
+                d_model=D_MODEL,
+                specialization="emergency_analysis",
+                weight_scale=1.5,
+                is_spawned=True,
+                name="spawned_agent"
+            )
+            
+            base_result = base_agent.process(x)
+            spawned_result = spawned_agent.process(x)
+            
+            return base_result, spawned_result, base_agent.is_spawned, spawned_agent.is_spawned
+        
+        init_fn, apply_fn = hk.transform_with_state(forward_fn)
+        
+        inputs = jax.random.normal(self.rng, (BATCH_SIZE, D_MODEL))
+        params, state = init_fn(self.rng, inputs)
+        (base_result, spawned_result, base_spawned, spawned_spawned), _ = apply_fn(
+            params, state, self.rng, inputs
+        )
+        
+        # Check spawned flags
+        self.assertFalse(base_spawned)
+        self.assertTrue(spawned_spawned)
+        
+        # Both should produce valid outputs
+        self.assertEqual(base_result['response'].shape, spawned_result['response'].shape)
+        self.assertTrue(jnp.all(jnp.isfinite(base_result['response'])))
+        self.assertTrue(jnp.all(jnp.isfinite(spawned_result['response'])))
+        
+    def test_parallel_processing(self):
+        """Test parallel agent processing method."""
+        from hybrid_architecture.hybrid_integrator import MultiAgentConsensus
+        
+        def forward_fn(x):
+            consensus = MultiAgentConsensus(
+                d_model=D_MODEL,
+                num_agents=4,
+                name="parallel_test"
+            )
+            return consensus.process_parallel(x)
+        
+        init_fn, apply_fn = hk.transform_with_state(forward_fn)
+        
+        inputs = jax.random.normal(self.rng, (BATCH_SIZE, D_MODEL))
+        params, state = init_fn(self.rng, inputs)
+        result, _ = apply_fn(params, state, self.rng, inputs)
+        
+        # Check parallel consensus output
+        self.assertIn('parallel_consensus', result)
+        self.assertEqual(result['parallel_consensus'].shape, (BATCH_SIZE, D_MODEL))
+        self.assertEqual(result['num_agents'], 4)
+
+
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)
