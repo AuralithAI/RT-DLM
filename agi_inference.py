@@ -24,6 +24,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from rtdlm_agi_complete import RT_DLM_AGI, create_rtdlm_agi
 from config.agi_config import AGIConfig
 from data_processing.data_utils import DataProcessor
+from core.checkpoint_manager import CheckpointManager
 
 class RT_DLM_AGI_Assistant:
     """Interactive RT-DLM AGI Assistant for demonstrations and real-world usage"""
@@ -79,15 +80,28 @@ class RT_DLM_AGI_Assistant:
         print(f"[INFO] AGI Model initialized with {param_count:,} parameters")
     
     def load_checkpoint(self, checkpoint_path: str):
-        """Load model from checkpoint"""
+        """Load model from checkpoint (supports SafeTensors and legacy pickle)"""
         print(f"[INFO] Loading AGI model from {checkpoint_path}...")
         
-        import pickle
-        with open(checkpoint_path, 'rb') as f:
-            checkpoint = pickle.load(f)
-        
-        self.params = checkpoint["params"]
-        print(f"[INFO] Model loaded from epoch {checkpoint['epoch']}")
+        # Check if it's a SafeTensors file
+        if checkpoint_path.endswith('.safetensors'):
+            checkpoint_manager = CheckpointManager(
+                checkpoint_dir=str(Path(checkpoint_path).parent)
+            )
+            checkpoint = checkpoint_manager.load_checkpoint(
+                checkpoint_path=checkpoint_path,
+                load_opt_state=False  # Don't need optimizer for inference
+            )
+            self.params = checkpoint["params"]
+            print(f"[INFO] Model loaded from epoch {checkpoint['epoch']} (SafeTensors)")
+        else:
+            # Legacy pickle format (with security warning)
+            import pickle
+            logger.warning("Loading from pickle format - consider converting to SafeTensors")
+            with open(checkpoint_path, 'rb') as f:
+                checkpoint = pickle.load(f)
+            self.params = checkpoint["params"]
+            print(f"[INFO] Model loaded from epoch {checkpoint['epoch']} (pickle)")
     
     def preprocess_input(self, text: str, max_length: Optional[int] = None) -> jnp.ndarray:
         """Preprocess text input for the model with batch dimension check"""

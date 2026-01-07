@@ -23,6 +23,9 @@ faiss-cpu==1.10.0  # For GPU: pip install faiss-gpu instead
 cryptography>=42.0.0
 python-stdnum>=1.18
 
+# Safe model serialization
+safetensors>=0.4.0
+
 # Fairness and Ethical AI
 fairlearn>=0.10.0
 

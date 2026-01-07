@@ -28,6 +28,7 @@ from rtdlm_agi_complete import (
     create_rtdlm_agi, create_agi_optimizer, 
     compute_agi_loss
 )
+from core.checkpoint_manager import CheckpointManager, convert_pickle_to_safetensors
 from config.agi_config import AGIConfig
 from data_processing.data_utils import DataProcessor, load_data, create_batches
 from advanced_learning.advanced_algorithms import (
@@ -552,29 +553,40 @@ class AGITrainer:
         return 0.0
     
     def save_checkpoint(self, epoch: int, metrics: Dict):
-        """Save training checkpoint"""
-        checkpoint_dir = "checkpoints"
-        os.makedirs(checkpoint_dir, exist_ok=True)
+        """Save training checkpoint using SafeTensors (secure format)"""
+        checkpoint_manager = CheckpointManager(
+            checkpoint_dir="checkpoints",
+            model_name="rtdlm_agi",
+            keep_last_n=5  # Keep last 5 checkpoints
+        )
         
-        checkpoint = {
-            "params": self.params,
-            "opt_state": self.opt_state,
-            "epoch": epoch,
-            "step_count": self.step_count,
-            "config": self.config.to_dict(),
-            "metrics": metrics,
-            "training_losses": self.training_losses,
-            "validation_losses": self.validation_losses,
-        }
+        checkpoint_manager.save_checkpoint(
+            params=self.params,
+            opt_state=self.opt_state,
+            epoch=epoch,
+            step_count=self.step_count,
+            metrics=metrics,
+            config=self.config.to_dict(),
+            training_losses=self.training_losses[-100:],  # Last 100 losses
+            validation_losses=self.validation_losses
+        )
+    
+    def load_checkpoint(self, checkpoint_path: str):
+        """Load checkpoint from SafeTensors format"""
+        checkpoint_manager = CheckpointManager(checkpoint_dir="checkpoints")
         
-        checkpoint_path = os.path.join(checkpoint_dir, f"rtdlm_agi_epoch_{epoch}.pkl")
+        checkpoint = checkpoint_manager.load_checkpoint(
+            checkpoint_path=checkpoint_path,
+            load_opt_state=True,
+            reference_opt_state=self.opt_state
+        )
         
-        # Save using JAX's serialization
-        import pickle
-        with open(checkpoint_path, 'wb') as f:
-            pickle.dump(checkpoint, f)
+        self.params = checkpoint["params"]
+        if checkpoint["opt_state"] is not None:
+            self.opt_state = checkpoint["opt_state"]
+        self.step_count = checkpoint.get("step_count", 0)
         
-        print(f"[INFO] Checkpoint saved: {checkpoint_path}")
+        print(f"[INFO] Loaded checkpoint from epoch {checkpoint['epoch']}")
     
     def plot_training_metrics(self):
         """Plot training progress"""
