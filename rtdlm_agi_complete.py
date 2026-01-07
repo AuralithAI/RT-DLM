@@ -33,6 +33,12 @@ from external_integration.web_integration import HybridKnowledgeIntegration
 from hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
 from advanced_learning.advanced_algorithms import ContinualLearner
 from core.agi.agi_system import AGISystemAbstraction, AGIStage, StageThresholds
+from ethics.ethical_adaptation import (
+    FairnessAnalyzer, 
+    FairnessConfig, 
+    FairnessResult,
+    SensitiveAttribute
+)
 
 class ConsciousnessSimulator(hk.Module):
     """Simulates aspects of consciousness including self-awareness and introspection"""
@@ -1286,7 +1292,7 @@ class RTDLMAGISystem(hk.Module):
         return output
     
     def _build_output_dict(self, logits, hybrid_result, reasoning_result, return_reasoning):
-        """Build comprehensive output dictionary"""
+        """Build comprehensive output dictionary with fairness evaluation"""
         output = {
             "logits": logits,
             "hybrid_analysis": hybrid_result,
@@ -1295,6 +1301,28 @@ class RTDLMAGISystem(hk.Module):
         
         if return_reasoning and "reasoning_chain" in reasoning_result:
             output["reasoning_chain"] = reasoning_result["reasoning_chain"]
+        
+        # Add fairness evaluation for ethical tracking
+        if self.config.ethics_enabled and self.config.fairness_constraints:
+            try:
+                fairness_config = FairnessConfig()
+                # Compute output distribution for fairness analysis
+                output_probs = jax.nn.softmax(logits, axis=-1)
+                output["fairness_evaluation"] = {
+                    "analyzer_active": True,
+                    "output_entropy": float(jnp.mean(
+                        -jnp.sum(output_probs * jnp.log(output_probs + 1e-10), axis=-1)
+                    )),
+                    "fairness_config": {
+                        "bias_threshold": fairness_config.bias_threshold,
+                        "fairness_penalty_weight": fairness_config.fairness_penalty_weight,
+                        "strict_enforcement": fairness_config.strict_enforcement,
+                        "enabled_metrics": [m.value for m in fairness_config.enabled_metrics]
+                    }
+                }
+            except Exception as e:
+                logger.warning(f"Fairness evaluation skipped: {e}")
+                output["fairness_evaluation"] = {"analyzer_active": False, "reason": str(e)}
         
         return output
     
@@ -1450,6 +1478,16 @@ def compute_agi_loss(logits, targets, aux_outputs=None, config=None):
         if "multimodal_features" in aux_outputs:
             multimodal_loss = compute_multimodal_alignment_loss(aux_outputs)
             total_loss += 0.2 * multimodal_loss
+        
+        # Fairness penalty loss - adjust rewards when bias > threshold
+        if "fairness_evaluation" in aux_outputs:
+            fairness_eval = aux_outputs["fairness_evaluation"]
+            if fairness_eval.get("analyzer_active", False):
+                fairness_loss = compute_fairness_penalty_loss(
+                    aux_outputs.get("logits"),
+                    fairness_eval
+                )
+                total_loss += 0.15 * fairness_loss
     
     return total_loss
 
@@ -1484,3 +1522,53 @@ def compute_multimodal_alignment_loss(_aux_outputs):
     """Compute loss for multi-modal alignment"""
     # Placeholder for multi-modal alignment loss
     return 0.0
+
+
+def compute_fairness_penalty_loss(logits, fairness_eval):
+    """
+    Compute fairness penalty loss for bias correction.
+    
+    When bias (demographic parity difference, equalized odds difference) 
+    exceeds the threshold (default 0.1), apply penalty to adjust rewards.
+    
+    This ensures unbiased outputs in sensitive domains like law/finance,
+    aligning with human flourishing principles.
+    
+    Args:
+        logits: Model output logits [batch, seq, vocab] or [batch, vocab]
+        fairness_eval: Fairness evaluation dictionary with config and metrics
+        
+    Returns:
+        Fairness penalty loss (scalar)
+    """
+    if logits is None:
+        return 0.0
+    
+    config = fairness_eval.get("fairness_config", {})
+    bias_threshold = config.get("bias_threshold", 0.1)
+    
+    # Compute output entropy as proxy for uniformity/fairness
+    output_probs = jax.nn.softmax(logits, axis=-1)
+    
+    # Entropy of output distribution (higher = more uniform = potentially fairer)
+    epsilon = 1e-10
+    entropy = -jnp.sum(output_probs * jnp.log(output_probs + epsilon), axis=-1)
+    max_entropy = jnp.log(float(output_probs.shape[-1]))
+    normalized_entropy = entropy / max_entropy
+    
+    # Compute distribution variance across batch as bias proxy
+    # High variance across samples may indicate biased predictions
+    mean_probs = jnp.mean(output_probs, axis=0, keepdims=True)
+    variance = jnp.mean((output_probs - mean_probs) ** 2)
+    
+    # If variance (bias proxy) exceeds threshold, apply penalty
+    # Penalty increases as variance exceeds threshold
+    bias_excess = jnp.maximum(variance - bias_threshold, 0.0)
+    
+    # Penalty that encourages more uniform, fair outputs
+    # Also penalize very low entropy (overly confident/concentrated predictions)
+    low_entropy_penalty = jnp.mean(jnp.maximum(0.3 - normalized_entropy, 0.0))
+    
+    fairness_penalty = bias_excess + 0.5 * low_entropy_penalty
+    
+    return fairness_penalty

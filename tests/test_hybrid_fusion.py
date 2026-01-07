@@ -236,7 +236,8 @@ def test_multi_agent_consensus():
     
     def forward(inputs):
         mac = MultiAgentConsensus(d_model=32, num_agents=4)
-        return mac(inputs)
+        # Disable auto-spawning to get exactly 4 agents
+        return mac(inputs, auto_spawn=False)
     
     model = hk.transform(forward)
     rng = jax.random.PRNGKey(0)

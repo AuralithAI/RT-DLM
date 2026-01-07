@@ -718,10 +718,12 @@ class LogicReasoningEngine(hk.Module):
         # Generate conclusions
         conclusions = self.conclusion_generator(inferred)
         
-        # Aggregate conclusions
-        aggregated_conclusions = jnp.mean(conclusions, axis=1)
-        
-        return aggregated_conclusions
+        # Preserve input shape - only aggregate if 2D input
+        if inputs.ndim == 2:
+            return jnp.mean(conclusions, axis=0, keepdims=True) if conclusions.ndim == 1 else conclusions
+        else:
+            # Keep sequence dimension for 3D inputs
+            return conclusions
 
 
 class SymbolGroundingModule(hk.Module):
@@ -997,14 +999,30 @@ class AdaptiveWeightingModule(hk.Module):
     
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
         """Calculate adaptive weights based on input characteristics"""
-        # Analyze input complexity
-        complexity = self.complexity_analyzer(inputs.mean(axis=1))
+        # Handle both 2D [batch, d_model] and 3D [batch, seq, d_model] inputs
+        if inputs.ndim == 3:
+            pooled_input = inputs.mean(axis=1)  # [batch, d_model]
+            input_std = jnp.std(inputs, axis=1)  # [batch, d_model]
+        else:
+            pooled_input = inputs  # [batch, d_model]
+            input_std = jnp.std(inputs, axis=-1, keepdims=True)  # [batch, 1]
         
-        # Estimate noise level
-        noise_level = self.noise_estimator(jnp.std(inputs, axis=1, keepdims=True))
+        # Analyze input complexity
+        complexity = self.complexity_analyzer(pooled_input)  # [batch, 1]
+        
+        # Estimate noise level - ensure 2D output
+        if input_std.ndim > 2:
+            input_std = input_std.squeeze()
+        if input_std.ndim == 1:
+            input_std = input_std[:, None]
+        noise_level = self.noise_estimator(input_std)  # [batch, 1]
+        
+        # Ensure both have same shape for concatenation
+        if noise_level.ndim > 2:
+            noise_level = noise_level.squeeze(-1)
         
         # Combine characteristics
-        characteristics = jnp.concatenate([complexity, noise_level], axis=-1)
+        characteristics = jnp.concatenate([complexity, noise_level], axis=-1)  # [batch, 2]
         
         # Calculate adaptive weights
         adaptive_weights = self.adaptivity_controller(characteristics)
@@ -1043,29 +1061,36 @@ class EnsembleFusion(hk.Module):
         
         model_outputs expected order: [traditional_ml, deep_learning, symbolic, probabilistic]
         """
+        # Normalize all outputs to 2D [batch, d_model] for consistent stacking
+        normalized_outputs = []
+        for output in model_outputs:
+            if output.ndim == 3:
+                # Pool sequence dimension: [batch, seq, d_model] -> [batch, d_model]
+                normalized = jnp.mean(output, axis=1)
+            elif output.ndim == 2:
+                normalized = output
+            else:
+                # Handle unexpected dimensions
+                normalized = output.reshape(output.shape[0], -1)
+                if normalized.shape[-1] != self.d_model:
+                    normalized = normalized[..., :self.d_model]
+            normalized_outputs.append(normalized)
+        
         # Stack model outputs
-        stacked_outputs = jnp.stack(model_outputs, axis=1)  # [batch, num_models, d_model]
+        stacked_outputs = jnp.stack(normalized_outputs, axis=1)  # [batch, num_models, d_model]
         
         # Compute cross-paradigm interaction between statistical (traditional) and deep learning
         # model_outputs[0] = traditional ML, model_outputs[1] = deep learning
-        statistical_features = model_outputs[0]  # [batch, d_model] or [batch, seq, d_model]
-        deep_features = model_outputs[1]
+        statistical_features = normalized_outputs[0]  # [batch, d_model]
+        deep_features = normalized_outputs[1]  # [batch, d_model]
         
         # Compute outer product interaction: captures feature correlations across paradigms
-        if statistical_features.ndim == 2:
-            # [batch, d_model] case - compute outer product per batch element
-            # Use mean pooling to get fixed-size interaction
-            interaction = jnp.einsum('bi,bj->bij', statistical_features, deep_features)
-            # Take diagonal + trace as summary (efficient approximation)
-            interaction_diag = jnp.diagonal(interaction, axis1=1, axis2=2)
-            interaction_trace = jnp.trace(interaction, axis1=1, axis2=2, dtype=interaction.dtype)
-            interaction_summary = interaction_diag * (1.0 + interaction_trace[:, None] / self.d_model)
-        else:
-            # [batch, seq, d_model] case - compute per-position interaction
-            interaction = jnp.einsum('bsi,bsj->bsij', statistical_features, deep_features)
-            interaction_diag = jnp.diagonal(interaction, axis1=2, axis2=3)
-            interaction_trace = jnp.trace(interaction, axis1=2, axis2=3, dtype=interaction.dtype)
-            interaction_summary = interaction_diag * (1.0 + interaction_trace[..., None] / self.d_model)
+        # [batch, d_model] case - compute outer product per batch element
+        interaction = jnp.einsum('bi,bj->bij', statistical_features, deep_features)
+        # Take diagonal + trace as summary (efficient approximation)
+        interaction_diag = jnp.diagonal(interaction, axis1=1, axis2=2)
+        interaction_trace = jnp.trace(interaction, axis1=1, axis2=2, dtype=interaction.dtype)
+        interaction_summary = interaction_diag * (1.0 + interaction_trace[:, None] / self.d_model)
         
         # Project interaction to match dimensions
         interaction_features = self.interaction_projection(interaction_summary)
@@ -1073,21 +1098,14 @@ class EnsembleFusion(hk.Module):
         # Apply attention fusion
         fused = self.fusion_attention(stacked_outputs, stacked_outputs, stacked_outputs)
         
-        # Weight by approach weights
+        # Weight by approach weights - fused is [batch, num_models, d_model]
         weighted_fused = fused * weights[:, :, None]
         
         # Sum across models
-        ensemble_output = jnp.sum(weighted_fused, axis=1)
+        ensemble_output = jnp.sum(weighted_fused, axis=1)  # [batch, d_model]
         
-        # Add cross-paradigm interaction
-        if ensemble_output.ndim != interaction_features.ndim:
-            # Handle dimension mismatch
-            if interaction_features.ndim == 2 and ensemble_output.ndim == 3:
-                interaction_features = interaction_features[:, None, :]
-            elif interaction_features.ndim == 3 and ensemble_output.ndim == 2:
-                interaction_features = jnp.mean(interaction_features, axis=1)
-        
-        ensemble_output = ensemble_output + 0.1 * interaction_features  # Residual connection
+        # Add cross-paradigm interaction as residual connection
+        ensemble_output = ensemble_output + 0.1 * interaction_features
         
         # Final projection
         final_output = self.final_projection(ensemble_output)
@@ -1118,8 +1136,20 @@ class KnowledgeDistillationModule(hk.Module):
     
     def __call__(self, ensemble_output: jnp.ndarray, teacher_outputs: List[jnp.ndarray]) -> jnp.ndarray:
         """Distill knowledge from ensemble to student network"""
+        # Normalize all teacher outputs to 2D [batch, d_model] before concatenation
+        normalized_teachers = []
+        for output in teacher_outputs:
+            if output.ndim == 3:
+                # Pool sequence dimension: [batch, seq, d_model] -> [batch, d_model]
+                normalized = jnp.mean(output, axis=1)
+            elif output.ndim == 2:
+                normalized = output
+            else:
+                normalized = output.reshape(output.shape[0], -1)
+            normalized_teachers.append(normalized)
+        
         # Extract knowledge from all teachers
-        teacher_knowledge = jnp.concatenate(teacher_outputs, axis=-1)
+        teacher_knowledge = jnp.concatenate(normalized_teachers, axis=-1)
         extracted_knowledge = self.knowledge_extractor(teacher_knowledge)
         
         # Train student to match ensemble
