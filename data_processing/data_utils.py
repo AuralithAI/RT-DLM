@@ -4,9 +4,9 @@ import numpy as np
 import sentencepiece as spm
 import jax.numpy as jnp
 from typing import List
-from config.train_config import TrainConfig
+from config.agi_config import AGIConfig
 
-config = TrainConfig()
+config = AGIConfig()
 
 class DataProcessor:
     def __init__(self, vocab_size: int = config.vocab_size, model_prefix: str = "data/rt_dlm_sp"):
