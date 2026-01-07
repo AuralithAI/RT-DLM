@@ -25,6 +25,14 @@ from rtdlm import RT_DLM_AGI, create_rtdlm_agi
 from config.agi_config import AGIConfig
 from data_processing.data_utils import DataProcessor
 from core.checkpoint_manager import CheckpointManager
+from core.sampling import (
+    TokenSampler, 
+    SamplingConfig, 
+    SampleOutput,
+    create_sampling_config_balanced,
+    create_sampling_config_creative,
+    create_sampling_config_precise
+)
 
 class RT_DLM_AGI_Assistant:
     """Interactive RT-DLM AGI Assistant for demonstrations and real-world usage"""
@@ -46,6 +54,10 @@ class RT_DLM_AGI_Assistant:
         self.params = None
         self.conversation_history = []
         self.knowledge_base = []
+        
+        # Initialize token sampler for advanced generation
+        self.sampler = TokenSampler(vocab_size=config.vocab_size)
+        self.default_sampling_config = create_sampling_config_balanced()
         
         # Initialize or load model
         if checkpoint_path and os.path.exists(checkpoint_path):
@@ -125,26 +137,142 @@ class RT_DLM_AGI_Assistant:
         
         return token_array
     
-    def postprocess_output(self, logits: jnp.ndarray, temperature: float = 1.0) -> str:
-        """Convert model logits to human-readable text"""
-        # Apply temperature scaling
-        scaled_logits = logits / temperature
+    def postprocess_output(
+        self, 
+        logits: jnp.ndarray, 
+        temperature: float = 1.0,
+        top_k: int = 50,
+        top_p: float = 0.9,
+        repetition_penalty: float = 1.0,
+        generated_tokens: Optional[jnp.ndarray] = None,
+        return_probs: bool = False
+    ) -> str | Dict[str, Any]:
+        """Convert model logits to human-readable text using advanced sampling.
         
-        # Sample from distribution
+        Args:
+            logits: Model output logits [batch_size, seq_len, vocab_size]
+            temperature: Temperature for sampling (lower = more deterministic)
+            top_k: Only consider top-K tokens (0 to disable)
+            top_p: Nucleus sampling threshold (1.0 to disable)
+            repetition_penalty: Penalty for repeated tokens (1.0 = no penalty)
+            generated_tokens: Previously generated tokens for repetition penalty
+            return_probs: If True, return dict with text and probability info
+            
+        Returns:
+            Generated text string, or dict with text and probabilities if return_probs=True
+        """
+        # Create sampling config
+        sampling_config = SamplingConfig(
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
+            log_probs=return_probs
+        )
+        
+        # Sample using advanced sampler
         self.rng, sample_rng = jax.random.split(self.rng)
-        token_ids = jax.random.categorical(sample_rng, scaled_logits, axis=-1)
+        sample_output: SampleOutput = self.sampler.sample(
+            logits, 
+            sampling_config, 
+            sample_rng,
+            generated_tokens=generated_tokens
+        )
         
         # Convert to text
-        token_ids_list = token_ids[0].tolist()
+        token_ids_list = sample_output.token_id.flatten().tolist()
         
         # Remove padding tokens
         filtered_tokens = [t for t in token_ids_list if t != self.config.pad_token_id]
         
         try:
             generated_text = self.data_processor.decode_tokens(filtered_tokens)
-            return generated_text
-        except:
-            return "[Generated text could not be decoded]"
+        except Exception as e:
+            logger.warning(f"Token decoding failed: {e}")
+            generated_text = "[Generated text could not be decoded]"
+        
+        if return_probs:
+            return {
+                "text": generated_text,
+                "token_ids": token_ids_list,
+                "token_prob": float(sample_output.token_prob.mean()),
+                "token_log_prob": float(sample_output.token_log_prob.mean()),
+                "entropy": float(sample_output.entropy.mean()),
+                "top_k_tokens": sample_output.top_k_token_ids.tolist(),
+                "top_k_probs": sample_output.top_k_probs.tolist(),
+            }
+        
+        return generated_text
+    
+    def generate_with_config(
+        self,
+        prompt: str,
+        sampling_config: Optional[SamplingConfig] = None,
+        max_new_tokens: int = 100
+    ) -> Dict[str, Any]:
+        """Generate text with full control over sampling parameters.
+        
+        Args:
+            prompt: Input text prompt
+            sampling_config: Sampling configuration (uses default if None)
+            max_new_tokens: Maximum tokens to generate
+            
+        Returns:
+            Dict with generated text, tokens, and probability information
+        """
+        if sampling_config is None:
+            sampling_config = self.default_sampling_config
+        
+        # Tokenize input
+        input_tokens = self.preprocess_input(prompt)
+        
+        # Prepare batch
+        batch = {"text": input_tokens}
+        if self.config.multimodal_enabled:
+            batch["multimodal_inputs"] = {
+                "images": jnp.zeros((1, 224, 224, 3)),
+                "audio": jnp.zeros((1, 128, 128)),
+            }
+        
+        # Run model
+        self.rng, forward_rng = jax.random.split(self.rng)
+        model_output = self.model.apply(self.params, forward_rng, **batch)
+        logits = model_output["logits"]
+        
+        # Sample with config
+        self.rng, sample_rng = jax.random.split(self.rng)
+        sample_output = self.sampler.sample(logits, sampling_config, sample_rng)
+        
+        # Decode tokens
+        token_ids_list = sample_output.token_id.flatten().tolist()
+        filtered_tokens = [t for t in token_ids_list if t != self.config.pad_token_id]
+        
+        try:
+            generated_text = self.data_processor.decode_tokens(filtered_tokens)
+        except Exception as e:
+            logger.warning(f"Token decoding failed: {e}")
+            generated_text = "[Decoding error]"
+        
+        return {
+            "text": generated_text,
+            "tokens": token_ids_list,
+            "token_probs": sample_output.token_prob.tolist(),
+            "log_probs": sample_output.token_log_prob.tolist(),
+            "entropy": float(sample_output.entropy.mean()),
+            "top_alternatives": [
+                {
+                    "token_ids": sample_output.top_k_token_ids[i].tolist(),
+                    "probs": sample_output.top_k_probs[i].tolist()
+                }
+                for i in range(sample_output.top_k_token_ids.shape[0])
+            ],
+            "sampling_config": {
+                "temperature": sampling_config.temperature,
+                "top_k": sampling_config.top_k,
+                "top_p": sampling_config.top_p,
+                "repetition_penalty": sampling_config.repetition_penalty
+            }
+        }
     
     def _compute_attention_fusion(self, query: jnp.ndarray, context: jnp.ndarray) -> jnp.ndarray:
         """Compute attention-based fusion between query and context

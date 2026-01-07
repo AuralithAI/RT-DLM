@@ -197,7 +197,7 @@ def run_benchmark():
         # Import AGI components
         sys.path.insert(0, str(PROJECT_ROOT))
         from config.agi_config import AGIConfig
-        from agi_inference import RT_DLM_AGI_Assistant
+        from inference import RT_DLM_AGI_Assistant
         
         # Create lightweight config for benchmarking
         config = AGIConfig(
