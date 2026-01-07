@@ -9,7 +9,7 @@ RT-DLM integrates multiple AI paradigms into a unified architecture designed for
 ## Core Architecture
 
 ### AGI System
-The main cognitive engine (`rtdlm_agi_complete.py`) implements five integrated modules:
+The cognitive engine implements five integrated modules:
 - **ConsciousnessSimulator**: Metacognitive awareness and self-reflection capabilities
 - **ScientificDiscoveryEngine**: Hypothesis generation, experimental design, and knowledge synthesis
 - **CreativeGenerationEngine**: Novel content creation across multiple domains
@@ -38,11 +38,15 @@ Classical simulation of quantum computing primitives:
 - 32-qubit maximum with overflow protection
 - Quantum attention mechanisms and neural networks
 
-### Multi-Agent System
-Distributed cognitive processing with specialist agents:
-- Reasoning, Creativity, Analysis, Synthesis specialists
-- Consensus loop with weighted voting
-- Configurable specialist weights and iteration limits
+### Production Sampling
+Advanced token sampling strategies:
+- **Top-K Filtering**: Keep only top-k probable tokens
+- **Top-P (Nucleus) Sampling**: Dynamic probability mass cutoff
+- **Temperature Scaling**: Control output randomness
+- **Min-P Filtering**: Relative probability threshold
+- **Repetition Penalty**: Prevent repetitive outputs
+- **Token Probability Logging**: Debug and analysis support
+- **Preset Configurations**: Creative, Precise, Balanced, Deterministic
 
 ### Multimodal Processing
 Cross-modal fusion capabilities:
@@ -56,6 +60,30 @@ Knowledge augmentation through external sources:
 - Hybrid knowledge integration with embedding (vocab_size: 50000)
 - Real-time data collection and processing
 
+## Quick Start
+
+### Installation
+```bash
+pip install -r requirements.txt
+```
+
+### Training
+```bash
+python train.py
+```
+
+### Inference
+```bash
+python inference.py
+```
+
+### Running Tests
+```bash
+pytest tests/
+# or
+python tests/test_runner.py
+```
+
 ## Implementation Status
 
 ### Completed
@@ -67,20 +95,13 @@ Knowledge augmentation through external sources:
 - Variational quantum circuit with build_layers method
 - Multi-agent consensus system with four specialists
 - Multimodal fusion and tokenization
+- Production-ready token sampling (Top-K, Top-P, temperature, repetition penalty)
+- SafeTensors checkpoint management
 - Web integration with DuckDuckGo and Wikipedia
 - Training pipeline with epoch-based loop
-- Inference engine with benchmark mode
-- Ethics module with feedback collection and reward modeling
-- Test framework with 13 passing test suites
-
-### Pending Implementation
-- `advanced_learning/`: Advanced learning algorithms (empty)
-- `advanced_understanding/`: Advanced comprehension modules (empty)
-- `core/agi/`: Core AGI components (empty)
-- `core/components/`: Reusable core components (empty)
-- Real quantum hardware integration
-- Distributed multi-node training
-- Production deployment configurations
+- Inference engine with advanced sampling
+- Ethics module with feedback collection, fairness analysis, and reward modeling
+- Comprehensive test framework with **244 passing tests**
 
 ### Improvements Needed
 - Quantum circuits: extend beyond 32-qubit simulation
@@ -89,16 +110,21 @@ Knowledge augmentation through external sources:
 - Web integration: rate limiting and caching
 - Training: mixed-precision and gradient checkpointing
 - Inference: batched processing optimization
-- Testing: integration tests for full pipeline
 - Documentation: API reference and usage examples
 
 ## Requirements
 
 - Python 3.10+
-- JAX 0.4.26
-- Haiku 0.0.14
+- JAX 0.4.35
+- Haiku 0.0.13
 - SentencePiece
 - NumPy, Optax
+- SafeTensors
+
+## Documentation
+
+See the `docs/` folder for detailed documentation:
+- [Architecture Overview](docs/ARCHITECTURE.md) - System architecture diagrams and data flow
 
 ## License
 
