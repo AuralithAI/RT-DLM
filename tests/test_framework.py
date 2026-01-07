@@ -16,7 +16,7 @@ from pathlib import Path
 # Add project to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from data_processing.data_utils import DataProcessor
+from data.processing.data_utils import DataProcessor
 from config.agi_config import AGIConfig
 
 @dataclass
@@ -319,3 +319,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     sys.exit(0 if success else 1)
+

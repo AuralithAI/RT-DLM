@@ -14,7 +14,20 @@ tensorflow_datasets==4.9.7
 tensorflow==2.18.0
 
 # Memory and retrieval systems
-faiss-cpu==1.10.0
+# Windows: use faiss-cpu (faiss-gpu not supported on Windows)
+# Linux/Mac: use faiss-gpu for GPU acceleration, or faiss-cpu for CPU-only
+faiss-cpu==1.10.0  # For GPU: pip install faiss-gpu instead
+#faiss-gpu
+
+# Security
+cryptography>=42.0.0
+python-stdnum>=1.18
+
+# Safe model serialization
+safetensors>=0.4.0
+
+# Fairness and Ethical AI
+fairlearn>=0.10.0
 
 # Visualization and monitoring
 matplotlib==3.10.0

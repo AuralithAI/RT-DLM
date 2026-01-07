@@ -14,8 +14,8 @@ import jax
 import jax.numpy as jnp
 import haiku as hk
 
-from rtdlm_agi_complete import SocialEmotionalIntelligence
-from multimodal.hybrid_audio_module import AudioEmotionModule
+from rtdlm import SocialEmotionalIntelligence
+from modules.multimodal.hybrid_audio_module import AudioEmotionModule
 
 # Test constants
 D_MODEL = 64
@@ -120,3 +120,4 @@ class TestAudioEmotionIntegration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

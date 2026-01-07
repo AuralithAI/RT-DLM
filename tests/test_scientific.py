@@ -14,7 +14,7 @@ import jax
 import jax.numpy as jnp
 import haiku as hk
 
-from rtdlm_agi_complete import ScientificDiscoveryEngine
+from rtdlm import ScientificDiscoveryEngine
 
 # Test constants
 D_MODEL = 64
@@ -181,3 +181,4 @@ class TestCausalReasoningAdvanced(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

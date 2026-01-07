@@ -22,7 +22,7 @@ import jax.numpy as jnp
 import haiku as hk
 import numpy as np
 
-from advanced_understanding.comprehension_modules import (
+from modules.capabilities.comprehension_modules import (
     SemanticParser,
     GraphAttentionLayer,
     ConceptualGraphBuilder,
@@ -380,3 +380,4 @@ class TestSemanticParserFactory(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

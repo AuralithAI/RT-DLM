@@ -27,7 +27,7 @@ class TestTrainingBatch(unittest.TestCase):
     def test_create_training_batch_text_only(self):
         """Test creating a text-only training batch"""
         from config.agi_config import AGIConfig
-        from train_agi import AGITrainer
+        from train import AGITrainer
         
         # Create minimal config for testing
         config = AGIConfig(
@@ -51,7 +51,7 @@ class TestTrainingBatch(unittest.TestCase):
     def test_create_training_batch_multimodal(self):
         """Test creating a multimodal training batch"""
         from config.agi_config import AGIConfig
-        from train_agi import AGITrainer
+        from train import AGITrainer
         
         config = AGIConfig(
             d_model=D_MODEL,
@@ -79,7 +79,7 @@ class TestTrainingBatch(unittest.TestCase):
     def test_create_training_batch_with_real_images(self):
         """Test creating batch with real image data"""
         from config.agi_config import AGIConfig
-        from train_agi import AGITrainer
+        from train import AGITrainer
         
         config = AGIConfig(
             d_model=D_MODEL,
@@ -114,7 +114,7 @@ class TestReasoningTask(unittest.TestCase):
     def test_create_reasoning_task(self):
         """Test creating reasoning tasks"""
         from config.agi_config import AGIConfig
-        from train_agi import AGITrainer
+        from train import AGITrainer
         
         config = AGIConfig(
             d_model=D_MODEL,
@@ -194,7 +194,7 @@ class TestEvaluateReasoningQuality(unittest.TestCase):
     def test_evaluate_reasoning_with_ground_truth(self):
         """Test reasoning evaluation with ground truth"""
         from config.agi_config import AGIConfig
-        from train_agi import AGITrainer
+        from train import AGITrainer
         
         config = AGIConfig(
             d_model=D_MODEL,
@@ -221,7 +221,7 @@ class TestEvaluateReasoningQuality(unittest.TestCase):
     def test_evaluate_empty_reasoning_chain(self):
         """Test evaluation with empty reasoning chain"""
         from config.agi_config import AGIConfig
-        from train_agi import AGITrainer
+        from train import AGITrainer
         
         config = AGIConfig(
             d_model=D_MODEL,
@@ -239,3 +239,4 @@ class TestEvaluateReasoningQuality(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

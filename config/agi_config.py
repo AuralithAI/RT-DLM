@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-from tokenization.multimodal_tokenizer import TokenizationConfig
+from modules.tokenization.multimodal_tokenizer import TokenizationConfig
 
 class AGIConfig:
     """
@@ -232,3 +232,4 @@ class AGIConfig:
         print(f"  - Learning rate: {self.learning_rate}")
         print(f"  - Epochs: {self.num_epochs}")
         print("=" * 60)
+

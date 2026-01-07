@@ -14,7 +14,7 @@ import jax
 import jax.numpy as jnp
 import haiku as hk
 
-from rtdlm_agi_complete import CreativeGenerationEngine
+from rtdlm import CreativeGenerationEngine
 
 # Test constants
 D_MODEL = 64
@@ -136,3 +136,4 @@ class TestCreativeGenerationEngine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

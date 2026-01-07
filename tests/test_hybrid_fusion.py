@@ -32,7 +32,7 @@ class TestHybridFusion:
     
     def test_ensemble_fusion_initialization(self, rng_key, d_model):
         """Test EnsembleFusion module initializes correctly"""
-        from hybrid_architecture.hybrid_integrator import EnsembleFusion
+        from modules.hybrid_architecture.hybrid_integrator import EnsembleFusion
         
         def forward(model_outputs, weights):
             fusion = EnsembleFusion(d_model)
@@ -59,7 +59,7 @@ class TestHybridFusion:
     
     def test_cross_paradigm_interaction(self, rng_key, d_model):
         """Test that cross-paradigm interaction (outer product) is computed"""
-        from hybrid_architecture.hybrid_integrator import EnsembleFusion
+        from modules.hybrid_architecture.hybrid_integrator import EnsembleFusion
         
         def forward(model_outputs, weights):
             fusion = EnsembleFusion(d_model)
@@ -88,7 +88,7 @@ class TestHybridFusion:
     
     def test_fusion_with_sequence_input(self, rng_key, d_model):
         """Test fusion with 3D sequence inputs"""
-        from hybrid_architecture.hybrid_integrator import EnsembleFusion
+        from modules.hybrid_architecture.hybrid_integrator import EnsembleFusion
         
         def forward(model_outputs, weights):
             fusion = EnsembleFusion(d_model)
@@ -116,7 +116,7 @@ class TestHybridFusion:
     
     def test_rbf_kernel_svm(self, rng_key, d_model):
         """Test RBF kernel in SVM-like classifier"""
-        from hybrid_architecture.hybrid_integrator import SVMLikeClassifier
+        from modules.hybrid_architecture.hybrid_integrator import SVMLikeClassifier
         
         def forward(x):
             svm = SVMLikeClassifier(d_model, num_support_vectors=16, gamma=0.1)
@@ -136,7 +136,7 @@ class TestHybridFusion:
     
     def test_cnn_branch_vectorized(self, rng_key, d_model):
         """Test vectorized CNN branch processing"""
-        from hybrid_architecture.hybrid_integrator import CNNBranch
+        from modules.hybrid_architecture.hybrid_integrator import CNNBranch
         
         def forward(x):
             cnn = CNNBranch(d_model)
@@ -156,7 +156,7 @@ class TestHybridFusion:
     
     def test_full_hybrid_integrator(self, rng_key, d_model):
         """Test complete hybrid architecture integrator"""
-        from hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
+        from modules.hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
         
         def forward(inputs, task_type=None):
             integrator = HybridArchitectureIntegrator(d_model)
@@ -185,7 +185,7 @@ class TestHybridFusion:
     
     def test_fusion_deterministic(self, rng_key, d_model):
         """Test that fusion is deterministic with same inputs"""
-        from hybrid_architecture.hybrid_integrator import EnsembleFusion
+        from modules.hybrid_architecture.hybrid_integrator import EnsembleFusion
         
         def forward(model_outputs, weights):
             fusion = EnsembleFusion(d_model)
@@ -209,7 +209,7 @@ class TestHybridFusion:
 
 def test_ensemble_fusion_basic():
     """Basic test for ensemble fusion without fixtures"""
-    from hybrid_architecture.hybrid_integrator import EnsembleFusion
+    from modules.hybrid_architecture.hybrid_integrator import EnsembleFusion
     
     def forward(model_outputs, weights):
         fusion = EnsembleFusion(d_model=32)
@@ -232,11 +232,12 @@ def test_ensemble_fusion_basic():
 
 def test_multi_agent_consensus():
     """Test multi-agent system with consensus loop"""
-    from hybrid_architecture.hybrid_integrator import MultiAgentConsensus
+    from modules.hybrid_architecture.hybrid_integrator import MultiAgentConsensus
     
     def forward(inputs):
         mac = MultiAgentConsensus(d_model=32, num_agents=4)
-        return mac(inputs)
+        # Disable auto-spawning to get exactly 4 agents
+        return mac(inputs, auto_spawn=False)
     
     model = hk.transform(forward)
     rng = jax.random.PRNGKey(0)
@@ -265,7 +266,7 @@ def test_multi_agent_consensus():
 
 def test_specialist_agent():
     """Test individual specialist agent"""
-    from hybrid_architecture.hybrid_integrator import SpecialistAgent
+    from modules.hybrid_architecture.hybrid_integrator import SpecialistAgent
     
     def forward(inputs):
         agent = SpecialistAgent(d_model=32, specialization="reasoning")
@@ -296,3 +297,4 @@ if __name__ == "__main__":
     
     # Run pytest tests
     pytest.main([__file__, "-v"])
+
