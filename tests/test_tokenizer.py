@@ -4,10 +4,51 @@ Test script for the Advanced Multi-Modal Tokenizer
 
 import os
 import sys
+import shutil
+import pytest
 # Add parent directory to path so we can import from tokenization module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tokenization.multimodal_tokenizer import MultiModalTokenizer, TokenizationConfig, ModalityType
+
+
+# Test data directory path
+TEST_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_data")
+
+
+@pytest.fixture(autouse=True)
+def cleanup_test_files():
+    """Fixture to clean up test files after each test."""
+    # Setup: nothing to do before test
+    yield
+    # Teardown: clean up files created during test
+    cleanup_test_data()
+
+
+def cleanup_test_data():
+    """Remove test data files created during testing."""
+    files_to_remove = [
+        os.path.join(TEST_DATA_DIR, "sample.txt"),
+        os.path.join(TEST_DATA_DIR, "sample.json"),
+        os.path.join(TEST_DATA_DIR, "sample.xml"),
+        os.path.join(TEST_DATA_DIR, "sample.py"),
+    ]
+    
+    for file_path in files_to_remove:
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                print(f"[WARN] Could not remove {file_path}: {e}")
+    
+    # Also clean up tokenizers directory if created
+    tokenizers_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tokenizers")
+    if os.path.exists(tokenizers_dir):
+        try:
+            shutil.rmtree(tokenizers_dir)
+        except Exception as e:
+            print(f"[WARN] Could not remove tokenizers directory: {e}")
+
 
 def test_multimodal_tokenizer():
     """Test the advanced multi-modal tokenizer with various data types."""
@@ -166,18 +207,19 @@ def test_multimodal_tokenizer():
 def create_sample_files_for_testing():
     """Create sample files for testing different modalities."""
     
-    os.makedirs("test_data", exist_ok=True)
+    # Use the global test data directory constant
+    os.makedirs(TEST_DATA_DIR, exist_ok=True)
     
     # Create sample text file
-    with open("test_data/sample.txt", "w") as f:
+    with open(os.path.join(TEST_DATA_DIR, "sample.txt"), "w") as f:
         f.write("This is a sample text file for testing the AGI tokenizer.")
     
     # Create sample JSON file
-    with open("test_data/sample.json", "w") as f:
+    with open(os.path.join(TEST_DATA_DIR, "sample.json"), "w") as f:
         f.write('{"model": "RT-DLM", "version": "2.0", "capabilities": ["AGI", "multimodal"]}')
     
     # Create sample XML file
-    with open("test_data/sample.xml", "w") as f:
+    with open(os.path.join(TEST_DATA_DIR, "sample.xml"), "w") as f:
         f.write("""<?xml version="1.0"?>
 <agi>
     <name>RT-DLM</name>
@@ -190,7 +232,7 @@ def create_sample_files_for_testing():
 </agi>""")
     
     # Create sample Python code file
-    with open("test_data/sample.py", "w") as f:
+    with open(os.path.join(TEST_DATA_DIR, "sample.py"), "w") as f:
         f.write("""# RT-DLM AGI Sample Code
 def process_multimodal_input(text, image, audio, video):
     \"\"\"Process multi-modal input through AGI system.\"\"\"
@@ -210,34 +252,42 @@ def process_multimodal_input(text, image, audio, video):
     return agi_output
 """)
     
-    print("[INFO] Sample test files created in 'test_data/' directory")
+    print(f"[INFO] Sample test files created in '{TEST_DATA_DIR}' directory")
+
 
 if __name__ == "__main__":
-    # Create sample files for testing
-    create_sample_files_for_testing()
+    try:
+        # Create sample files for testing
+        create_sample_files_for_testing()
+        
+        # Run the main test
+        tokenizer = test_multimodal_tokenizer()
+        
+        print("\n[TEST] TESTING WITH SAMPLE FILES")
+        print("=" * 40)
+        
+        # Test with actual files
+        file_tests = [
+            (os.path.join(TEST_DATA_DIR, "sample.txt"), ModalityType.TEXT),
+            (os.path.join(TEST_DATA_DIR, "sample.json"), ModalityType.JSON),
+            (os.path.join(TEST_DATA_DIR, "sample.xml"), ModalityType.XML),
+            (os.path.join(TEST_DATA_DIR, "sample.py"), ModalityType.CODE)
+        ]
+        
+        for file_path, modality in file_tests:
+            if os.path.exists(file_path):
+                print(f"\n[FILE] Testing {file_path}")
+                try:
+                    tokens = tokenizer.tokenize(file_path, modality)
+                    print(f"[OK] File tokenized: {len(tokens)} tokens")
+                    print(f"Sample tokens: {tokens[:5]}...{tokens[-5:]}")
+                except Exception as e:
+                    print(f"[FAIL] Error: {e}")
+        
+        print("\n[COMPLETE] All tests completed! Your AGI tokenizer is ready!")
     
-    # Run the main test
-    tokenizer = test_multimodal_tokenizer()
-    
-    print("\n[TEST] TESTING WITH SAMPLE FILES")
-    print("=" * 40)
-    
-    # Test with actual files
-    file_tests = [
-        ("test_data/sample.txt", ModalityType.TEXT),
-        ("test_data/sample.json", ModalityType.JSON),
-        ("test_data/sample.xml", ModalityType.XML),
-        ("test_data/sample.py", ModalityType.CODE)
-    ]
-    
-    for file_path, modality in file_tests:
-        if os.path.exists(file_path):
-            print(f"\n[FILE] Testing {file_path}")
-            try:
-                tokens = tokenizer.tokenize(file_path, modality)
-                print(f"[OK] File tokenized: {len(tokens)} tokens")
-                print(f"Sample tokens: {tokens[:5]}...{tokens[-5:]}")
-            except Exception as e:
-                print(f"[FAIL] Error: {e}")
-    
-    print("\n[COMPLETE] All tests completed! Your AGI tokenizer is ready!")
+    finally:
+        # Cleanup: remove test files created during testing
+        print("\n[CLEANUP] Cleaning up test files...")
+        cleanup_test_data()
+        print("[CLEANUP] Done!")
