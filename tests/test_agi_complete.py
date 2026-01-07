@@ -30,7 +30,7 @@ import jax
 import jax.numpy as jnp
 import haiku as hk
 
-from rtdlm_agi_complete import (
+from rtdlm import (
     ConsciousnessSimulator,
     ScientificDiscoveryEngine,
     CreativeGenerationEngine,

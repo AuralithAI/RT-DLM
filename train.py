@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from rtdlm_agi_complete import (
+from rtdlm import (
     create_rtdlm_agi, create_agi_optimizer, 
     compute_agi_loss
 )

@@ -268,7 +268,7 @@ class TestFairnessPenaltyIntegration(unittest.TestCase):
     @unittest.skipUnless(JAX_AVAILABLE, "JAX not installed")
     def test_compute_fairness_penalty_loss(self):
         """Test the fairness penalty loss computation."""
-        from rtdlm_agi_complete import compute_fairness_penalty_loss
+        from rtdlm import compute_fairness_penalty_loss
         
         # Create mock logits with high variance (biased)
         np.random.seed(42)
@@ -291,7 +291,7 @@ class TestFairnessPenaltyIntegration(unittest.TestCase):
     @unittest.skipUnless(JAX_AVAILABLE, "JAX not installed")
     def test_fairness_penalty_with_uniform_output(self):
         """Test penalty is lower for uniform (fair) outputs."""
-        from rtdlm_agi_complete import compute_fairness_penalty_loss
+        from rtdlm import compute_fairness_penalty_loss
         
         # Create uniform logits (all same value = maximum entropy)
         uniform_logits = jnp.zeros((4, 10, 100))
@@ -315,7 +315,7 @@ class TestFairnessPenaltyIntegration(unittest.TestCase):
         """Test penalty returns 0 when logits are None."""
         # Import only if available
         if JAX_AVAILABLE:
-            from rtdlm_agi_complete import compute_fairness_penalty_loss
+            from rtdlm import compute_fairness_penalty_loss
             
             result = compute_fairness_penalty_loss(None, {})
             self.assertEqual(result, 0.0)

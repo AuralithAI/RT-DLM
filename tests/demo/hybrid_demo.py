@@ -18,7 +18,7 @@ import logging
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from config.agi_config import AGIConfig
-from rtdlm_agi_complete import RTDLMAGISystem, create_rtdlm_agi
+from rtdlm import RTDLMAGISystem, create_rtdlm_agi
 from external_integration.web_integration import HybridKnowledgeIntegration
 from multimodal.hybrid_audio_module import HybridAudioEncoder
 from multimodal.hybrid_video_module import HybridVideoEncoder

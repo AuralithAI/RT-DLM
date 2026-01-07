@@ -14,7 +14,7 @@ import jax
 import jax.numpy as jnp
 import haiku as hk
 
-from rtdlm_agi_complete import SocialEmotionalIntelligence
+from rtdlm import SocialEmotionalIntelligence
 from multimodal.hybrid_audio_module import AudioEmotionModule
 
 # Test constants

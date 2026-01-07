@@ -68,7 +68,7 @@ def main():
         ("import jax.numpy as jnp", "JAX NumPy"),
         ("import haiku as hk", "Haiku"),
         ("import optax", "Optax"),
-        ("from rtdlm_agi_complete import RT_DLM_AGI", "RT-DLM AGI Core")
+        ("from rtdlm import RT_DLM_AGI", "RT-DLM AGI Core")
     ]
     
     all_passed = True
