@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 logger = logging.getLogger(__name__)
 
-from TMS_block.model_tms import TMSModel
+from model.model_tms import TMSModel
 from multimodal.fusion_module import MultiModalRTDLM
 from multimodal.hybrid_audio_module import HybridAudioEncoder
 from multimodal.hybrid_video_module import HybridVideoEncoder

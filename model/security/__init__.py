@@ -1,5 +1,5 @@
 """
-TMS_block Security Module
+Model Security Module
 
 Provides security utilities for the Memory Bank system:
 - Encryption: AES-256 encryption for sensitive data storage
@@ -14,7 +14,7 @@ Security Philosophy:
 - Fail safely - if detection fails, err on the side of caution
 
 Usage:
-    from TMS_block.security import SecureStorage, PIIDetector, DataSanitizer, IdentifierHasher
+    from model.security import SecureStorage, PIIDetector, DataSanitizer, IdentifierHasher
     
     # Encryption
     storage = SecureStorage(encryption_key="secret")

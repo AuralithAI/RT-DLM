@@ -11,11 +11,11 @@ from typing import Optional
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from self_attention.model_module_self_attention import SelfAttentionModel
-from transformer_block.model_transformer_module import TransformerModel
+from model.model_module_self_attention import SelfAttentionModel
+from model.model_transformer_module import TransformerModel
 from ethics.reward_model import EthicalRewardModel
-from moe_block.sparse_moe import SparseMoE
-from TMS_block.memory_bank import MemoryBank
+from model.sparse_moe import SparseMoE
+from model.memory_bank import MemoryBank
 
 # Import reusable components for shared spiking/pruning utilities
 from core.components.reusable_components import (

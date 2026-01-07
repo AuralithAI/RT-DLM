@@ -25,7 +25,7 @@ except ImportError:
 
 # Security imports - only import what's actually used
 try:
-    from TMS_block.security import (
+    from model.security import (
         SecureStorage,
         DataSanitizer,
         IdentifierHasher
@@ -56,7 +56,7 @@ import time
 
 
 # =============================================================================
-# Security: PIIScrubber and SecureStorage imported from TMS_block.security
+# Security: PIIScrubber and SecureStorage imported from model.security
 # =============================================================================
 
 # Backward compatibility aliases for any code that imports from this module
