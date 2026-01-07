@@ -30,7 +30,7 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(ROOT))
 
-from ethics.ethical_adaptation import (
+from core.ethics.ethical_adaptation import (
     FairnessConfig,
     FairnessResult,
     FairnessMetric,
@@ -371,3 +371,4 @@ class TestBiasThresholdBehavior(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

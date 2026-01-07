@@ -5,7 +5,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from data_processing.data_processor import DataProcessor
+from data.processing.data_processor import DataProcessor
 from config.agi_config import AGIConfig
 
 # Configure logging

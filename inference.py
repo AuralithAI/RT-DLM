@@ -23,7 +23,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from rtdlm import RT_DLM_AGI, create_rtdlm_agi
 from config.agi_config import AGIConfig
-from data_processing.data_utils import DataProcessor
+from data.processing.data_utils import DataProcessor
 from core.checkpoint_manager import CheckpointManager
 from core.sampling import (
     TokenSampler, 
@@ -924,3 +924,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

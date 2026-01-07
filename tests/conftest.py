@@ -52,3 +52,4 @@ def batch_size():
 def seq_len():
     """Sequence length"""
     return SEQ_LEN
+

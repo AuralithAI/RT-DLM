@@ -12,7 +12,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from data_processing.data_utils import DataProcessor
+from data.processing.data_utils import DataProcessor
 from config.agi_config import AGIConfig
 
 def print_header():
@@ -119,3 +119,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     sys.exit(0 if success else 1)
+

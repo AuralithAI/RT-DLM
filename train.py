@@ -30,8 +30,8 @@ from rtdlm import (
 )
 from core.checkpoint_manager import CheckpointManager, convert_pickle_to_safetensors
 from config.agi_config import AGIConfig
-from data_processing.data_utils import DataProcessor, load_data, create_batches
-from advanced_learning.advanced_algorithms import (
+from data.processing.data_utils import DataProcessor, load_data, create_batches
+from modules.capabilities.advanced_algorithms import (
     ContinualLearner, TaskMemory, compute_ewc_loss, compute_fisher_information
 )
 
@@ -792,3 +792,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

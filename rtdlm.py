@@ -14,13 +14,13 @@ sys.path.insert(0, str(ROOT))
 
 logger = logging.getLogger(__name__)
 
-from model.model_tms import TMSModel
-from multimodal.fusion_module import MultiModalRTDLM
-from multimodal.hybrid_audio_module import HybridAudioEncoder
-from multimodal.hybrid_video_module import HybridVideoEncoder
-from reasoning.reasoning import ReasoningEngine
-from quantum.quantum_agi_core import QuantumAGICore
-from quantum.quantum_readiness import (
+from core.model.model_tms import TMSModel
+from modules.multimodal.fusion_module import MultiModalRTDLM
+from modules.multimodal.hybrid_audio_module import HybridAudioEncoder
+from modules.multimodal.hybrid_video_module import HybridVideoEncoder
+from core.reasoning import ReasoningEngine
+from core.quantum.quantum_agi_core import QuantumAGICore
+from core.quantum.quantum_readiness import (
     QubitAssistedOptimization, 
     SelfEvolvingArchitecture, 
     AutonomousScientificDiscovery, 
@@ -29,11 +29,11 @@ from quantum.quantum_readiness import (
     QuantumSimulator
 )
 from config.agi_config import AGIConfig
-from external_integration.web_integration import HybridKnowledgeIntegration
-from hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
-from advanced_learning.advanced_algorithms import ContinualLearner
+from modules.integrations.web_integration import HybridKnowledgeIntegration
+from modules.hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
+from modules.capabilities.advanced_algorithms import ContinualLearner
 from core.agi.agi_system import AGISystemAbstraction, AGIStage, StageThresholds
-from ethics.ethical_adaptation import (
+from core.ethics.ethical_adaptation import (
     FairnessAnalyzer, 
     FairnessConfig, 
     FairnessResult,
@@ -1572,3 +1572,4 @@ def compute_fairness_penalty_loss(logits, fairness_eval):
     fairness_penalty = bias_excess + 0.5 * low_entropy_penalty
     
     return fairness_penalty
+

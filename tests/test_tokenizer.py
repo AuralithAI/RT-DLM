@@ -9,7 +9,7 @@ import pytest
 # Add parent directory to path so we can import from tokenization module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tokenization.multimodal_tokenizer import MultiModalTokenizer, TokenizationConfig, ModalityType
+from modules.tokenization.multimodal_tokenizer import MultiModalTokenizer, TokenizationConfig, ModalityType
 
 
 # Test data directory path
@@ -291,3 +291,4 @@ if __name__ == "__main__":
         print("\n[CLEANUP] Cleaning up test files...")
         cleanup_test_data()
         print("[CLEANUP] Done!")
+

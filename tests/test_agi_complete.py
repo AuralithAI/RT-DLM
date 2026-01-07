@@ -493,7 +493,7 @@ class TestAudioEmotionIntegration(unittest.TestCase):
     def test_audio_emotion_14_classes(self):
         """Test that AudioEmotionModule produces 14 emotion classes"""
         # Import AudioEmotionModule
-        from multimodal.hybrid_audio_module import AudioEmotionModule
+        from modules.multimodal.hybrid_audio_module import AudioEmotionModule
         
         def forward_fn(audio_features):
             model = AudioEmotionModule(d_model=D_MODEL)
@@ -513,7 +513,7 @@ class TestAudioEmotionIntegration(unittest.TestCase):
         
     def test_audio_emotion_labels_match_social(self):
         """Test that AudioEmotionModule labels match SocialEmotionalIntelligence"""
-        from multimodal.hybrid_audio_module import AudioEmotionModule
+        from modules.multimodal.hybrid_audio_module import AudioEmotionModule
         
         # Both should have the same 14 emotion labels
         audio_labels = AudioEmotionModule.EMOTION_LABELS
@@ -524,7 +524,7 @@ class TestAudioEmotionIntegration(unittest.TestCase):
         
     def test_audio_emotion_probability_sum(self):
         """Test that audio emotion probabilities sum to 1"""
-        from multimodal.hybrid_audio_module import AudioEmotionModule
+        from modules.multimodal.hybrid_audio_module import AudioEmotionModule
         
         def forward_fn(audio_features):
             model = AudioEmotionModule(d_model=D_MODEL)
@@ -543,7 +543,7 @@ class TestAudioEmotionIntegration(unittest.TestCase):
         
     def test_audio_emotion_dominant_detection(self):
         """Test that dominant emotion index is correctly computed"""
-        from multimodal.hybrid_audio_module import AudioEmotionModule
+        from modules.multimodal.hybrid_audio_module import AudioEmotionModule
         
         def forward_fn(audio_features):
             model = AudioEmotionModule(d_model=D_MODEL)
@@ -571,7 +571,7 @@ class TestContinualLearning(unittest.TestCase):
         
     def test_ewc_loss_computation(self):
         """Test EWC loss is computed correctly and is non-negative"""
-        from advanced_learning.advanced_algorithms import compute_ewc_loss
+        from modules.capabilities.advanced_algorithms import compute_ewc_loss
         
         # Create mock parameters
         params = {
@@ -616,7 +616,7 @@ class TestContinualLearning(unittest.TestCase):
         
     def test_ewc_loss_stability_across_tasks(self):
         """Test EWC maintains loss stability when learning multiple tasks"""
-        from advanced_learning.advanced_algorithms import (
+        from modules.capabilities.advanced_algorithms import (
             compute_ewc_loss, ContinualLearner
         )
         
@@ -693,7 +693,7 @@ class TestMultiAgentCrisisResponse(unittest.TestCase):
         
     def test_compute_task_complexity(self):
         """Test entropy-based task complexity computation."""
-        from hybrid_architecture.hybrid_integrator import compute_task_complexity
+        from modules.hybrid_architecture.hybrid_integrator import compute_task_complexity
         
         # Low entropy input (uniform-ish after softmax)
         low_complexity_input = jnp.ones((BATCH_SIZE, D_MODEL))
@@ -714,7 +714,7 @@ class TestMultiAgentCrisisResponse(unittest.TestCase):
         
     def test_multi_agent_consensus_basic(self):
         """Test basic multi-agent consensus without spawning."""
-        from hybrid_architecture.hybrid_integrator import MultiAgentConsensus
+        from modules.hybrid_architecture.hybrid_integrator import MultiAgentConsensus
         
         def forward_fn(x):
             consensus = MultiAgentConsensus(
@@ -750,7 +750,7 @@ class TestMultiAgentCrisisResponse(unittest.TestCase):
         Note: In JAX/Haiku, spawned agents are created within the forward pass
         but the spawning logic is verified through the metrics returned.
         """
-        from hybrid_architecture.hybrid_integrator import MultiAgentConsensus, compute_task_complexity
+        from modules.hybrid_architecture.hybrid_integrator import MultiAgentConsensus, compute_task_complexity
         
         # Create inputs with different characteristics
         # Low complexity: uniform values (low entropy after softmax)
@@ -798,7 +798,7 @@ class TestMultiAgentCrisisResponse(unittest.TestCase):
         Note: Due to JAX's functional nature, we test that crisis mode
         activates the crisis spawning logic and produces valid output.
         """
-        from hybrid_architecture.hybrid_integrator import MultiAgentConsensus
+        from modules.hybrid_architecture.hybrid_integrator import MultiAgentConsensus
         
         def forward_fn(x):
             consensus = MultiAgentConsensus(
@@ -836,7 +836,7 @@ class TestMultiAgentCrisisResponse(unittest.TestCase):
         
         Verifies that the system handles high-complexity crisis data correctly.
         """
-        from hybrid_architecture.hybrid_integrator import MultiAgentConsensus
+        from modules.hybrid_architecture.hybrid_integrator import MultiAgentConsensus
         
         def forward_fn(x):
             consensus = MultiAgentConsensus(
@@ -876,7 +876,7 @@ class TestMultiAgentCrisisResponse(unittest.TestCase):
         
     def test_specialist_agent_weight_scaling(self):
         """Test that spawned agents have specialized weight scales."""
-        from hybrid_architecture.hybrid_integrator import SpecialistAgent
+        from modules.hybrid_architecture.hybrid_integrator import SpecialistAgent
         
         def forward_fn(x):
             # Create base agent
@@ -921,7 +921,7 @@ class TestMultiAgentCrisisResponse(unittest.TestCase):
         
     def test_parallel_processing(self):
         """Test parallel agent processing method."""
-        from hybrid_architecture.hybrid_integrator import MultiAgentConsensus
+        from modules.hybrid_architecture.hybrid_integrator import MultiAgentConsensus
         
         def forward_fn(x):
             consensus = MultiAgentConsensus(
@@ -946,3 +946,4 @@ class TestMultiAgentCrisisResponse(unittest.TestCase):
 if __name__ == "__main__":
     # Run tests with verbosity
     unittest.main(verbosity=2)
+

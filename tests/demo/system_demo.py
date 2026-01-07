@@ -12,7 +12,7 @@ import jax.numpy as jnp
 # Add parent directories to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-from data_processing.data_utils import DataProcessor
+from data.processing.data_utils import DataProcessor
 from config.agi_config import AGIConfig
 
 def demo_reasoning():
@@ -163,3 +163,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

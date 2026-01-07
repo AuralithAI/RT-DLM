@@ -19,10 +19,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 
 from config.agi_config import AGIConfig
 from rtdlm import RTDLMAGISystem, create_rtdlm_agi
-from external_integration.web_integration import HybridKnowledgeIntegration
-from multimodal.hybrid_audio_module import HybridAudioEncoder
-from multimodal.hybrid_video_module import HybridVideoEncoder
-from hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
+from modules.integrations.web_integration import HybridKnowledgeIntegration
+from modules.multimodal.hybrid_audio_module import HybridAudioEncoder
+from modules.multimodal.hybrid_video_module import HybridVideoEncoder
+from modules.hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -328,3 +328,4 @@ if __name__ == "__main__":
         print(f"\\n[ERROR] Demo error: {e}")
         import traceback
         traceback.print_exc()
+
