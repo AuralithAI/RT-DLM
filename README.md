@@ -125,6 +125,9 @@ python tests/test_runner.py
 
 See the `docs/` folder for detailed documentation:
 - [Architecture Overview](docs/ARCHITECTURE.md) - System architecture diagrams and data flow
+- [Data Pipeline](docs/DATA_PIPELINE.md) - Data ingestion, tokenization, and sharding pipeline
+- [Sampling Strategies](docs/SAMPLING.md) - Token sampling and generation configuration
+- [Quick Start Guide](docs/QUICKSTART.md) - Getting started with RT-DLM
 
 ## License
 
