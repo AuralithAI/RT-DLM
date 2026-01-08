@@ -40,11 +40,11 @@ except ImportError:
 
 # Document processing
 try:
-    import PyPDF2
+    import pdfplumber
     HAS_PDF = True
 except ImportError:
     HAS_PDF = False
-    print("PyPDF2 not installed. PDF processing will be limited.")
+    print("pdfplumber not installed. PDF processing will be limited. Run: pip install pdfplumber")
 
 try:
     import xml.etree.ElementTree as ET
@@ -464,15 +464,16 @@ class MultiModalTokenizer:
             return [self.config.unk_token_id]
     
     def _tokenize_pdf(self, pdf_path) -> List[int]:
-        """Extract text from PDF and tokenize."""
+        """Extract text from PDF using pdfplumber and tokenize."""
         if not HAS_PDF:
             return [self.config.unk_token_id]
         
         text = ""
-        with open(pdf_path, 'rb') as file:
-            reader = PyPDF2.PdfReader(file)
-            for page_num, page in enumerate(reader.pages[:self.config.pdf_max_pages]):
-                text += page.extract_text() + "\n"
+        with pdfplumber.open(pdf_path) as pdf:
+            for page_num, page in enumerate(pdf.pages[:self.config.pdf_max_pages]):
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
         
         return self._tokenize_text(text)
     
