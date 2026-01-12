@@ -202,14 +202,10 @@ tramp
 *.json
 *.merges
 
-# Dataset files
+# Dataset files (data pipeline now at Auralith-Data-Pipeline)
 dataset/
 datasets/
-data/train_data.txt
-data/validation_data.txt
-data/test_data.txt
-data/rt_dlm_sp.model
-data/rt_dlm_sp.vocab
+data/
 
 # Training artifacts
 checkpoints/
