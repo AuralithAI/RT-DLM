@@ -1,11 +1,14 @@
-# RT-DLM Architecture Diagram
+# RT-DLM Architecture
+
+This document describes the model architecture for training and inference.
+
+> **Note**: Data collection and processing are handled by [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline).
 
 ## System Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                        RT-DLM AGI SYSTEM                                            │
-│                                           (rtdlm.py)                                                │
+│                                        RT-DLM MODEL                                                 │
 │                                                                                                     │
 │  ┌───────────────────────────────────────────────────────────────────────────────────────────────┐  │
 │  │                                    COGNITIVE CORE                                             │  │
@@ -153,31 +156,32 @@
 │                                    SUPPORT SYSTEMS                                                  │
 │                                                                                                     │
 │  ┌─────────────────────────────┐  ┌─────────────────────────────┐  ┌─────────────────────────────┐  │
-│  │     Ethics (core/ethics/)   │  │  External Integration       │  │    Data Processing          │  │
-│  │                             │  │  (modules/integrations/)    │  │    (data/processing/)       │  │
+│  │     Ethics (core/ethics/)   │  │  External Integration       │  │    Tokenization             │  │
+│  │                             │  │  (modules/integrations/)    │  │    (tokenization/)          │  │
 │  │ - EthicalRewardModel        │  │                             │  │                             │  │
-│  │ - MultidimensionalBias      │  │ - WebSearchModule           │  │ - DataProcessor             │  │
-│  │   Detector                  │  │   - DuckDuckGo search       │  │ - MultiModalDataSample      │  │
-│  │   - Gender bias             │  │   - Wikipedia search        │  │ - DataUtils                 │  │
-│  │   - Racial bias             │  │   - Real embeddings         │  │   - Tokenization            │  │
-│  │   - Cultural bias           │  │   - vocab_size: 50000       │  │   - Batch creation          │  │
-│  │ - FeedbackCollector         │  │                             │  │   - Preprocessing           │  │
+│  │ - MultidimensionalBias      │  │ - WebSearchModule           │  │ - MultiModalTokenizer       │  │
+│  │   Detector                  │  │   - DuckDuckGo search       │  │ - TokenizationConfig        │  │
+│  │   - Gender bias             │  │   - Wikipedia search        │  │ - ModalityType enum         │  │
+│  │   - Racial bias             │  │   - Real embeddings         │  │ - SentencePiece integration │  │
+│  │   - Cultural bias           │  │   - vocab_size: 50000       │  │ - Text/Image/Audio/Video    │  │
+│  │ - FeedbackCollector         │  │                             │  │ - PDF/XML/JSON support      │  │
 │  │ - FairnessAnalyzer          │  │ - HybridKnowledgeIntegration│  │                             │  │
 │  └─────────────────────────────┘  │   - Knowledge fusion        │  └─────────────────────────────┘  │
 │                                   │   - Relevance scoring       │                                   │
 │                                   └─────────────────────────────┘                                   │
 │                                                                                                     │
 │  ┌─────────────────────────────┐  ┌─────────────────────────────┐  ┌─────────────────────────────┐  │
-│  │     Tokenization            │  │     Configuration           │  │   Checkpoint Management     │  │
-│  │    (modules/tokenization/)  │  │     (config/)               │  │ (core/checkpoint_manager.py)│  │
+│  │     Configuration           │  │   Checkpoint Management     │  │   Data Pipeline (External)  │  │
+│  │     (config/)               │  │ (core/checkpoint_manager.py)│  │                             │  │
+│  │                             │  │                             │  │ See:                        │  │
+│  │ - AGIConfig                 │  │ - SafeTensors format        │  │ github.com/AuralithAI/      │  │
+│  │   - Model architecture      │  │ - Secure serialization      │  │   Auralith-Data-Pipeline    │  │
+│  │   - Training params         │  │ - Version tracking          │  │                             │  │
+│  │   - Memory settings         │  │ - Metadata storage          │  │ - Data collection           │  │
+│  │   - Quantum settings        │  │ - Backward compatibility    │  │ - Preprocessing             │  │
+│  │   - Ethics settings         │  │                             │  │ - Sharding                  │  │
+│  │ - ImageConfig               │  │                             │  │ - Storage backends          │  │
 │  │                             │  │                             │  │                             │  │
-│  │ - MultiModalTokenizer       │  │ - AGIConfig                 │  │ - SafeTensors format        │  │
-│  │ - TokenizationConfig        │  │   - Model architecture      │  │ - Secure serialization      │  │
-│  │ - ModalityType enum         │  │   - Training params         │  │ - Version tracking          │  │
-│  │ - SentencePiece integration │  │   - Memory settings         │  │ - Metadata storage          │  │
-│  │ - Text/Image/Audio/Video    │  │   - Quantum settings        │  │ - Backward compatibility    │  │
-│  │ - PDF/XML/JSON support      │  │   - Ethics settings         │  │                             │  │
-│  │                             │  │ - ImageConfig               │  │                             │  │
 │  └─────────────────────────────┘  └─────────────────────────────┘  └─────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
@@ -344,15 +348,16 @@ rtdlm.py
 └── modules/hybrid_architecture/hybrid_integrator.py
 
 train.py
-├── rtdlm.py (all dependencies above)
+├── Model components (all dependencies above)
 ├── config/agi_config.py
-└── data/processing/data_utils.py
+├── config/train_config.py
+└── data_processing/data_utils.py
 
 inference.py
-├── rtdlm.py (all dependencies above)
+├── Model components (all dependencies above)
 ├── config/agi_config.py
-├── data/processing/data_utils.py
-└── core/sampling.py
+├── data_processing/data_utils.py
+└── core/inference_engine.py
 
 modules/capabilities/integrated_agi_system.py
 ├── modules/capabilities/real_time_learning.py
@@ -419,27 +424,21 @@ RT-DLM/
 │   └── integrations/                # External integrations
 │       └── web_integration.py
 │
-├── data/                            # Data files
-│   ├── processing/                  # Data processing utilities
-│   │   ├── data_collection.py
-│   │   ├── data_processor.py
-│   │   └── data_utils.py
-│   ├── dataset.txt
-│   ├── train_data.txt
-│   ├── validation_data.txt
-│   └── rt_dlm_sp.*                  # SentencePiece model
+├── data_processing/                 # Data utilities
+│   ├── data_processor.py
+│   └── data_utils.py
 │
-├── apps/                            # Downstream applications
-│   ├── image_generation/
-│   │   ├── api.py
-│   │   ├── chat_ui.py
-│   │   ├── model_module.py
-│   │   └── train.py
-│   └── text_summarization/
-│       ├── api.py
-│       ├── chat_ui.py
-│       ├── text_summary_module.py
-│       └── train.py
+├── image_generation/                # Image generation app
+│   ├── api.py
+│   ├── chat_ui.py
+│   ├── model_module.py
+│   └── train.py
+│
+├── text_summarization/              # Text summarization app
+│   ├── api.py
+│   ├── chat_ui.py
+│   ├── text_summary_module.py
+│   └── train.py
 │
 ├── tests/                           # Test suite
 │   ├── test_framework.py            # Main test framework
@@ -500,21 +499,19 @@ RT-DLM/
 
 | Category | Location | Files | Status |
 |----------|----------|-------|--------|
-| Core AGI | `rtdlm.py` | 1 | Complete |
-| Model Core | `core/model/` | 6 | Complete |
-| Quantum | `core/quantum/` | 2 | Complete |
-| Ethics | `core/ethics/` | 2 | Complete |
-| Sampling | `core/sampling.py` | 1 | Complete |
-| Reasoning | `core/reasoning.py` | 1 | Complete |
-| Checkpoint | `core/checkpoint_manager.py` | 1 | Complete |
-| Hybrid Architecture | `modules/hybrid_architecture/` | 1 | Complete |
-| Multimodal | `modules/multimodal/` | 3 | Complete |
-| Tokenization | `modules/tokenization/` | 1 | Complete |
-| Capabilities | `modules/capabilities/` | 3 | Complete |
-| Integrations | `modules/integrations/` | 1 | Complete |
-| Data Processing | `data/processing/` | 3 | Complete |
-| Configuration | `config/` | 2 | Complete |
-| Training | `train.py` | 1 | Complete |
+| Model Core | `core/` | 6+ | Complete |
+| Quantum | `quantum/` | 2 | Complete |
+| Ethics | `ethics/` | 3 | Complete |
+| TMS Block | `TMS_block/` | 6 | Complete |
+| MoE Block | `moe_block/` | 2 | Complete |
+| Transformer | `transformer_block/` | 4 | Complete |
+| Hybrid Architecture | `hybrid_architecture/` | 1 | Complete |
+| Multimodal | `multimodal/` | 3 | Complete |
+| Tokenization | `tokenization/` | 1 | Complete |
+| Reasoning | `reasoning/` | 1 | Complete |
+| Configuration | `config/` | 3 | Complete |
+| Training | `train.py`, `train_*.py` | 4 | Complete |
 | Inference | `inference.py` | 1 | Complete |
-| Applications | `apps/` | 8 | Complete |
 | Tests | `tests/` | 244 tests | Complete |
+
+> **Note**: Data processing has been moved to [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline).

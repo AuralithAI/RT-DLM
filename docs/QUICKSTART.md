@@ -1,6 +1,8 @@
 # RT-DLM Quick Start Guide
 
-Get started with RT-DLM in minutes.
+Get started with RT-DLM model training and inference.
+
+> **Note**: This guide covers model training and inference. For data collection and processing, see [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline).
 
 ## Installation
 
@@ -8,10 +10,12 @@ Get started with RT-DLM in minutes.
 
 - Python 3.10+
 - pip or conda
+- CUDA (optional, for GPU acceleration)
 
 ### Install Dependencies
 
 ```bash
+git clone https://github.com/AuralithAI/RT-DLM.git
 cd RT-DLM
 pip install -r requirements.txt
 ```
@@ -24,25 +28,39 @@ python install_dependencies.py
 
 ## Training
 
-### Train the Tokenizer
+### Prepare Training Data
 
-First, train the SentencePiece tokenizer on your data:
+Training data (pre-tokenized SafeTensor shards) should be prepared using [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline):
 
 ```bash
-python train_tokenizer.py
+# Using Auralith-Data-Pipeline
+auralith-pipeline process --input ./raw_data --output ./shards
 ```
 
-This creates `data/rt_dlm_sp.model` and `data/rt_dlm_sp.vocab`.
+The shards directory should contain `.safetensors` files with `input_ids` tensors.
 
 ### Train the Model
 
-Train the full AGI model:
+Train the model with pre-tokenized data:
 
 ```bash
-python train.py
+python train.py --data-dir /path/to/shards
 ```
 
-Training configuration is in `config/agi_config.py`.
+#### Training Options
+
+```bash
+# Train with custom hyperparameters
+python train.py --data-dir ./shards --epochs 50 --batch-size 32 --lr 1e-4
+
+# Specify model architecture
+python train.py --data-dir ./shards --d-model 768 --num-layers 24 --num-heads 12
+
+# Resume from a checkpoint
+python train.py --data-dir ./shards --resume checkpoints/rtdlm_epoch_10.safetensors
+```
+
+Training configuration is in `config/train_config.py`.
 
 ## Inference
 
@@ -108,25 +126,9 @@ pytest tests/test_framework.py::test_function_name
 pytest tests/ -v
 ```
 
-## Project Structure
-
-```
-RT-DLM/
-├── rtdlm.py          # Main AGI model
-├── train.py          # Training script
-├── inference.py      # Inference script
-├── config/           # Configuration
-├── core/             # Core components
-├── modules/          # Feature modules
-├── data/             # Data files
-├── apps/             # Applications
-├── tests/            # Test suite
-└── docs/             # Documentation
-```
-
 ## Configuration
 
-The main configuration is in `config/agi_config.py`:
+Model configuration is in `config/agi_config.py`:
 
 ```python
 from config.agi_config import AGIConfig
@@ -141,9 +143,11 @@ config = AGIConfig(
 )
 ```
 
+Training configuration is in `config/train_config.py`.
+
 ## Next Steps
 
 - Read the [Architecture Overview](ARCHITECTURE.md) for system design
 - Check the [Sampling Guide](SAMPLING.md) for generation control
-- Explore `apps/` for downstream applications
-- Run tests to validate your setup
+- Run tests with `pytest tests/` to validate your setup
+- For data preparation, see [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline)

@@ -1,74 +1,88 @@
-# RT-DLM: Real-Time Deep Learning Model with AGI Capabilities
+# RT-DLM: Real-Time Deep Learning Model
 
-A JAX-based neural architecture combining transformer models, mixture of experts, quantum-inspired computing, and multi-paradigm hybrid learning for advanced cognitive AI systems.
+A JAX/Haiku-based neural architecture for training and inference, combining transformer models, mixture of experts, quantum-inspired computing, and multi-paradigm hybrid learning.
+
+> **Note**: This repository focuses on **model architecture, training, and inference**. Data collection and processing are handled by the standalone [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline) repository. Inference may be separated into its own package in a future release.
 
 ## Overview
 
-RT-DLM integrates multiple AI paradigms into a unified architecture designed for real-time inference and multi-modal understanding. The system combines classical deep learning with symbolic reasoning, probabilistic inference, and quantum-ready modules.
+RT-DLM provides a unified architecture for building and training advanced AI models with real-time inference capabilities. The system combines classical deep learning with symbolic reasoning, probabilistic inference, and quantum-ready modules.
 
-## Core Architecture
+## Core Components
 
-### AGI System
-The cognitive engine implements five integrated modules:
-- **ConsciousnessSimulator**: Metacognitive awareness and self-reflection capabilities
-- **ScientificDiscoveryEngine**: Hypothesis generation, experimental design, and knowledge synthesis
-- **CreativeGenerationEngine**: Novel content creation across multiple domains
-- **SocialEmotionalIntelligence**: Affective computing and social context understanding
-- **RTDLMAGISystem**: Orchestration layer unifying all cognitive components
+### Model Architecture
 
-### Transformer-Memory-Sparse Architecture (TMS)
+#### Transformer-Memory-Sparse (TMS) Model
 A three-tier memory system with sparse mixture of experts:
-- Long-term memory (LTM) for persistent knowledge
-- Short-term memory (STM) for context-sensitive processing
-- Meta-task memory (MTM) for adaptive task handling
-- Sparse MoE with configurable expert routing
+- **Long-term Memory (LTM)**: Persistent knowledge storage
+- **Short-term Memory (STM)**: Context-sensitive processing
+- **Meta-task Memory (MTM)**: Adaptive task handling
+- **Sparse MoE**: Configurable expert routing with load balancing
 
-### Hybrid Architecture Integration
+#### Hybrid Architecture
 Multi-paradigm learning combining:
-- **Traditional ML**: SVM with RBF kernel, Random Forest, Naive Bayes
+- **Traditional ML**: SVM, Random Forest, Naive Bayes branches
 - **Deep Learning**: CNN, RNN, Transformer branches
 - **Symbolic Reasoning**: Rule-based inference and logical operations
 - **Probabilistic Models**: Uncertainty quantification and Bayesian methods
 - **Ensemble Fusion**: Cross-paradigm interaction via outer-product attention
 
-### Quantum Readiness
+#### Quantum-Inspired Modules
 Classical simulation of quantum computing primitives:
 - QuantumSimulator with PHASE, CNOT, Hadamard gates
 - VariationalQuantumCircuit for parameterized quantum ML
-- 32-qubit maximum with overflow protection
-- Quantum attention mechanisms and neural networks
+- 32-qubit simulation with overflow protection
+- Quantum attention mechanisms
 
-### Production Sampling
-Advanced token sampling strategies:
-- **Top-K Filtering**: Keep only top-k probable tokens
-- **Top-P (Nucleus) Sampling**: Dynamic probability mass cutoff
-- **Temperature Scaling**: Control output randomness
-- **Min-P Filtering**: Relative probability threshold
-- **Repetition Penalty**: Prevent repetitive outputs
-- **Token Probability Logging**: Debug and analysis support
-- **Preset Configurations**: Creative, Precise, Balanced, Deterministic
-
-### Multimodal Processing
+#### Multimodal Processing
 Cross-modal fusion capabilities:
 - Audio emotion detection and hybrid audio module
 - Video understanding with temporal modeling
 - Multimodal tokenization with SentencePiece integration
 
-### External Integration
-Knowledge augmentation through external sources:
-- Web search module (DuckDuckGo, Wikipedia)
-- Hybrid knowledge integration with embedding (vocab_size: 50000)
+### Training Pipeline
+
+- **Epoch-based training loop** with configurable batch size
+- **SafeTensors checkpointing** for model persistence
+- **Gradient optimization** via Optax (AdamW, learning rate scheduling)
+- **Ethics module** with feedback collection and reward modeling
+- **Mixed-precision ready** architecture
+
+### Inference Engine
+
+Advanced token generation with production sampling:
+- **Top-K Filtering**: Keep only top-k probable tokens
+- **Top-P (Nucleus) Sampling**: Dynamic probability mass cutoff
+- **Temperature Scaling**: Control output randomness
+- **Min-P Filtering**: Relative probability threshold
+- **Repetition Penalty**: Prevent repetitive outputs
+- **Preset Configurations**: Creative, Precise, Balanced, Deterministic
 
 ## Quick Start
 
 ### Installation
 ```bash
+git clone https://github.com/AuralithAI/RT-DLM.git
+cd RT-DLM
 pip install -r requirements.txt
 ```
 
 ### Training
+
+The model accepts pre-tokenized tensors (from [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline)).
+
 ```bash
-python train.py
+# Train model
+python train.py --data-dir /path/to/tokenized/shards
+
+# Train with custom settings
+python train.py --epochs 50 --batch-size 32 --lr 1e-4
+
+# Resume training from a checkpoint
+python train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors
+
+# Resume with extended epochs
+python train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors --epochs 100
 ```
 
 ### Inference
@@ -79,58 +93,54 @@ python inference.py
 ### Running Tests
 ```bash
 pytest tests/
-# or
-python tests/test_runner.py
 ```
 
 ## Implementation Status
 
 ### Completed
-- AGI core system with five cognitive modules
 - TMS block with three-tier memory and sparse MoE
-- Hybrid architecture integrator with four ML paradigms
+- Hybrid architecture with four ML paradigms
 - Ensemble fusion with cross-paradigm interaction
-- Quantum simulator with gate operations and 32-qubit limit
-- Variational quantum circuit with build_layers method
-- Multi-agent consensus system with four specialists
-- Multimodal fusion and tokenization
+- Quantum simulator with 32-qubit limit
+- Variational quantum circuit
+- Multimodal fusion
 - Production-ready token sampling (Top-K, Top-P, temperature, repetition penalty)
 - SafeTensors checkpoint management
-- Web integration with DuckDuckGo and Wikipedia
-- Training pipeline with epoch-based loop
+- Training pipeline with epoch-based loop and checkpoint resumption
 - Inference engine with advanced sampling
-- Ethics module with feedback collection, fairness analysis, and reward modeling
-- Comprehensive test framework with **244 passing tests**
+- Ethics module with feedback collection and reward modeling
+- Comprehensive test suite (**244 passing tests**)
 
-### Improvements Needed
-- Quantum circuits: extend beyond 32-qubit simulation
-- Multi-agent system: dynamic specialist spawning
-- Memory bank: persistent storage backend
-- Web integration: rate limiting and caching
-- Training: mixed-precision and gradient checkpointing
-- Inference: batched processing optimization
-- Documentation: API reference and usage examples
+### Roadmap
+- [ ] Separate inference into standalone package
+- [ ] Extend quantum simulation beyond 32 qubits
+- [ ] Mixed-precision training (bfloat16/float16)
+- [ ] Gradient checkpointing for memory efficiency
+- [ ] Batched inference optimization
+- [ ] Distributed training support
+- [ ] ONNX/TensorRT export for deployment
 
 ## Requirements
 
 - Python 3.10+
-- JAX 0.4.35
-- Haiku 0.0.13
-- SentencePiece
-- NumPy, Optax
-- SafeTensors
+- JAX 0.4.35+
+- Haiku 0.0.13+
+- Optax (optimizer)
+- SafeTensors (checkpoints)
+- NumPy
+
+## Related Repositories
+
+| Repository | Description |
+|------------|-------------|
+| [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline) | Data collection, processing, and sharding |
 
 ## Documentation
 
-See the `docs/` folder for detailed documentation:
-- [Architecture Overview](docs/ARCHITECTURE.md) - System architecture diagrams and data flow
-- [Sampling Strategies](docs/SAMPLING.md) - Token sampling and generation configuration
-- [Quick Start Guide](docs/QUICKSTART.md) - Getting started with RT-DLM
-
-### Data Pipeline
-
-For data collection, processing, and sharding, see the standalone **[Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline)** repository.
+- [Architecture Overview](docs/ARCHITECTURE.md) - System design and data flow
+- [Sampling Strategies](docs/SAMPLING.md) - Token generation configuration
+- [Quick Start Guide](docs/QUICKSTART.md) - Getting started
 
 ## License
 
-See LICENSE file for details.
+See [LICENSE](LICENSE) file for details.

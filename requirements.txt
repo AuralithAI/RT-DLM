@@ -1,4 +1,6 @@
-# RT-DLM AGI Requirements
+# RT-DLM Requirements
+# Model architecture and training - tokenization handled by Auralith-Data-Pipeline
+
 # Core ML/DL frameworks - Compatible with TensorFlow 2.18
 dm_haiku==0.0.13
 jax==0.4.35
@@ -8,7 +10,6 @@ optax==0.2.3
 # Data processing and ML utilities
 scikit-learn==1.6.1
 numpy>=1.26,<2.1
-sentencepiece==0.2.0
 tensorflow==2.18.0
 
 # Memory and retrieval systems
