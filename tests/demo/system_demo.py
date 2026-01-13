@@ -12,7 +12,6 @@ import jax.numpy as jnp
 # Add parent directories to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-from data.processing.data_utils import DataProcessor
 from config.agi_config import AGIConfig
 
 def demo_reasoning():
@@ -92,31 +91,6 @@ def demo_ethical_framework():
     print("   Ethics framework operational")
     print()
 
-def demo_tokenization():
-    """Demonstrate tokenization capabilities"""
-    print("Tokenization Demo:")
-    
-    try:
-        processor = DataProcessor(vocab_size=1000, model_prefix="data/rt_dlm_sp")
-        
-        test_inputs = [
-            "Welcome to RT-DLM AGI system",
-            "Processing natural language input",
-            "Generating intelligent responses"
-        ]
-        
-        for text in test_inputs:
-            tokens = processor.tokenize(text)
-            print(f"   Input: {text}")
-            print(f"   Tokens: {len(tokens)} generated")
-        
-        print("   Tokenization operational")
-        
-    except Exception as e:
-        print(f"   Tokenization: {e}")
-    
-    print()
-
 def demo_agi_integration():
     """Demonstrate AGI system integration"""
     print("AGI Integration Demo:")
@@ -148,7 +122,6 @@ def main():
     demo_reasoning()
     demo_memory_system()
     demo_ethical_framework()
-    demo_tokenization()
     demo_agi_integration()
     
     print("=" * 45)

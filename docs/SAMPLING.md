@@ -139,23 +139,18 @@ deterministic_config = create_sampling_config_deterministic()
 # temperature=0.0, do_sample=False
 ```
 
-## Integration with Inference
+## Using Sampling in Training
 
-The `inference.py` module integrates sampling:
+The sampling module can be used for evaluation during training:
 
 ```python
-from inference import RT_DLM_AGI_Assistant
+from core.sampling import TokenSampler, SamplingConfig
 
-assistant = RT_DLM_AGI_Assistant()
+sampler = TokenSampler()
+config = SamplingConfig(temperature=0.7, top_k=50)
 
-# Generate with custom sampling
-response = assistant.generate_response(
-    "What is quantum computing?",
-    temperature=0.7,
-    top_k=50,
-    top_p=0.9,
-    repetition_penalty=1.05
-)
+# During model evaluation
+result = sampler.sample(model_logits, config, token_history=[])
 ```
 
 ## Best Practices

@@ -6,7 +6,6 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
-from data.processing.data_utils import DataProcessor
 
 
 class EthicalDimension(Enum):
@@ -288,8 +287,16 @@ class EthicalRewardModel(hk.Module):
 
 
 ### Only if you want to train-demo the reward model ###
-def train_reward_model(config, feedback_dataset: List[Dict], processor: DataProcessor):
-    """Train the reward model on feedback dataset."""
+# Note: This function requires a processor with tokenize() and pad_sequence() methods
+# Use the DataProcessor from Auralith-Data-Pipeline for tokenization
+def train_reward_model(config, feedback_dataset: List[Dict], processor):
+    """Train the reward model on feedback dataset.
+    
+    Args:
+        config: Model configuration with d_model, vocab_size, max_seq_length, batch_size
+        feedback_dataset: List of dicts with 'input', 'output', 'feedback_score' keys
+        processor: Tokenizer with tokenize() and pad_sequence() methods
+    """
     rng = jax.random.PRNGKey(42)
 
     def forward_fn(inputs, outputs):

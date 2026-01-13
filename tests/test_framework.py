@@ -16,7 +16,6 @@ from pathlib import Path
 # Add project to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from data.processing.data_utils import DataProcessor
 from config.agi_config import AGIConfig
 
 @dataclass
@@ -72,9 +71,6 @@ class RTDLMTestFramework:
     def test_core_imports(self):
         """Test that core system modules can be imported"""
         
-        # Core data processing
-        print("   Data processing module imported")
-        
         # Configuration system
         config = AGIConfig()
         assert hasattr(config, 'd_model'), "Configuration missing d_model"
@@ -94,19 +90,6 @@ class RTDLMTestFramework:
             print(f"   AGI system: {e}")
             # Don't fail - AGI integration can be external
     
-    def test_data_processing(self):
-        """Test data processing capabilities"""
-        processor = DataProcessor(vocab_size=1000, model_prefix="data/rt_dlm_sp")
-        
-        # Test tokenization
-        test_text = "Test AGI processing capability"
-        tokens = processor.tokenize(test_text)
-        assert len(tokens) > 0, "Tokenization failed"
-        print(f"   Tokenization: {len(tokens)} tokens generated")
-        
-        # Test text processing - simplified since process_text might not exist
-        print("   Text processing operational")
-    
     def test_model_components(self):
         """Test model architecture components"""
         config = AGIConfig()
@@ -118,34 +101,13 @@ class RTDLMTestFramework:
         
         print(f"   Model config: {config.d_model}d, {config.num_heads}h, {config.num_layers}l")
     
-    def test_tokenization(self):
-        """Test tokenization system"""
-        processor = DataProcessor(vocab_size=1000, model_prefix="data/rt_dlm_sp")
-        
-        test_cases = [
-            "Simple text processing",
-            "Complex natural language understanding test",
-            "AGI system tokenization validation"
-        ]
-        
-        for text in test_cases:
-            tokens = processor.tokenize(text)
-            assert len(tokens) > 0, f"Failed to tokenize: {text}"
-        
-        print(f"   Tokenization: {len(test_cases)} test cases passed")
-    
     def test_training_readiness(self):
         """Test training infrastructure readiness"""
         
-        # Check training configuration exists
-        config_file = Path("../train_config.py")
-        if config_file.exists():
-            print("   Training configuration available")
-        
-        # Check tokenizer training
-        tokenizer_file = Path("../train_tokenizer.py")
-        if tokenizer_file.exists():
-            print("   Tokenizer training available")
+        # Check training script exists
+        train_file = Path("../train.py")
+        if train_file.exists():
+            print("   Training script available")
         
         # Always pass for production
         print("   Training infrastructure ready")
@@ -154,7 +116,7 @@ class RTDLMTestFramework:
         """Test ethics and safety systems"""
         
         # Check ethics modules exist
-        ethics_dir = Path("../ethics")
+        ethics_dir = Path("../core/ethics")
         if ethics_dir.exists():
             print("   Ethics framework directory found")
             
@@ -200,10 +162,9 @@ class RTDLMTestFramework:
         
         # Check essential files exist
         essential_files = [
-            "data_utils.py",
-            "agi_config.py", 
-            "system_validator.py",
-            "system_demo.py"
+            "config/agi_config.py", 
+            "tests/system_validator.py",
+            "tests/demo/system_demo.py"
         ]
         
         missing_files = []
@@ -213,11 +174,6 @@ class RTDLMTestFramework:
         
         if missing_files:
             print(f"   ! Missing files: {missing_files}")
-        
-        # Check data directory
-        data_dir = Path("../data")
-        if data_dir.exists():
-            print("   Data directory available")
         
         print("   Production requirements validated")
     
@@ -234,9 +190,7 @@ class RTDLMTestFramework:
             ("Python Environment", self.test_python_environment),
             ("Core Imports", self.test_core_imports),
             ("AGI System", self.test_agi_system),
-            ("Data Processing", self.test_data_processing),
             ("Model Components", self.test_model_components),
-            ("Tokenization", self.test_tokenization),
             ("Training Readiness", self.test_training_readiness),
             ("Ethics Framework", self.test_ethics_framework),
             ("Performance Baseline", self.test_performance_baseline),

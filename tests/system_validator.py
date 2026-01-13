@@ -12,7 +12,6 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from data.processing.data_utils import DataProcessor
 from config.agi_config import AGIConfig
 
 def print_header():
@@ -41,17 +40,6 @@ def check_core_systems():
         checks["Python+JAX"] = False
         print(f"[FAIL] Python+JAX: {e}")
     
-    # Test data processing
-    try:
-        processor = DataProcessor(vocab_size=1000, model_prefix="data/rt_dlm_sp")
-        test_text = "Hello AGI world"
-        tokens = processor.tokenize(test_text)
-        checks["Data Processing"] = len(tokens) > 0
-        print(f"[PASS] Data Processing: {len(tokens)} tokens generated")
-    except Exception as e:
-        checks["Data Processing"] = False
-        print(f"[FAIL] Data Processing: {e}")
-    
     # Test configuration
     try:
         config = AGIConfig()
@@ -62,7 +50,7 @@ def check_core_systems():
         print(f"[FAIL] Configuration: {e}")
     
     # Test framework exists
-    test_file = Path("tests/test_tokenizer.py")
+    test_file = Path("tests/test_model.py")
     checks["Testing Framework"] = test_file.exists()
     if checks["Testing Framework"]:
         print("[PASS] Testing Framework: Available in tests/")

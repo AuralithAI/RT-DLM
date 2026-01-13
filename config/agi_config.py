@@ -1,30 +1,20 @@
 import jax.numpy as jnp
-from modules.tokenization.multimodal_tokenizer import TokenizationConfig
+
 
 class AGIConfig:
     """
     Configuration class for RT-DLM AGI model with multi-modal processing,
     quantum-inspired components, and meta-learning capabilities.
+    
+    Note: Tokenization is handled externally by Auralith-Data-Pipeline.
+    This config focuses on model architecture parameters.
     """
 
     def __init__(self, **kwargs):
-        # --- Tokenization Parameters ---
-        self.tokenization_config = kwargs.get("tokenization_config", TokenizationConfig(
-            text_vocab_size=32000,
-            text_model_type="bpe",
-            max_text_length=2048,
-            image_patch_size=16,
-            image_vocab_size=8192,
-            image_resize=(224, 224),
-            audio_sample_rate=16000,
-            audio_vocab_size=1024,
-            video_max_frames=64,
-            max_sequence_length=4096
-        ))
-        
         # --- Model Architecture Parameters ---
-        self.vocab_size = kwargs.get("vocab_size", self.tokenization_config.text_vocab_size)  # Base vocabulary size
+        self.vocab_size = kwargs.get("vocab_size", 32000)  # Base vocabulary size
         self.total_vocab_size = kwargs.get("total_vocab_size", 50000)  # Total vocab including all modalities
+        self.max_seq_length = kwargs.get("max_seq_length", 2048)  # Maximum sequence length
         self.d_model = kwargs.get("d_model", 384)  # Embedding dimension (model width)
         self.num_heads = kwargs.get("num_heads", 8)  # Number of attention heads
         self.num_layers = kwargs.get("num_layers", 12)  # Number of transformer layers
@@ -101,11 +91,10 @@ class AGIConfig:
         self.clip_norm = kwargs.get("clip_norm", 0.5)  # Global norm clipping value
 
         # --- Data Processing Parameters ---
-        self.max_seq_length = kwargs.get("max_seq_length", self.tokenization_config.max_sequence_length)  # Maximum sequence length for input
-        self.pad_token_id = kwargs.get("pad_token_id", self.tokenization_config.pad_token_id)  # Token ID used for padding
-        self.max_sentence_length = kwargs.get("max_sentence_length", self.tokenization_config.max_text_length)  # Maximum allowed sentence length
+        self.max_seq_length = kwargs.get("max_seq_length", 4096)  # Maximum sequence length for input
+        self.pad_token_id = kwargs.get("pad_token_id", 0)  # Token ID used for padding
+        self.max_sentence_length = kwargs.get("max_sentence_length", 2048)  # Maximum allowed sentence length
         self.input_sentence_size = kwargs.get("input_sentence_size", 500000)  # Total number of sentences in input data
-        self.character_coverage = kwargs.get("character_coverage", 0.9999)  # Character coverage for tokenizer
         self.num_threads = kwargs.get("num_threads", 16)  # Number of threads for data processing
 
         # --- Memory Bank Parameters ---
