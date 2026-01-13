@@ -5,7 +5,7 @@ import optax
 import numpy as np
 import re
 import argparse
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union, Iterator, Any
 import matplotlib.pyplot as plt
 import time
 import os
@@ -29,11 +29,10 @@ from rtdlm import (
     create_rtdlm_agi, create_agi_optimizer, 
     compute_agi_loss
 )
-from core.checkpoint_manager import CheckpointManager, convert_pickle_to_safetensors
+from core.checkpoint_manager import CheckpointManager
 from config.agi_config import AGIConfig
-from data.processing.data_utils import DataProcessor, load_data, create_batches
 from modules.capabilities.advanced_algorithms import (
-    ContinualLearner, TaskMemory, compute_ewc_loss, compute_fisher_information
+    TaskMemory, compute_ewc_loss, compute_fisher_information
 )
 
 def cosine_similarity(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
@@ -45,7 +44,12 @@ def cosine_similarity(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
     return jnp.sum(a_flat * b_flat) / (norm_a * norm_b)
 
 class AGITrainer:
-    """Advanced trainer for RT-DLM AGI with comprehensive capabilities"""
+    """
+    Advanced trainer for RT-DLM AGI.
+    
+    Accepts pre-tokenized tensor data from the external data pipeline.
+    Training data should be prepared using Auralith-Data-Pipeline.
+    """
     
     def __init__(self, config: AGIConfig):
         self.config = config
@@ -72,18 +76,11 @@ class AGITrainer:
         # Continual learning state
         self.task_memories: List[TaskMemory] = []
         self.current_task_id = "task_0"
-        self.lambda_ewc = 1000.0  # EWC regularization strength
-        self.enable_continual_learning = True
+        self.lambda_ewc = 1000.0
         
-        # Data processor
-        self.data_processor = DataProcessor(
-            vocab_size=config.vocab_size,
-            model_prefix="data/rt_dlm_sp"
-        )
-        
-    def initialize_model(self, sample_batch):
-        """Initialize model parameters"""
-        print("[INFO] Initializing RT-DLM AGI model...")
+    def initialize_model(self, sample_batch: Dict[str, jnp.ndarray]):
+        """Initialize model parameters from a sample batch."""
+        logger.info("Initializing RT-DLM model...")
         
         # Create sample inputs for initialization
         sample_inputs = {
@@ -105,7 +102,7 @@ class AGITrainer:
         
         # Count parameters
         param_count = sum(x.size for x in jax.tree_util.tree_leaves(self.params))
-        print(f"[INFO] Model initialized with {param_count:,} parameters")
+        logger.info(f"Model initialized with {param_count:,} parameters")
         
         return self.params, self.opt_state
     
@@ -121,10 +118,10 @@ class AGITrainer:
             data_samples: Representative data samples from the task
             targets: Corresponding targets
         """
-        if not self.enable_continual_learning or self.params is None:
-            return
+        if self.params is None:
+            raise RuntimeError("Model must be initialized before consolidating tasks")
             
-        print(f"[INFO] Consolidating task {task_id} with EWC...")
+        logger.info(f"Consolidating task {task_id} with EWC...")
         
         # Compute Fisher information for current task
         self.rng, fisher_rng = jax.random.split(self.rng)
@@ -142,13 +139,13 @@ class AGITrainer:
             task_id=task_id,
             params_snapshot=jax.tree_util.tree_map(lambda x: x.copy(), self.params),
             fisher_matrix=fisher_matrix,
-            importance_weights=fisher_matrix,  # Use Fisher as importance for SI
+            importance_weights=fisher_matrix,
             performance_metrics={"final_loss": float(self.training_losses[-1]) if self.training_losses else 0.0},
             num_samples=len(data_samples)
         )
         
         self.task_memories.append(task_memory)
-        print(f"[INFO] Task {task_id} consolidated. Total task memories: {len(self.task_memories)}")
+        logger.info(f"Task {task_id} consolidated. Total task memories: {len(self.task_memories)}")
     
     def compute_ewc_regularization(self, params: Dict) -> jnp.ndarray:
         """
@@ -175,105 +172,77 @@ class AGITrainer:
         
         return total_ewc_loss
 
-    def create_training_batch(self, texts: List[str], include_multimodal: bool = False,
-                               images: Optional[np.ndarray] = None,
-                               audio: Optional[np.ndarray] = None):
-        """Create a training batch with optional multimodal data
+    def create_batch_from_tensors(
+        self, 
+        input_ids: jnp.ndarray,
+        targets: Optional[jnp.ndarray] = None,
+        images: Optional[jnp.ndarray] = None,
+        audio: Optional[jnp.ndarray] = None
+    ) -> Dict[str, jnp.ndarray]:
+        """
+        Create a training batch from pre-tokenized tensor data.
+        
+        Data should be prepared using Auralith-Data-Pipeline and loaded
+        from SafeTensors shards.
         
         Args:
-            texts: List of text strings to tokenize
-            include_multimodal: Whether to include synthetic multimodal data
-            images: Optional real image data (batch, H, W, C) in uint8 [0-255]
-            audio: Optional real audio mel spectrograms (batch, time, freq)
+            input_ids: Pre-tokenized input tensor (batch, seq_len)
+            targets: Target tensor for next-token prediction (default: input_ids)
+            images: Optional image tensor (batch, H, W, C)
+            audio: Optional audio mel spectrogram tensor (batch, time, freq)
         
         Returns:
             Dictionary with input_ids, targets, and optional multimodal_inputs
         """
-        # Tokenize texts
-        tokenized = [self.data_processor.tokenize(text) for text in texts]
-        
-        # Pad sequences
-        max_len = min(self.config.max_seq_length, max(len(tokens) for tokens in tokenized))
-        inputs = jnp.array([
-            self.data_processor.pad_sequence(tokens, max_len) 
-            for tokens in tokenized
-        ], dtype=jnp.int32)
-        
         batch = {
-            "input_ids": inputs,
-            "targets": inputs,  # For next-token prediction
-            "text": inputs,  # Alias for multimodal batch format
+            "input_ids": input_ids,
+            "targets": targets if targets is not None else input_ids,
+            "text": input_ids,
         }
         
-        batch_size = inputs.shape[0]
+        batch_size = input_ids.shape[0]
         
-        # Add multimodal data if provided or generate synthetic
-        if include_multimodal and self.config.multimodal_enabled:
-            self.rng, *modal_rngs = jax.random.split(self.rng, 4)
+        # Add multimodal data if provided
+        if self.config.multimodal_enabled and (images is not None or audio is not None):
+            self.rng, *modal_rngs = jax.random.split(self.rng, 3)
             
             # Use provided images or generate synthetic
             if images is not None:
-                # Normalize real images from [0-255] to [0-1]
-                batch_images = jnp.array(images[:batch_size] / 255.0, dtype=jnp.float32)
-                # Resize if needed
-                if batch_images.shape[1:3] != (224, 224):
-                    batch_images = jax.image.resize(
-                        batch_images, 
-                        (batch_size, 224, 224, 3),
-                        method='bilinear'
-                    )
+                batch_images = jnp.array(images[:batch_size], dtype=jnp.float32)
             else:
-                # Generate synthetic image data
                 batch_images = jax.random.normal(modal_rngs[0], (batch_size, 224, 224, 3)) * 0.1
             
-            # Use provided audio or generate synthetic mel spectrograms
+            # Use provided audio or generate synthetic
             if audio is not None:
                 mel_spectrograms = jnp.array(audio[:batch_size], dtype=jnp.float32)
-                # Resize if needed
-                if mel_spectrograms.shape[1:] != (128, 128):
-                    mel_spectrograms = jax.image.resize(
-                        mel_spectrograms[..., None],  # Add channel dim
-                        (batch_size, 128, 128, 1),
-                        method='bilinear'
-                    )[..., 0]  # Remove channel dim
             else:
-                # Generate synthetic mel spectrogram
                 mel_spectrograms = jax.random.normal(modal_rngs[1], (batch_size, 128, 128)) * 0.1
             
             batch["image"] = batch_images
             batch["audio"] = mel_spectrograms
-            
             batch["multimodal_inputs"] = {
                 "images": batch_images,
                 "audio": mel_spectrograms,
-                "video": jax.random.normal(modal_rngs[2], (batch_size, 8, 112, 112, 3)) * 0.1,
             }
         
         return batch
     
-    def create_reasoning_task(self, batch_size: int = 8):
-        """Create a reasoning task for training reasoning capabilities"""
+    def create_reasoning_batch(self, batch_size: int = 8) -> Dict[str, jnp.ndarray]:
+        """
+        Create a synthetic reasoning task batch for evaluation.
         
-        # Simple arithmetic reasoning task
-        reasoning_problems = []
-        for _ in range(batch_size):
-            a = np.random.randint(1, 100)
-            b = np.random.randint(1, 100)
-            operation = np.random.choice(['+', '-', '*'])
-            
-            if operation == '+':
-                answer = a + b
-                problem = f"What is {a} plus {b}? Let me think step by step."
-            elif operation == '-':
-                answer = a - b  
-                problem = f"What is {a} minus {b}? Let me think step by step."
-            else:  # multiplication
-                answer = a * b
-                problem = f"What is {a} times {b}? Let me think step by step."
-            
-            reasoning_problems.append(problem)
-        
-        return self.create_training_batch(reasoning_problems, include_multimodal=False)
+        Note: For actual training, use pre-tokenized data from the data pipeline.
+        This is only for reasoning capability evaluation.
+        """
+        # Generate random token sequences for reasoning evaluation
+        self.rng, rng = jax.random.split(self.rng)
+        input_ids = jax.random.randint(
+            rng, 
+            (batch_size, self.config.max_seq_length), 
+            0, 
+            self.config.vocab_size
+        )
+        return self.create_batch_from_tensors(input_ids)
     
     @jax.jit
     def train_step(self, params, opt_state, batch, rng):
@@ -375,7 +344,7 @@ class AGITrainer:
             return total_loss, (model_output, base_loss, ewc_loss)
         
         # Compute gradients
-        (total_loss, (model_output, base_loss, ewc_loss)), grads = jax.value_and_grad(
+        (total_loss, (_, base_loss, ewc_loss)), grads = jax.value_and_grad(
             loss_fn_with_ewc, has_aux=True
         )(params, batch, rng)
         
@@ -401,21 +370,25 @@ class AGITrainer:
         
         return new_params, new_opt_state, total_loss, base_loss, ewc_loss
 
-    def evaluate_model(self, eval_data: List[str], num_samples: int = 100):
-        """Comprehensive model evaluation"""
-        print("[INFO] Evaluating model...")
+    def evaluate_model(self, eval_batches: List[Dict[str, jnp.ndarray]], num_samples: int = 100):
+        """
+        Comprehensive model evaluation on pre-tokenized tensor data.
+        
+        Args:
+            eval_batches: List of evaluation batches, each containing input_ids and targets
+            num_samples: Maximum number of samples to evaluate
+        """
+        logger.info("Evaluating model...")
         
         eval_losses = []
         reasoning_scores = []
         consciousness_scores = []
         
         # Regular evaluation
-        for i in range(0, min(len(eval_data), num_samples), self.config.batch_size):
-            batch_texts = eval_data[i:i + self.config.batch_size]
-            if len(batch_texts) < self.config.batch_size:
+        samples_evaluated = 0
+        for batch in eval_batches:
+            if samples_evaluated >= num_samples:
                 break
-                
-            batch = self.create_training_batch(batch_texts)
             
             # Forward pass
             self.rng, eval_rng = jax.random.split(self.rng)
@@ -434,6 +407,7 @@ class AGITrainer:
             )
             
             eval_losses.append(float(loss))
+            samples_evaluated += batch["input_ids"].shape[0]
             
             # Evaluate reasoning quality
             if "reasoning_chain" in model_output:
@@ -450,7 +424,7 @@ class AGITrainer:
                 consciousness_scores.append(consciousness_score)
         
         # Reasoning-specific evaluation
-        reasoning_batch = self.create_reasoning_task(self.config.batch_size)
+        reasoning_batch = self.create_reasoning_batch(self.config.batch_size)
         self.rng, reasoning_rng = jax.random.split(self.rng)
         
         reasoning_output = self.model.apply(
@@ -490,8 +464,8 @@ class AGITrainer:
         if ground_truth is not None:
             # Parse step-by-step reasoning patterns
             # Matches patterns like "Step 1: ...", "step 2: ...", "Answer: ..."
-            step_pattern = r'[Ss]tep\s*\d+:\s*(.+?)(?=[Ss]tep\s*\d+:|[Aa]nswer:|$)'
-            answer_pattern = r'[Aa]nswer:\s*(.+?)(?:\.|$)'
+            step_pattern = r'[Ss]tep\s*\d+:\s*(.+)(?=[Ss]tep\s*\d+:|[Aa]nswer:|$)'
+            answer_pattern = r'[Aa]nswer:\s*([^.]+)'
             
             # Extract steps and answer from reasoning output (if available as text)
             # This works with string representations of the reasoning chain
@@ -612,7 +586,7 @@ class AGITrainer:
         
         # First, initialize the model structure if not already done
         if self.params is None:
-            print("[INFO] Initializing model structure before loading weights...")
+            logger.info("Initializing model structure before loading weights...")
             self.initialize_model(sample_batch)
         
         # Load checkpoint
@@ -630,9 +604,9 @@ class AGITrainer:
         # Restore optimizer state if available
         if checkpoint["opt_state"] is not None:
             self.opt_state = checkpoint["opt_state"]
-            print("[INFO] Optimizer state restored")
+            logger.info("Optimizer state restored")
         else:
-            print("[INFO] No optimizer state in checkpoint, using fresh optimizer")
+            logger.info("No optimizer state in checkpoint, using fresh optimizer")
         
         # Restore step count
         self.step_count = checkpoint.get("step_count", 0)
@@ -641,10 +615,10 @@ class AGITrainer:
         metadata = checkpoint.get("metadata", {})
         if metadata.get("training_losses"):
             self.training_losses = list(metadata["training_losses"])
-            print(f"[INFO] Restored {len(self.training_losses)} training loss records")
+            logger.info(f"Restored {len(self.training_losses)} training loss records")
         if metadata.get("validation_losses"):
             self.validation_losses = list(metadata["validation_losses"])
-            print(f"[INFO] Restored {len(self.validation_losses)} validation loss records")
+            logger.info(f"Restored {len(self.validation_losses)} validation loss records")
         
         # Calculate resume epoch
         resume_epoch = checkpoint.get("epoch", 0)
@@ -652,10 +626,10 @@ class AGITrainer:
         # Count parameters
         param_count = sum(x.size for x in jax.tree_util.tree_leaves(self.params))
         
-        print(f"[INFO] ✓ Checkpoint loaded successfully")
-        print(f"[INFO]   - Epoch: {resume_epoch}")
-        print(f"[INFO]   - Step count: {self.step_count}")
-        print(f"[INFO]   - Parameters: {param_count:,}")
+        logger.info("Checkpoint loaded successfully")
+        logger.info(f"  - Epoch: {resume_epoch}")
+        logger.info(f"  - Step count: {self.step_count}")
+        logger.info(f"  - Parameters: {param_count:,}")
         
         return resume_epoch
     
@@ -695,119 +669,198 @@ class AGITrainer:
         plt.show()
         plt.close(fig)  # Clean up figure resources
     
-    def train(self, train_data: List[str], val_data: List[str], 
-              resume_checkpoint: Optional[str] = None):
+    def _run_epoch(
+        self,
+        batch_iterator: Iterator[Dict[str, jnp.ndarray]],
+        num_batches_estimate: int
+    ) -> List[float]:
         """
-        Complete training loop for RT-DLM AGI.
+        Run a single training epoch.
         
         Args:
-            train_data: List of training text samples
-            val_data: List of validation text samples
-            resume_checkpoint: Optional path to checkpoint to resume from.
-                              If provided, training continues from saved state.
+            batch_iterator: Iterator over training batches
+            num_batches_estimate: Estimated number of batches for logging
+            
+        Returns:
+            List of losses for the epoch
         """
-        print("=" * 60)
-        print("RT-DLM AGI Training Started")
-        print("=" * 60)
+        epoch_losses = []
         
-        # Print configuration
-        self.config.print_summary()
+        for batch_idx, batch in enumerate(batch_iterator):
+            self.rng, train_rng = jax.random.split(self.rng)
+            self.params, self.opt_state, loss, _ = self.train_step(
+                self.params, self.opt_state, batch, train_rng
+            )
+            
+            if jnp.isnan(loss) or jnp.isinf(loss):
+                logger.warning(f"NaN/Inf loss detected at batch {batch_idx}, skipping...")
+                continue
+            
+            epoch_losses.append(float(loss))
+            self.training_losses.append(float(loss))
+            self.step_count += 1
+            
+            if batch_idx % 50 == 0:
+                logger.info(f"  Batch {batch_idx + 1}/{num_batches_estimate}, Loss: {loss:.4f}")
         
-        # Initialize model with first batch
-        sample_batch = self.create_training_batch(train_data[:self.config.batch_size])
+        return epoch_losses
+    
+    def _run_validation(
+        self, 
+        val_data: Any,
+        use_streaming: bool
+    ) -> Dict[str, float]:
+        """
+        Run validation and return metrics.
         
-        # Handle checkpoint resumption
+        Args:
+            val_data: Validation data source (List or ShardedDataLoader)
+            use_streaming: Whether using streaming data loader
+            
+        Returns:
+            Dictionary of validation metrics
+        """
+        if use_streaming:
+            val_batches: List[Dict[str, jnp.ndarray]] = val_data.get_validation_batches(max_batches=50)
+        else:
+            val_batches = val_data
+            
+        return self.evaluate_model(val_batches)
+    
+    def _check_early_stopping(
+        self,
+        val_loss: float,
+        best_val_loss: float,
+        patience_counter: int,
+        max_patience: int,
+        epoch: int,
+        metrics: Dict[str, float]
+    ) -> Tuple[float, int, bool]:
+        """
+        Check early stopping condition and update best model.
+        
+        Returns:
+            Tuple of (new_best_loss, new_patience_counter, should_stop)
+        """
+        if val_loss < best_val_loss:
+            self.save_checkpoint(epoch, metrics)
+            return val_loss, 0, False
+        
+        new_patience = patience_counter + 1
+        if new_patience >= max_patience:
+            logger.info(f"Early stopping triggered after {new_patience} epochs without improvement")
+            return best_val_loss, new_patience, True
+        
+        return best_val_loss, new_patience, False
+    
+    def _prepare_training(
+        self,
+        train_data: Any,
+        resume_checkpoint: Optional[str]
+    ) -> Tuple[int, Dict[str, jnp.ndarray], int, bool]:
+        """
+        Prepare training: initialize model or resume from checkpoint.
+        
+        Returns:
+            Tuple of (start_epoch, sample_batch, num_batches_estimate, use_streaming)
+        """
+        use_streaming = isinstance(train_data, ShardedDataLoader)
+        
+        if use_streaming:
+            sample_batch = train_data.get_sample_batch()
+            num_batches_estimate = train_data.num_batches_per_epoch
+        else:
+            sample_batch = train_data[0]
+            num_batches_estimate = len(train_data)
+        
         start_epoch = 0
         if resume_checkpoint:
             start_epoch = self.resume_from_checkpoint(resume_checkpoint, sample_batch)
-            print(f"[INFO] Resuming from epoch {start_epoch + 1}")
+            logger.info(f"Resuming from epoch {start_epoch + 1}")
         else:
             self.initialize_model(sample_batch)
+        
+        return start_epoch, sample_batch, num_batches_estimate, use_streaming
+
+    def train(
+        self, 
+        train_data: Union[List[Dict[str, jnp.ndarray]], "ShardedDataLoader"],
+        val_data: Union[List[Dict[str, jnp.ndarray]], "ShardedDataLoader"],
+        resume_checkpoint: Optional[str] = None
+    ) -> Dict:
+        """
+        Complete training loop for RT-DLM.
+        
+        Accepts pre-tokenized tensor data from the external data pipeline
+        (Auralith-Data-Pipeline). Supports both in-memory batch lists and
+        streaming ShardedDataLoader for large datasets.
+        
+        Args:
+            train_data: Training data - either list of batches or ShardedDataLoader
+            val_data: Validation data - either list of batches or ShardedDataLoader
+            resume_checkpoint: Optional path to checkpoint to resume from.
+            
+        Returns:
+            Dictionary with training results and metrics
+        """
+        logger.info("=" * 60)
+        logger.info("RT-DLM Training Started")
+        logger.info("=" * 60)
+        
+        self.config.print_summary()
+        
+        # Prepare training
+        start_epoch, _, num_batches_estimate, use_streaming = self._prepare_training(
+            train_data, resume_checkpoint
+        )
         
         best_val_loss = float('inf')
         patience_counter = 0
         max_patience = 5
         
         for epoch in range(start_epoch, self.config.num_epochs):
-            print(f"\n[EPOCH {epoch + 1}/{self.config.num_epochs}]")
-            
-            epoch_losses = []
+            logger.info(f"EPOCH {epoch + 1}/{self.config.num_epochs}")
             epoch_start_time = time.time()
             
-            # Training
-            num_batches = len(train_data) // self.config.batch_size
-            for batch_idx in range(0, len(train_data), self.config.batch_size):
-                if batch_idx + self.config.batch_size > len(train_data):
-                    break
-                
-                # Create batch
-                batch_texts = train_data[batch_idx:batch_idx + self.config.batch_size]
-                batch = self.create_training_batch(
-                    batch_texts, 
-                    include_multimodal=self.config.multimodal_enabled
-                )
-                
-                # Training step
-                self.rng, train_rng = jax.random.split(self.rng)
-                self.params, self.opt_state, loss, model_output = self.train_step(
-                    self.params, self.opt_state, batch, train_rng
-                )
-                
-                # NaN check for loss
-                if jnp.isnan(loss) or jnp.isinf(loss):
-                    logger.warning(f"NaN/Inf loss detected at batch {batch_idx}, skipping...")
-                    continue
-                
-                epoch_losses.append(float(loss))
-                self.training_losses.append(float(loss))
-                self.step_count += 1
-                
-                # Log progress
-                if batch_idx // self.config.batch_size % 50 == 0:
-                    current_batch = batch_idx // self.config.batch_size + 1
-                    print(f"  Batch {current_batch}/{num_batches}, Loss: {loss:.4f}")
+            # Run training epoch
+            batch_iterator = train_data.iter_epoch() if use_streaming else iter(train_data)
+            epoch_losses = self._run_epoch(batch_iterator, num_batches_estimate)
             
-            # Epoch summary
+            # Log epoch summary
             epoch_time = time.time() - epoch_start_time
-            avg_epoch_loss = np.mean(epoch_losses)
+            avg_epoch_loss = np.mean(epoch_losses) if epoch_losses else float('inf')
+            logger.info(f"  Average Loss: {avg_epoch_loss:.4f}")
+            logger.info(f"  Epoch Time: {epoch_time:.1f}s")
             
-            print(f"  Average Loss: {avg_epoch_loss:.4f}")
-            print(f"  Epoch Time: {epoch_time:.1f}s")
-            
-            # Save checkpoint every 10 epochs
+            # Periodic checkpoint
             if epoch % 10 == 0 and epoch > 0:
-                self.save_checkpoint(epoch, {"avg_loss": avg_epoch_loss})
+                self.save_checkpoint(epoch, {"avg_loss": float(avg_epoch_loss)})
                 logger.info(f"Periodic checkpoint saved at epoch {epoch}")
             
             # Validation
-            if epoch % self.config.eval_interval == 0 or epoch == self.config.num_epochs - 1:
-                metrics = self.evaluate_model(val_data)
+            should_validate = (epoch % self.config.eval_interval == 0) or (epoch == self.config.num_epochs - 1)
+            if should_validate:
+                metrics = self._run_validation(val_data, use_streaming)
                 
                 self.validation_losses.append(metrics["eval_loss"])
                 self.reasoning_accuracies.append(metrics["reasoning_accuracy"])
                 self.consciousness_coherence.append(metrics["consciousness_coherence"])
                 
-                print(f"  Validation Loss: {metrics['eval_loss']:.4f}")
-                print(f"  Reasoning Accuracy: {metrics['reasoning_accuracy']:.4f}")
-                print(f"  Consciousness Coherence: {metrics['consciousness_coherence']:.4f}")
+                logger.info(f"  Validation Loss: {metrics['eval_loss']:.4f}")
+                logger.info(f"  Reasoning Accuracy: {metrics['reasoning_accuracy']:.4f}")
+                logger.info(f"  Consciousness Coherence: {metrics['consciousness_coherence']:.4f}")
                 
-                # Early stopping check
-                if metrics["eval_loss"] < best_val_loss:
-                    best_val_loss = metrics["eval_loss"]
-                    patience_counter = 0
-                    self.save_checkpoint(epoch, metrics)
-                else:
-                    patience_counter += 1
-                
-                if patience_counter >= max_patience:
-                    print(f"[INFO] Early stopping triggered after {patience_counter} epochs without improvement")
+                # Check early stopping
+                best_val_loss, patience_counter, should_stop = self._check_early_stopping(
+                    metrics["eval_loss"], best_val_loss, patience_counter, max_patience, epoch, metrics
+                )
+                if should_stop:
                     break
         
-        print("\n" + "=" * 60)
-        print("RT-DLM AGI Training Completed!")
-        print("=" * 60)
+        logger.info("=" * 60)
+        logger.info("RT-DLM Training Completed!")
+        logger.info("=" * 60)
         
-        # Plot training metrics
         self.plot_training_metrics()
         
         return {
@@ -891,16 +944,10 @@ Examples:
     
     # Data paths
     parser.add_argument(
-        "--train-data",
+        "--data-dir",
         type=str,
-        default="data/train_data.txt",
-        help="Path to training data file"
-    )
-    parser.add_argument(
-        "--val-data",
-        type=str,
-        default="data/validation_data.txt",
-        help="Path to validation data file"
+        default=None,
+        help="Path to directory containing pre-tokenized SafeTensor shards"
     )
     
     # Output
@@ -914,11 +961,192 @@ Examples:
     return parser.parse_args()
 
 
+class ShardedDataLoader:
+    """
+    Memory-efficient data loader for large SafeTensor datasets.
+    
+    Streams batches from disk instead of loading all data into memory.
+    Supports sharding across multiple files for datasets that don't fit in RAM.
+    """
+    
+    def __init__(
+        self, 
+        data_dir: str, 
+        batch_size: int,
+        seq_length: int,
+        shuffle: bool = True,
+        prefetch_shards: int = 2
+    ):
+        """
+        Initialize the sharded data loader.
+        
+        Args:
+            data_dir: Directory containing .safetensors shard files
+            batch_size: Number of samples per batch
+            seq_length: Maximum sequence length
+            shuffle: Whether to shuffle shards each epoch
+            prefetch_shards: Number of shards to keep in memory
+        """
+        from safetensors.numpy import load_file as load_safetensors
+        self._load_safetensors = load_safetensors
+        
+        self.data_dir = Path(data_dir)
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.shuffle = shuffle
+        self.prefetch_shards = prefetch_shards
+        
+        # Discover shard files
+        self.shard_files = sorted(self.data_dir.glob("*.safetensors"))
+        if not self.shard_files:
+            raise FileNotFoundError(f"No .safetensors files found in {data_dir}")
+        
+        self.num_shards = len(self.shard_files)
+        self._rng = np.random.default_rng(42)
+        
+        # Estimate total samples (scan first shard)
+        first_shard = self._load_shard(self.shard_files[0])
+        self.samples_per_shard = first_shard["input_ids"].shape[0]
+        self.total_samples = self.samples_per_shard * self.num_shards
+        
+        logger.info(f"DataLoader initialized: {self.num_shards} shards, ~{self.total_samples} samples")
+    
+    def _load_shard(self, shard_path: Path) -> Dict[str, np.ndarray]:
+        """Load a single shard from disk."""
+        tensors = self._load_safetensors(str(shard_path))
+        return tensors
+    
+    def _create_batches_from_shard(
+        self, 
+        shard_data: Dict[str, np.ndarray]
+    ) -> List[Dict[str, jnp.ndarray]]:
+        """Create batches from a loaded shard."""
+        input_ids = shard_data["input_ids"]
+        targets = shard_data.get("targets", input_ids)
+        
+        num_samples = input_ids.shape[0]
+        batches = []
+        
+        # Create batches from this shard
+        for start_idx in range(0, num_samples, self.batch_size):
+            end_idx = min(start_idx + self.batch_size, num_samples)
+            
+            batch_input_ids = jnp.array(input_ids[start_idx:end_idx])
+            batch_targets = jnp.array(targets[start_idx:end_idx])
+            
+            # Pad to batch_size if needed (for last batch)
+            current_batch_size = batch_input_ids.shape[0]
+            if current_batch_size < self.batch_size:
+                pad_size = self.batch_size - current_batch_size
+                batch_input_ids = jnp.pad(
+                    batch_input_ids, 
+                    ((0, pad_size), (0, 0)), 
+                    constant_values=0
+                )
+                batch_targets = jnp.pad(
+                    batch_targets, 
+                    ((0, pad_size), (0, 0)), 
+                    constant_values=0
+                )
+            
+            batches.append({
+                "input_ids": batch_input_ids,
+                "targets": batch_targets,
+                "text": batch_input_ids,
+            })
+        
+        return batches
+    
+    def iter_epoch(self) -> Iterator[Dict[str, jnp.ndarray]]:
+        """
+        Iterate through one epoch of data.
+        
+        Yields batches one at a time, loading shards as needed.
+        Memory-efficient for large datasets.
+        """
+        # Shuffle shard order if enabled
+        shard_order = list(range(self.num_shards))
+        if self.shuffle:
+            self._rng.shuffle(shard_order)
+        
+        for shard_idx in shard_order:
+            shard_path = self.shard_files[shard_idx]
+            shard_data = self._load_shard(shard_path)
+            
+            batches = self._create_batches_from_shard(shard_data)
+            
+            # Shuffle batches within shard if enabled
+            if self.shuffle:
+                batch_indices = list(range(len(batches)))
+                self._rng.shuffle(batch_indices)
+                batches = [batches[i] for i in batch_indices]
+            
+            for batch in batches:
+                yield batch
+            
+            # Free memory after processing shard
+            del shard_data
+    
+    def get_sample_batch(self) -> Dict[str, jnp.ndarray]:
+        """Get a single sample batch for model initialization."""
+        shard_data = self._load_shard(self.shard_files[0])
+        batches = self._create_batches_from_shard(shard_data)
+        return batches[0]
+    
+    def get_validation_batches(self, max_batches: int = 50) -> List[Dict[str, jnp.ndarray]]:
+        """
+        Load validation batches (limited number for memory efficiency).
+        
+        Args:
+            max_batches: Maximum number of batches to load
+            
+        Returns:
+            List of validation batches
+        """
+        val_batches = []
+        batch_count = 0
+        
+        for batch in self.iter_epoch():
+            val_batches.append(batch)
+            batch_count += 1
+            if batch_count >= max_batches:
+                break
+        
+        return val_batches
+    
+    @property
+    def num_batches_per_epoch(self) -> int:
+        """Estimate number of batches per epoch."""
+        return (self.total_samples + self.batch_size - 1) // self.batch_size
+
+
+def create_synthetic_batches(
+    num_batches: int, 
+    batch_size: int, 
+    seq_length: int, 
+    vocab_size: int
+) -> List[Dict[str, jnp.ndarray]]:
+    """Create synthetic tensor batches for testing."""
+    rng = jax.random.PRNGKey(42)
+    batches = []
+    
+    for _ in range(num_batches):
+        rng, key = jax.random.split(rng)
+        input_ids = jax.random.randint(key, (batch_size, seq_length), 0, vocab_size)
+        batches.append({
+            "input_ids": input_ids,
+            "targets": input_ids,
+            "text": input_ids,
+        })
+    
+    return batches
+
+
 def main():
     """Main training function with CLI support."""
     args = parse_args()
     
-    # Create AGI configuration
+    # Create configuration
     config = AGIConfig(
         # Core architecture
         d_model=args.d_model,
@@ -940,28 +1168,48 @@ def main():
     )
     
     # Load training data
-    print("[INFO] Loading training data...")
-    try:
-        train_data = load_data(args.train_data)
-        val_data = load_data(args.val_data)
-        
-        # Sample smaller datasets for faster training
-        train_data = train_data[:10000]  # Use first 10k samples
-        val_data = val_data[:1000]      # Use first 1k validation samples
-        
-        print(f"[INFO] Loaded {len(train_data)} training samples, {len(val_data)} validation samples")
-        
-    except FileNotFoundError:
-        print("[WARNING] Training data not found. Creating synthetic data...")
-        # Create synthetic training data
-        train_data = [
-            f"This is sample text number {i} for training the AGI model."
-            for i in range(1000)
-        ]
-        val_data = [
-            f"This is validation text number {i} for evaluating the AGI model."
-            for i in range(100)
-        ]
+    logger.info("Loading training data...")
+    
+    if args.data_dir and os.path.isdir(args.data_dir):
+        # Use streaming data loader for memory efficiency
+        try:
+            train_loader = ShardedDataLoader(
+                data_dir=args.data_dir,
+                batch_size=config.batch_size,
+                seq_length=config.max_seq_length,
+                shuffle=True
+            )
+            
+            # Create separate validation loader (no shuffle)
+            val_loader = ShardedDataLoader(
+                data_dir=args.data_dir,
+                batch_size=config.batch_size,
+                seq_length=config.max_seq_length,
+                shuffle=False
+            )
+            
+            logger.info(f"Streaming data loader ready: ~{train_loader.num_batches_per_epoch} batches/epoch")
+            
+            train_data = train_loader
+            val_data = val_loader
+            
+        except FileNotFoundError as e:
+            logger.error(str(e))
+            sys.exit(1)
+    else:
+        logger.warning("No data directory provided. Creating synthetic data for testing...")
+        train_data = create_synthetic_batches(
+            num_batches=100,
+            batch_size=config.batch_size,
+            seq_length=config.max_seq_length,
+            vocab_size=config.vocab_size
+        )
+        val_data = create_synthetic_batches(
+            num_batches=10,
+            batch_size=config.batch_size,
+            seq_length=config.max_seq_length,
+            vocab_size=config.vocab_size
+        )
     
     # Create trainer
     trainer = AGITrainer(config)
@@ -969,22 +1217,22 @@ def main():
     # Handle checkpoint resumption
     if args.resume:
         if not os.path.exists(args.resume):
-            print(f"[ERROR] Checkpoint not found: {args.resume}")
+            logger.error(f"Checkpoint not found: {args.resume}")
             sys.exit(1)
-        print(f"[INFO] Will resume training from: {args.resume}")
+        logger.info(f"Will resume training from: {args.resume}")
     
-    # Start training (resume_checkpoint passed to train method)
+    # Start training
     results = trainer.train(
         train_data, 
         val_data,
         resume_checkpoint=args.resume
     )
     
-    print("[INFO] Training completed successfully!")
-    print(f"[INFO] Final training loss: {results['training_losses'][-1]:.4f}")
+    logger.info("Training completed successfully!")
+    logger.info(f"Final training loss: {results['training_losses'][-1]:.4f}")
     
     if results['validation_losses']:
-        print(f"[INFO] Final validation loss: {results['validation_losses'][-1]:.4f}")
+        logger.info(f"Final validation loss: {results['validation_losses'][-1]:.4f}")
 
 
 if __name__ == "__main__":

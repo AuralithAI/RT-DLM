@@ -68,12 +68,12 @@ pip install -r requirements.txt
 ```
 
 ### Training
-```bash
-# Train tokenizer (requires training data)
-python train_tokenizer.py
 
+The model accepts pre-tokenized tensors (from [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline)).
+
+```bash
 # Train model
-python train.py
+python train.py --data-dir /path/to/tokenized/shards
 
 # Train with custom settings
 python train.py --epochs 50 --batch-size 32 --lr 1e-4
@@ -97,21 +97,21 @@ pytest tests/
 
 ## Implementation Status
 
-### Completed ✅
+### Completed
 - TMS block with three-tier memory and sparse MoE
 - Hybrid architecture with four ML paradigms
 - Ensemble fusion with cross-paradigm interaction
 - Quantum simulator with 32-qubit limit
 - Variational quantum circuit
-- Multimodal fusion and tokenization
+- Multimodal fusion
 - Production-ready token sampling (Top-K, Top-P, temperature, repetition penalty)
 - SafeTensors checkpoint management
-- Training pipeline with epoch-based loop
+- Training pipeline with epoch-based loop and checkpoint resumption
 - Inference engine with advanced sampling
 - Ethics module with feedback collection and reward modeling
 - Comprehensive test suite (**244 passing tests**)
 
-### Roadmap 🚧
+### Roadmap
 - [ ] Separate inference into standalone package
 - [ ] Extend quantum simulation beyond 32 qubits
 - [ ] Mixed-precision training (bfloat16/float16)
@@ -126,7 +126,6 @@ pytest tests/
 - JAX 0.4.35+
 - Haiku 0.0.13+
 - Optax (optimizer)
-- SentencePiece (tokenization)
 - SafeTensors (checkpoints)
 - NumPy
 
