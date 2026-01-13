@@ -4,6 +4,7 @@ import haiku as hk
 import optax
 import numpy as np
 import re
+import argparse
 from typing import Dict, List, Tuple, Optional
 import matplotlib.pyplot as plt
 import time
@@ -587,6 +588,76 @@ class AGITrainer:
         self.step_count = checkpoint.get("step_count", 0)
         
         print(f"[INFO] Loaded checkpoint from epoch {checkpoint['epoch']}")
+        
+        return checkpoint
+    
+    def resume_from_checkpoint(self, checkpoint_path: str, sample_batch: Dict) -> int:
+        """
+        Resume training from a checkpoint.
+        
+        Loads model parameters, optimizer state, and training progress from a 
+        previously saved checkpoint. The model doesn't start from zero weights.
+        
+        Args:
+            checkpoint_path: Path to the checkpoint file (.safetensors)
+            sample_batch: Sample batch for model initialization (if needed)
+            
+        Returns:
+            The epoch number to resume from (start_epoch)
+        """
+        print(f"[INFO] Resuming training from checkpoint: {checkpoint_path}")
+        
+        if not os.path.exists(checkpoint_path):
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+        
+        # First, initialize the model structure if not already done
+        if self.params is None:
+            print("[INFO] Initializing model structure before loading weights...")
+            self.initialize_model(sample_batch)
+        
+        # Load checkpoint
+        checkpoint_manager = CheckpointManager(checkpoint_dir=str(Path(checkpoint_path).parent))
+        
+        checkpoint = checkpoint_manager.load_checkpoint(
+            checkpoint_path=checkpoint_path,
+            load_opt_state=True,
+            reference_opt_state=self.opt_state
+        )
+        
+        # Restore model parameters
+        self.params = checkpoint["params"]
+        
+        # Restore optimizer state if available
+        if checkpoint["opt_state"] is not None:
+            self.opt_state = checkpoint["opt_state"]
+            print("[INFO] Optimizer state restored")
+        else:
+            print("[INFO] No optimizer state in checkpoint, using fresh optimizer")
+        
+        # Restore step count
+        self.step_count = checkpoint.get("step_count", 0)
+        
+        # Restore training history if available
+        metadata = checkpoint.get("metadata", {})
+        if metadata.get("training_losses"):
+            self.training_losses = list(metadata["training_losses"])
+            print(f"[INFO] Restored {len(self.training_losses)} training loss records")
+        if metadata.get("validation_losses"):
+            self.validation_losses = list(metadata["validation_losses"])
+            print(f"[INFO] Restored {len(self.validation_losses)} validation loss records")
+        
+        # Calculate resume epoch
+        resume_epoch = checkpoint.get("epoch", 0)
+        
+        # Count parameters
+        param_count = sum(x.size for x in jax.tree_util.tree_leaves(self.params))
+        
+        print(f"[INFO] ✓ Checkpoint loaded successfully")
+        print(f"[INFO]   - Epoch: {resume_epoch}")
+        print(f"[INFO]   - Step count: {self.step_count}")
+        print(f"[INFO]   - Parameters: {param_count:,}")
+        
+        return resume_epoch
     
     def plot_training_metrics(self):
         """Plot training progress"""
@@ -624,8 +695,17 @@ class AGITrainer:
         plt.show()
         plt.close(fig)  # Clean up figure resources
     
-    def train(self, train_data: List[str], val_data: List[str]):
-        """Complete training loop for RT-DLM AGI"""
+    def train(self, train_data: List[str], val_data: List[str], 
+              resume_checkpoint: Optional[str] = None):
+        """
+        Complete training loop for RT-DLM AGI.
+        
+        Args:
+            train_data: List of training text samples
+            val_data: List of validation text samples
+            resume_checkpoint: Optional path to checkpoint to resume from.
+                              If provided, training continues from saved state.
+        """
         print("=" * 60)
         print("RT-DLM AGI Training Started")
         print("=" * 60)
@@ -635,13 +715,20 @@ class AGITrainer:
         
         # Initialize model with first batch
         sample_batch = self.create_training_batch(train_data[:self.config.batch_size])
-        self.initialize_model(sample_batch)
+        
+        # Handle checkpoint resumption
+        start_epoch = 0
+        if resume_checkpoint:
+            start_epoch = self.resume_from_checkpoint(resume_checkpoint, sample_batch)
+            print(f"[INFO] Resuming from epoch {start_epoch + 1}")
+        else:
+            self.initialize_model(sample_batch)
         
         best_val_loss = float('inf')
         patience_counter = 0
         max_patience = 5
         
-        for epoch in range(self.config.num_epochs):
+        for epoch in range(start_epoch, self.config.num_epochs):
             print(f"\n[EPOCH {epoch + 1}/{self.config.num_epochs}]")
             
             epoch_losses = []
@@ -731,14 +818,112 @@ class AGITrainer:
             "consciousness_coherence": self.consciousness_coherence,
         }
 
+
+def parse_args():
+    """Parse command line arguments for training."""
+    parser = argparse.ArgumentParser(
+        description="Train RT-DLM model",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Train from scratch
+  python train.py
+  
+  # Resume training from a checkpoint
+  python train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors
+  
+  # Train with custom settings
+  python train.py --epochs 50 --batch-size 32 --lr 1e-4
+  
+  # Resume with more epochs
+  python train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors --epochs 100
+        """
+    )
+    
+    # Checkpoint resumption
+    parser.add_argument(
+        "--resume", "-r",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Path to checkpoint file to resume training from (.safetensors)"
+    )
+    
+    # Training hyperparameters
+    parser.add_argument(
+        "--epochs", "-e",
+        type=int,
+        default=10,
+        help="Total number of training epochs (default: 10)"
+    )
+    parser.add_argument(
+        "--batch-size", "-b",
+        type=int,
+        default=16,
+        help="Training batch size (default: 16)"
+    )
+    parser.add_argument(
+        "--lr", "--learning-rate",
+        type=float,
+        default=3e-4,
+        help="Learning rate (default: 3e-4)"
+    )
+    
+    # Model configuration
+    parser.add_argument(
+        "--d-model",
+        type=int,
+        default=512,
+        help="Model hidden dimension (default: 512)"
+    )
+    parser.add_argument(
+        "--num-layers",
+        type=int,
+        default=12,
+        help="Number of transformer layers (default: 12)"
+    )
+    parser.add_argument(
+        "--num-heads",
+        type=int,
+        default=8,
+        help="Number of attention heads (default: 8)"
+    )
+    
+    # Data paths
+    parser.add_argument(
+        "--train-data",
+        type=str,
+        default="data/train_data.txt",
+        help="Path to training data file"
+    )
+    parser.add_argument(
+        "--val-data",
+        type=str,
+        default="data/validation_data.txt",
+        help="Path to validation data file"
+    )
+    
+    # Output
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=str,
+        default="checkpoints",
+        help="Directory to save checkpoints (default: checkpoints)"
+    )
+    
+    return parser.parse_args()
+
+
 def main():
-    """Main training function"""
+    """Main training function with CLI support."""
+    args = parse_args()
+    
     # Create AGI configuration
     config = AGIConfig(
         # Core architecture
-        d_model=512,
-        num_heads=8,
-        num_layers=12,
+        d_model=args.d_model,
+        num_heads=args.num_heads,
+        num_layers=args.num_layers,
         vocab_size=8000,
         
         # Advanced features
@@ -748,17 +933,17 @@ def main():
         consciousness_simulation=True,
         
         # Training settings
-        batch_size=16,
-        num_epochs=10,
-        learning_rate=3e-4,
+        batch_size=args.batch_size,
+        num_epochs=args.epochs,
+        learning_rate=args.lr,
         eval_interval=2,
     )
     
     # Load training data
     print("[INFO] Loading training data...")
     try:
-        train_data = load_data("data/train_data.txt")
-        val_data = load_data("data/validation_data.txt")
+        train_data = load_data(args.train_data)
+        val_data = load_data(args.val_data)
         
         # Sample smaller datasets for faster training
         train_data = train_data[:10000]  # Use first 10k samples
@@ -781,14 +966,26 @@ def main():
     # Create trainer
     trainer = AGITrainer(config)
     
-    # Start training
-    results = trainer.train(train_data, val_data)
+    # Handle checkpoint resumption
+    if args.resume:
+        if not os.path.exists(args.resume):
+            print(f"[ERROR] Checkpoint not found: {args.resume}")
+            sys.exit(1)
+        print(f"[INFO] Will resume training from: {args.resume}")
     
-    print(f"[INFO] Training completed successfully!")
+    # Start training (resume_checkpoint passed to train method)
+    results = trainer.train(
+        train_data, 
+        val_data,
+        resume_checkpoint=args.resume
+    )
+    
+    print("[INFO] Training completed successfully!")
     print(f"[INFO] Final training loss: {results['training_losses'][-1]:.4f}")
     
     if results['validation_losses']:
         print(f"[INFO] Final validation loss: {results['validation_losses'][-1]:.4f}")
+
 
 if __name__ == "__main__":
     main()
