@@ -1,12 +1,12 @@
 # RT-DLM: Real-Time Deep Learning Model
 
-A JAX/Haiku-based neural architecture for training and inference, combining transformer models, mixture of experts, quantum-inspired computing, and multi-paradigm hybrid learning.
+A JAX/Haiku-based neural architecture for training, combining transformer models, mixture of experts, quantum-inspired computing, and multi-paradigm hybrid learning.
 
-> **Note**: This repository focuses on **model architecture, training, and inference**. Data collection and processing are handled by the standalone [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline) repository. Inference may be separated into its own package in a future release.
+> **Note**: This repository focuses on **model architecture and training**. Data collection, tokenization, and processing are handled by the standalone [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline) repository.
 
 ## Overview
 
-RT-DLM provides a unified architecture for building and training advanced AI models with real-time inference capabilities. The system combines classical deep learning with symbolic reasoning, probabilistic inference, and quantum-ready modules.
+RT-DLM provides a unified architecture for building and training advanced AI models. The system combines classical deep learning with symbolic reasoning, probabilistic inference, and quantum-ready modules.
 
 ## Core Components
 
@@ -38,7 +38,6 @@ Classical simulation of quantum computing primitives:
 Cross-modal fusion capabilities:
 - Audio emotion detection and hybrid audio module
 - Video understanding with temporal modeling
-- Multimodal tokenization with SentencePiece integration
 
 ### Training Pipeline
 
@@ -47,16 +46,6 @@ Cross-modal fusion capabilities:
 - **Gradient optimization** via Optax (AdamW, learning rate scheduling)
 - **Ethics module** with feedback collection and reward modeling
 - **Mixed-precision ready** architecture
-
-### Inference Engine
-
-Advanced token generation with production sampling:
-- **Top-K Filtering**: Keep only top-k probable tokens
-- **Top-P (Nucleus) Sampling**: Dynamic probability mass cutoff
-- **Temperature Scaling**: Control output randomness
-- **Min-P Filtering**: Relative probability threshold
-- **Repetition Penalty**: Prevent repetitive outputs
-- **Preset Configurations**: Creative, Precise, Balanced, Deterministic
 
 ## Quick Start
 
@@ -85,11 +74,6 @@ python train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors
 python train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors --epochs 100
 ```
 
-### Inference
-```bash
-python inference.py
-```
-
 ### Running Tests
 ```bash
 pytest tests/
@@ -107,12 +91,10 @@ pytest tests/
 - Production-ready token sampling (Top-K, Top-P, temperature, repetition penalty)
 - SafeTensors checkpoint management
 - Training pipeline with epoch-based loop and checkpoint resumption
-- Inference engine with advanced sampling
 - Ethics module with feedback collection and reward modeling
-- Comprehensive test suite (**244 passing tests**)
+- Comprehensive test suite
 
 ### Roadmap
-- [ ] Separate inference into standalone package
 - [ ] Extend quantum simulation beyond 32 qubits
 - [ ] Mixed-precision training (bfloat16/float16)
 - [ ] Gradient checkpointing for memory efficiency
@@ -133,7 +115,7 @@ pytest tests/
 
 | Repository | Description |
 |------------|-------------|
-| [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline) | Data collection, processing, and sharding |
+| [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline) | Data collection, tokenization, processing, and sharding |
 
 ## Documentation
 

@@ -60,46 +60,7 @@ python train.py --data-dir ./shards --d-model 768 --num-layers 24 --num-heads 12
 python train.py --data-dir ./shards --resume checkpoints/rtdlm_epoch_10.safetensors
 ```
 
-Training configuration is in `config/train_config.py`.
-
-## Inference
-
-### Run the Inference Demo
-
-```bash
-python inference.py
-```
-
-This starts an interactive session with the trained model.
-
-### Using in Code
-
-```python
-from inference import RT_DLM_AGI_Assistant
-
-# Initialize
-assistant = RT_DLM_AGI_Assistant()
-
-# Generate response
-response = assistant.generate_response(
-    "What is quantum computing?",
-    temperature=0.7,
-    top_k=50
-)
-print(response)
-
-# Step-by-step reasoning
-reasoning = assistant.think_step_by_step(
-    "Why is the sky blue?"
-)
-print(reasoning)
-
-# Creative generation
-creative = assistant.creative_generation(
-    "Write a poem about AI"
-)
-print(creative)
-```
+Training configuration is in `config/agi_config.py`.
 
 ## Running Tests
 
@@ -143,11 +104,9 @@ config = AGIConfig(
 )
 ```
 
-Training configuration is in `config/train_config.py`.
-
 ## Next Steps
 
 - Read the [Architecture Overview](ARCHITECTURE.md) for system design
 - Check the [Sampling Guide](SAMPLING.md) for generation control
 - Run tests with `pytest tests/` to validate your setup
-- For data preparation, see [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline)
+- For data preparation and tokenization, see [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline)

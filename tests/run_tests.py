@@ -66,8 +66,6 @@ def run_tests():
         "test_training.py",
         # Hybrid fusion tests
         "test_hybrid_fusion.py",
-        # Tokenizer test
-        "test_tokenizer.py",
         # Example tests
         os.sep.join(["test_example", "test_attention.py"]),
         os.sep.join(["test_example", "test_embedding.py"]),

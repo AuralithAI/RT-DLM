@@ -29,7 +29,6 @@ from core.quantum.quantum_readiness import (
     QuantumSimulator
 )
 from config.agi_config import AGIConfig
-from modules.integrations.web_integration import HybridKnowledgeIntegration
 from modules.hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
 from modules.capabilities.advanced_algorithms import ContinualLearner
 from core.agi.agi_system import AGISystemAbstraction, AGIStage, StageThresholds
@@ -941,9 +940,6 @@ class RTDLMAGISystem(hk.Module):
             self.hybrid_audio = HybridAudioEncoder(config.d_model)
             self.hybrid_video = HybridVideoEncoder(config.d_model)
         
-        # Web and external knowledge integration
-        self.external_knowledge = HybridKnowledgeIntegration(config.d_model)
-        
         # Reasoning engine
         self.reasoning_engine = ReasoningEngine(config)
         
@@ -1042,10 +1038,19 @@ class RTDLMAGISystem(hk.Module):
                  multimodal_inputs: Optional[Dict[str, jnp.ndarray]] = None,
                  conversation_history: Optional[jnp.ndarray] = None,
                  knowledge_base: Optional[jnp.ndarray] = None,
-                 query_text: Optional[str] = None,
                  return_reasoning: bool = False):
         """
         Complete AGI forward pass with hybrid architecture
+        
+        Args:
+            inputs: Dictionary containing tensor inputs (e.g., {"text": input_ids})
+            multimodal_inputs: Optional dictionary of multimodal tensor inputs
+            conversation_history: Optional tensor for conversation context
+            knowledge_base: Optional tensor for knowledge retrieval
+            return_reasoning: Whether to return reasoning traces
+            
+        Returns:
+            Dictionary containing model outputs (logits, features, etc.)
         """
         # Extract text inputs
         text_inputs = inputs.get("text", inputs.get("input_ids"))
@@ -1067,15 +1072,6 @@ class RTDLMAGISystem(hk.Module):
         )
         hybrid_features = hybrid_result["ensemble_output"]
         
-        # External knowledge integration
-        external_knowledge = None
-        if query_text:
-            knowledge_result = self.external_knowledge(
-                core_features.mean(axis=1), 
-                query_text
-            )
-            external_knowledge = knowledge_result["fused_knowledge"]
-        
         # Enhanced multi-modal processing
         multimodal_features = self._process_multimodal_inputs(
             multimodal_inputs, core_features
@@ -1084,13 +1080,13 @@ class RTDLMAGISystem(hk.Module):
         # Reasoning with hybrid features
         reasoning_result = self.reasoning_engine(
             hybrid_features, 
-            external_knowledge or core_features
+            core_features
         )
         
         # Integrate all features
         all_features = self._integrate_features(
             core_features, hybrid_features, multimodal_features, 
-            external_knowledge, reasoning_result
+            reasoning_result
         )
         
         # Final AGI integration
@@ -1133,18 +1129,17 @@ class RTDLMAGISystem(hk.Module):
         
         # Autonomous scientific discovery
         discovery_results = None
-        if external_knowledge is not None:
-            try:
-                theories, experiments, validation = self.autonomous_discovery(
-                    external_knowledge, reasoning_result
-                )
-                discovery_results = {
-                    "theories": theories,
-                    "experiments": experiments,
-                    "validation_scores": validation
-                }
-            except Exception as e:
-                logger.warning(f"Scientific discovery failed: {e}")
+        try:
+            theories, experiments, validation = self.autonomous_discovery(
+                core_features, reasoning_result
+            )
+            discovery_results = {
+                "theories": theories,
+                "experiments": experiments,
+                "validation_scores": validation
+            }
+        except Exception as e:
+            logger.warning(f"Scientific discovery failed: {e}")
         
         # AGI System Orchestration - unify cognitive components and track stage
         agi_system_result = self._orchestrate_agi_system(
@@ -1213,7 +1208,7 @@ class RTDLMAGISystem(hk.Module):
         return None
     
     def _integrate_features(self, core_features, hybrid_features, 
-                          multimodal_features, external_knowledge, reasoning_result):
+                          multimodal_features, reasoning_result):
         """Integrate all feature types"""
         features_list = [core_features, hybrid_features]
         
@@ -1223,9 +1218,6 @@ class RTDLMAGISystem(hk.Module):
                 projection = hk.Linear(core_features.shape[-1], name="multimodal_proj")
                 multimodal_features = projection(multimodal_features)
             features_list.append(multimodal_features)
-        
-        if external_knowledge is not None:
-            features_list.append(external_knowledge)
         
         # Add reasoning features
         if "reasoning_features" in reasoning_result:
