@@ -5,31 +5,20 @@ Implements tensor network methods for efficient quantum state representation:
 - Matrix Product States (MPS) for 1D systems
 - Tree Tensor Networks (TTN) for hierarchical systems
 - MERA for scale-invariant systems
+
+Used by QuantumAGICore for 100+ qubit simulation.
 """
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
-from dataclasses import dataclass
 import logging
 
+# Import config from config folder
+from config.tensor_network_config import TensorNetworkConfig
+
 logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Tensor Network Configuration
-# =============================================================================
-
-@dataclass
-class TensorNetworkConfig:
-    """Configuration for tensor network quantum simulation"""
-    num_qubits: int = 32
-    bond_dimension: int = 64  # Maximum bond dimension (controls accuracy vs memory)
-    truncation_threshold: float = 1e-10  # SVD truncation threshold
-    max_iterations: int = 100  # Max iterations for variational optimization
-    use_canonicalization: bool = True  # Use canonical form for MPS
-    network_type: str = "mps"  # "mps", "ttn", or "mera"
 
 
 # =============================================================================

@@ -10,8 +10,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from config.tensor_network_config import TensorNetworkConfig
 from core.quantum.tensor_network import (
-    TensorNetworkConfig,
     MatrixProductState,
     TreeTensorNetwork,
     TensorNetworkQuantumSimulator,
@@ -26,10 +26,10 @@ class TestTensorNetworkConfig:
     def test_default_config(self):
         """Test default configuration values"""
         config = TensorNetworkConfig()
-        assert config.num_qubits == 32
+        assert config.num_qubits == 16
         assert config.bond_dimension == 64
         assert config.max_iterations == 100
-        assert config.use_canonicalization is True
+        assert config.use_sparse is True
         assert config.network_type == "mps"
     
     def test_custom_config(self):

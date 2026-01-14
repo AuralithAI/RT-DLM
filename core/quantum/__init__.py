@@ -16,13 +16,14 @@ from core.quantum.extended_quantum_sim import (
     create_extended_quantum_simulator
 )
 from core.quantum.tensor_network import (
-    TensorNetworkConfig,
     MatrixProductState,
     TreeTensorNetwork,
     TensorNetworkQuantumSimulator,
     create_tensor_network_simulator,
     estimate_memory_usage
 )
+# Import TensorNetworkConfig from config folder
+from config.tensor_network_config import TensorNetworkConfig
 
 __all__ = [
     'QuantumAGICore',

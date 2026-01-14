@@ -31,8 +31,15 @@ from rtdlm import (
 )
 from core.checkpoint_manager import CheckpointManager
 from config.agi_config import AGIConfig
+from config.model_parallel_config import ModelParallelConfig
 from modules.capabilities.advanced_algorithms import (
     TaskMemory, compute_ewc_loss, compute_fisher_information
+)
+# Model parallelism imports (used when model_parallel=True)
+from core.model_parallel import (
+    DeviceMesh,
+    create_model_parallel_system,
+    create_model_parallel_transformer,
 )
 
 def cosine_similarity(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
@@ -49,14 +56,32 @@ class AGITrainer:
     
     Accepts pre-tokenized tensor data from the external data pipeline.
     Training data should be prepared using Auralith-Data-Pipeline.
+    
+    Supports:
+    - Standard single-device training
+    - Multi-device data parallelism (distributed_training=True)
+    - Model parallelism for very large models (model_parallel=True)
     """
     
     def __init__(self, config: AGIConfig):
         self.config = config
         self.rng = jax.random.PRNGKey(42)
         
-        # Initialize model
-        self.model = create_rtdlm_agi(config)
+        # Model parallelism setup (for very large models)
+        self.device_mesh = None
+        self.mp_config = None
+        if config.model_parallel:
+            self.device_mesh, self.mp_config = create_model_parallel_system(config)
+            logger.info(f"Model parallelism enabled: {self.mp_config.tensor_parallel_size} devices")
+        
+        # Initialize model (standard or model-parallel)
+        if config.model_parallel and self.device_mesh is not None:
+            # Use model parallel transformer for very large models
+            self.model = create_model_parallel_transformer(config, self.device_mesh)
+            logger.info("Using model-parallel transformer architecture")
+        else:
+            # Standard model
+            self.model = create_rtdlm_agi(config)
         
         # Initialize optimizer
         self.optimizer = create_agi_optimizer(config)

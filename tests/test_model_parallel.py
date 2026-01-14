@@ -11,8 +11,8 @@ import numpy as np
 import haiku as hk
 from jax.sharding import PartitionSpec as P
 
+from config.model_parallel_config import ModelParallelConfig
 from core.model_parallel import (
-    ModelParallelConfig,
     DeviceMesh,
     TensorParallelLinear,
     TensorParallelAttention,
@@ -20,7 +20,6 @@ from core.model_parallel import (
     PipelineStage,
     PipelineParallelModel,
     ModelParallelTransformer,
-    create_model_parallel_config,
     create_model_parallel_system,
 )
 
@@ -321,7 +320,7 @@ class TestConfigCreation:
             num_devices = 1
             gradient_checkpointing = True
         
-        config = create_model_parallel_config(MockAGIConfig())
+        config = ModelParallelConfig.from_agi_config(MockAGIConfig())
         assert isinstance(config, ModelParallelConfig)
 
 

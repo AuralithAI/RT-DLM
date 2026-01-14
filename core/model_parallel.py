@@ -5,6 +5,8 @@ Supports sharding large models across multiple devices:
 - Tensor parallelism (split layers across devices)
 - Pipeline parallelism (split layers sequentially)
 - Fully Sharded Data Parallel (FSDP) patterns
+
+This module is used by train.py when model_parallel=True in AGIConfig.
 """
 
 import jax
@@ -14,60 +16,14 @@ from jax.sharding import Mesh, PartitionSpec as P, NamedSharding
 from jax.experimental import mesh_utils
 import haiku as hk
 from typing import Dict, Any, Optional, Tuple, List, Callable
-from dataclasses import dataclass
 from functools import partial
 import numpy as np
 import logging
 
+# Import config from config folder
+from config.model_parallel_config import ModelParallelConfig
+
 logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Model Parallelism Configuration
-# =============================================================================
-
-@dataclass
-class ModelParallelConfig:
-    """Configuration for model parallelism"""
-    
-    # Device mesh configuration
-    num_devices: int = 1
-    mesh_shape: Tuple[int, ...] = (1,)  # (data, model) or (data, tensor, pipeline)
-    mesh_axis_names: Tuple[str, ...] = ("data",)
-    
-    # Parallelism strategy
-    tensor_parallel: bool = False  # Split individual layers
-    pipeline_parallel: bool = False  # Split layers sequentially
-    tensor_parallel_size: int = 1  # Number of devices for tensor parallelism
-    pipeline_parallel_size: int = 1  # Number of pipeline stages
-    
-    # Memory optimization
-    activation_checkpointing: bool = True
-    offload_to_cpu: bool = False  # Offload optimizer states to CPU
-    
-    # Communication optimization
-    async_communication: bool = True
-    gradient_compression: bool = False
-    
-    def __post_init__(self):
-        self.num_devices = jax.device_count()
-        if self.tensor_parallel and self.pipeline_parallel:
-            # Combined parallelism
-            assert self.tensor_parallel_size * self.pipeline_parallel_size <= self.num_devices
-        elif self.tensor_parallel:
-            self.tensor_parallel_size = min(self.tensor_parallel_size, self.num_devices)
-        elif self.pipeline_parallel:
-            self.pipeline_parallel_size = min(self.pipeline_parallel_size, self.num_devices)
-
-
-def create_model_parallel_config(config) -> ModelParallelConfig:
-    """Create model parallel config from AGI config"""
-    return ModelParallelConfig(
-        tensor_parallel=config.model_parallel,
-        pipeline_parallel=False,  # Can be extended
-        tensor_parallel_size=config.num_devices,
-        activation_checkpointing=config.gradient_checkpointing,
-    )
 
 
 # =============================================================================
@@ -615,8 +571,8 @@ class ModelParallelTransformer(hk.Module):
 # =============================================================================
 
 def create_model_parallel_system(config) -> Tuple[DeviceMesh, ModelParallelConfig]:
-    """Create model parallelism system from config"""
-    mp_config = create_model_parallel_config(config)
+    """Create model parallelism system from AGI config"""
+    mp_config = ModelParallelConfig.from_agi_config(config)
     mesh = DeviceMesh(mp_config)
     
     logger.info(f"Created device mesh with shape {mesh.mesh.shape}")
@@ -626,7 +582,7 @@ def create_model_parallel_system(config) -> Tuple[DeviceMesh, ModelParallelConfi
     return mesh, mp_config
 
 
-def create_model_parallel_transformer(config, mesh: DeviceMesh) -> Callable:
+def create_model_parallel_transformer(config, mesh: DeviceMesh):
     """Create model parallel transformer function"""
     def model_fn(input_ids, mask=None):
         model = ModelParallelTransformer(config, mesh)

@@ -10,7 +10,6 @@ from core.training_utils import (
     GradientAccumulator,
 )
 from core.model_parallel import (
-    ModelParallelConfig,
     DeviceMesh,
     TensorParallelLinear,
     TensorParallelAttention,
@@ -18,12 +17,13 @@ from core.model_parallel import (
     PipelineStage,
     PipelineParallelModel,
     ModelParallelTransformer,
-    create_model_parallel_config,
     shard_params_for_tensor_parallel,
     create_sharded_train_step,
     create_model_parallel_system,
     create_model_parallel_transformer,
 )
+# Import ModelParallelConfig from config folder
+from config.model_parallel_config import ModelParallelConfig
 
 __all__ = [
     # Training utilities
@@ -44,7 +44,6 @@ __all__ = [
     'PipelineStage',
     'PipelineParallelModel',
     'ModelParallelTransformer',
-    'create_model_parallel_config',
     'shard_params_for_tensor_parallel',
     'create_sharded_train_step',
     'create_model_parallel_system',
