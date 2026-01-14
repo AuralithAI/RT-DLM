@@ -126,6 +126,28 @@ class AGIConfig:
         # --- Spike Attention Parameters ---
         self.spike_threshold = kwargs.get("spike_threshold", 0.1)  # Spiking attention threshold
         self.EPSILON = kwargs.get("epsilon", 1e-8)  # Small value for numerical stability
+        
+        # --- Performance Optimization Parameters ---
+        # Mixed Precision Training
+        self.mixed_precision = kwargs.get("mixed_precision", False)  # Enable mixed precision
+        self.precision_dtype = kwargs.get("precision_dtype", "float32")  # float32, bfloat16, float16
+        self.compute_dtype = kwargs.get("compute_dtype", "float32")  # Compute precision
+        
+        # Gradient Checkpointing (Memory Efficiency)
+        self.gradient_checkpointing = kwargs.get("gradient_checkpointing", False)  # Enable gradient checkpointing
+        self.checkpoint_every_n_layers = kwargs.get("checkpoint_every_n_layers", 2)  # Checkpoint frequency
+        
+        # Distributed Training
+        self.distributed_training = kwargs.get("distributed_training", False)  # Enable distributed training
+        self.num_devices = kwargs.get("num_devices", 1)  # Number of devices for training
+        self.data_parallel = kwargs.get("data_parallel", True)  # Data parallelism
+        self.model_parallel = kwargs.get("model_parallel", False)  # Model parallelism
+        self.gradient_accumulation_steps = kwargs.get("gradient_accumulation_steps", 1)  # Gradient accumulation
+        
+        # Extended Quantum Simulation
+        self.quantum_max_qubits = kwargs.get("quantum_max_qubits", 64)  # Extended qubit simulation limit
+        self.quantum_chunked_simulation = kwargs.get("quantum_chunked_simulation", True)  # Enable chunked simulation
+        self.quantum_sparse_mode = kwargs.get("quantum_sparse_mode", True)  # Sparse state representation
 
         # Validate configuration
         self._validate_config()
@@ -144,6 +166,20 @@ class AGIConfig:
             assert self.vision_patch_size > 0, "vision_patch_size must be positive"
             assert self.audio_freq_bins > 0, "audio_freq_bins must be positive"
             assert self.video_frames > 0, "video_frames must be positive"
+        
+        # Validate precision dtype
+        valid_dtypes = ["float32", "bfloat16", "float16"]
+        assert self.precision_dtype in valid_dtypes, f"precision_dtype must be one of {valid_dtypes}"
+        assert self.compute_dtype in valid_dtypes, f"compute_dtype must be one of {valid_dtypes}"
+        
+        # Validate gradient checkpointing
+        if self.gradient_checkpointing:
+            assert self.checkpoint_every_n_layers > 0, "checkpoint_every_n_layers must be positive"
+            
+        # Validate distributed settings
+        if self.distributed_training:
+            assert self.num_devices >= 1, "num_devices must be at least 1"
+            assert self.gradient_accumulation_steps >= 1, "gradient_accumulation_steps must be at least 1"
             
     def to_dict(self):
         """Convert config to dictionary"""
@@ -215,6 +251,16 @@ class AGIConfig:
         print(f"  - Memory size: {self.memory_size}")
         print(f"  - Retrieval k: {self.retrieval_k}")
         print(f"  - Working memory: {self.working_memory_capacity}")
+        
+        print("\nPerformance Optimization:")
+        print(f"  - Mixed precision: {self.mixed_precision} ({self.precision_dtype})")
+        print(f"  - Gradient checkpointing: {self.gradient_checkpointing}")
+        print(f"  - Distributed training: {self.distributed_training}")
+        if self.distributed_training:
+            print(f"    - Devices: {self.num_devices}")
+            print(f"    - Gradient accumulation: {self.gradient_accumulation_steps}")
+        print(f"  - Quantum max qubits: {self.quantum_max_qubits}")
+        print(f"  - Quantum chunked sim: {self.quantum_chunked_simulation}")
         
         print("\nTraining:")
         print(f"  - Batch size: {self.batch_size}")

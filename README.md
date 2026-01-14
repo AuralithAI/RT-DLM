@@ -31,7 +31,7 @@ Multi-paradigm learning combining:
 Classical simulation of quantum computing primitives:
 - QuantumSimulator with PHASE, CNOT, Hadamard gates
 - VariationalQuantumCircuit for parameterized quantum ML
-- 32-qubit simulation with overflow protection
+- **64+ qubit simulation** with chunked/sparse representation
 - Quantum attention mechanisms
 
 #### Multimodal Processing
@@ -45,7 +45,9 @@ Cross-modal fusion capabilities:
 - **SafeTensors checkpointing** for model persistence
 - **Gradient optimization** via Optax (AdamW, learning rate scheduling)
 - **Ethics module** with feedback collection and reward modeling
-- **Mixed-precision ready** architecture
+- **Mixed-precision training** (bfloat16/float16) for faster training
+- **Gradient checkpointing** for memory efficiency
+- **Distributed training** support (data parallelism with pmap)
 
 ## Quick Start
 
@@ -85,22 +87,19 @@ pytest tests/
 - TMS block with three-tier memory and sparse MoE
 - Hybrid architecture with four ML paradigms
 - Ensemble fusion with cross-paradigm interaction
-- Quantum simulator with 32-qubit limit
+- Quantum simulator (64+ qubits with chunked/sparse simulation)
 - Variational quantum circuit
 - Multimodal fusion
 - Production-ready token sampling (Top-K, Top-P, temperature, repetition penalty)
 - SafeTensors checkpoint management
 - Training pipeline with epoch-based loop and checkpoint resumption
 - Ethics module with feedback collection and reward modeling
+- Mixed-precision training (bfloat16/float16)
+- Gradient checkpointing for memory efficiency
+- Distributed training support (data parallelism)
 - Comprehensive test suite
-
-### Roadmap
-- [ ] Extend quantum simulation beyond 32 qubits
-- [ ] Mixed-precision training (bfloat16/float16)
-- [ ] Gradient checkpointing for memory efficiency
-- [ ] Batched inference optimization
-- [ ] Distributed training support
-- [ ] ONNX/TensorRT export for deployment
+- Model parallelism (tensor parallelism, pipeline parallelism)
+- Tensor network approximations for quantum simulation (MPS, TTN, 100+ qubit support)
 
 ## Requirements
 
