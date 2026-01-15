@@ -31,15 +31,18 @@ from rtdlm import (
 )
 from core.checkpoint_manager import CheckpointManager
 from config.agi_config import AGIConfig
-from config.model_parallel_config import ModelParallelConfig
 from modules.capabilities.advanced_algorithms import (
     TaskMemory, compute_ewc_loss, compute_fisher_information
 )
-# Model parallelism imports (used when model_parallel=True)
-from core.model_parallel import (
-    DeviceMesh,
-    create_model_parallel_system,
-    create_model_parallel_transformer,
+# Scalable training (unified approach for all parallelism modes)
+from core.scalable_training import (
+    ScalableMesh,
+    create_scalable_mesh,
+    setup_scalable_training,
+    replicate_for_data_parallel,
+    unreplicate_params,
+    estimate_model_memory,
+    recommend_parallelism,
 )
 
 def cosine_similarity(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
@@ -57,31 +60,34 @@ class AGITrainer:
     Accepts pre-tokenized tensor data from the external data pipeline.
     Training data should be prepared using Auralith-Data-Pipeline.
     
-    Supports:
-    - Standard single-device training
-    - Multi-device data parallelism (distributed_training=True)
-    - Model parallelism for very large models (model_parallel=True)
+    Supports scalable training on any hardware configuration:
+    - Single GPU/TPU: Standard training
+    - Multiple GPUs/TPUs: Automatic data parallelism
+    - Very large models: Combined data + model parallelism
+    
+    The SAME full AGI model is used in all modes - parallelism is handled
+    automatically by the training infrastructure.
     """
     
     def __init__(self, config: AGIConfig):
         self.config = config
         self.rng = jax.random.PRNGKey(42)
         
-        # Model parallelism setup (for very large models)
-        self.device_mesh = None
-        self.mp_config = None
-        if config.model_parallel:
-            self.device_mesh, self.mp_config = create_model_parallel_system(config)
-            logger.info(f"Model parallelism enabled: {self.mp_config.tensor_parallel_size} devices")
+        # Scalable training setup
+        self.mesh = None
+        self.is_distributed = False
         
-        # Initialize model (standard or model-parallel)
-        if config.model_parallel and self.device_mesh is not None:
-            # Use model parallel transformer for very large models
-            self.model = create_model_parallel_transformer(config, self.device_mesh)
-            logger.info("Using model-parallel transformer architecture")
-        else:
-            # Standard model
-            self.model = create_rtdlm_agi(config)
+        # Always use the full AGI model (unified approach)
+        self.model = create_rtdlm_agi(config)
+        
+        # Set up scalable mesh if using multiple devices
+        if config.distributed_training or config.model_parallel:
+            self.mesh = create_scalable_mesh(config)
+            self.is_distributed = self.mesh.is_distributed
+            logger.info("Scalable training enabled:")
+            logger.info(f"  Data parallel: {self.mesh.data_parallel_size} replicas")
+            if self.mesh.has_tensor_parallel:
+                logger.info(f"  Tensor parallel: {self.mesh.tensor_parallel_size} shards")
         
         # Initialize optimizer
         self.optimizer = create_agi_optimizer(config)
@@ -105,7 +111,7 @@ class AGITrainer:
         
     def initialize_model(self, sample_batch: Dict[str, jnp.ndarray]):
         """Initialize model parameters from a sample batch."""
-        logger.info("Initializing RT-DLM model...")
+        logger.info("Initializing RT-DLM AGI model...")
         
         # Create sample inputs for initialization
         sample_inputs = {
@@ -123,11 +129,29 @@ class AGITrainer:
         # Initialize parameters
         self.rng, init_rng = jax.random.split(self.rng)
         self.params = self.model.init(init_rng, **sample_inputs)
+        
+        # Handle distributed training - replicate params across devices
+        if self.is_distributed and self.mesh is not None:
+            self.params = replicate_for_data_parallel(
+                self.params, 
+                self.mesh.data_parallel_size
+            )
+            logger.info(f"Parameters replicated across {self.mesh.data_parallel_size} devices")
+        
         self.opt_state = self.optimizer.init(self.params)
         
-        # Count parameters
-        param_count = sum(x.size for x in jax.tree_util.tree_leaves(self.params))
+        # Count parameters (get from single replica if distributed)
+        if self.is_distributed:
+            param_count = sum(x.size for x in jax.tree_util.tree_leaves(unreplicate_params(self.params)))
+        else:
+            param_count = sum(x.size for x in jax.tree_util.tree_leaves(self.params))
+        
+        # Print memory estimates
+        memory_est = estimate_model_memory(
+            unreplicate_params(self.params) if self.is_distributed else self.params
+        )
         logger.info(f"Model initialized with {param_count:,} parameters")
+        logger.info(f"Estimated memory: {memory_est['total_gb']:.2f} GB")
         
         return self.params, self.opt_state
     
