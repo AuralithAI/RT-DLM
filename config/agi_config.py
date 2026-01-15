@@ -77,6 +77,15 @@ class AGIConfig:
         self.prune_threshold = kwargs.get("prune_threshold", 0.01)  # Pruning threshold for MoE/Transformer/Self-Attention neurons.
         self.prune_interval = kwargs.get("prune_interval", 100)  # Pruning interval for MoE/Transformer/Self-Attention neurons.
 
+        # --- Advanced Attention Parameters ---
+        self.attention_type = kwargs.get("attention_type", "standard")  # "standard", "gqa", "mqa", "linear", "sliding"
+        self.num_kv_heads = kwargs.get("num_kv_heads", None)  # KV heads for GQA (None=MHA, 1=MQA)
+        self.position_encoding = kwargs.get("position_encoding", "rope")  # "rope", "learned", "alibi", "none"
+        self.rope_theta = kwargs.get("rope_theta", 10000.0)  # RoPE base frequency
+        self.rope_scaling = kwargs.get("rope_scaling", None)  # Extended context scaling (e.g., 2.0 for 2x length)
+        self.sliding_window_size = kwargs.get("sliding_window_size", 512)  # Window size for sliding attention
+        self.use_flash_attention = kwargs.get("use_flash_attention", False)  # Enable Flash Attention if available
+
         # --- Graph Neural Network Parameters ---
         self.graph_neurons_enabled = kwargs.get("graph_neurons_enabled", True)  # Enable graph-based neurons
         self.graph_max_nodes = kwargs.get("graph_max_nodes", 64)  # Maximum nodes in dynamic graphs
