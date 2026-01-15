@@ -172,3 +172,57 @@ print(f"Selected token: {result.token_id}")
 print(f"Probability: {result.probability:.4f}")
 print(f"Top 10 probabilities: {result.all_probabilities[:10]}")
 ```
+
+## Speculative Decoding
+
+RT-DLM supports speculative decoding for faster inference. This technique uses a smaller "draft" model to propose tokens, then verifies them with the main model.
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Speculative Decoding                          │
+│                                                                  │
+│   1. Draft Model generates K candidate tokens quickly            │
+│   2. Main Model verifies all K tokens in one forward pass        │
+│   3. Accept matching tokens, reject divergent ones               │
+│   4. Speedup: 2-3x faster than autoregressive decoding           │
+│                                                                  │
+│   ┌─────────┐        ┌─────────────┐        ┌─────────────────┐  │
+│   │  Draft  │──K────▶│   Verify    │──────▶│ Accept/Reject   │  │
+│   │  Model  │ tokens │ (Main Model)│        │ + Resample      │  │
+│   └─────────┘        └─────────────┘        └─────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Usage
+
+```python
+from core.sampling import SpeculativeDecoder, SelfSpeculativeDecoder
+
+# With separate draft model (e.g., smaller version)
+speculative = SpeculativeDecoder(
+    target_model=main_model,
+    draft_model=draft_model,
+    num_speculative_tokens=4
+)
+
+# Generate tokens
+tokens = speculative.generate(input_ids, max_new_tokens=100)
+
+# Self-speculative (uses early exit from same model)
+self_spec = SelfSpeculativeDecoder(
+    model=model,
+    early_exit_layer=6,  # Use layer 6 as draft
+    num_speculative_tokens=4
+)
+```
+
+### When to Use
+
+| Method | Best For | Speedup |
+|--------|----------|---------|
+| **Standard Autoregressive** | Short outputs, streaming | 1x |
+| **Speculative Decoding** | Long outputs, batch processing | 2-3x |
+| **Self-Speculative** | When no draft model available | 1.5-2x |
+

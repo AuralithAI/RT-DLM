@@ -1,6 +1,59 @@
 import jax.numpy as jnp
 
 
+# Model scale presets for different deployment scenarios
+MODEL_PRESETS = {
+    "tiny": {
+        "d_model": 256,
+        "num_heads": 4,
+        "num_layers": 6,
+        "moe_experts": 4,
+        "vocab_size": 32000,
+        "description": "Tiny model for testing (~50M params)",
+    },
+    "small": {
+        "d_model": 384,
+        "num_heads": 8,
+        "num_layers": 12,
+        "moe_experts": 8,
+        "vocab_size": 32000,
+        "description": "Small model for development (~150M params)",
+    },
+    "base": {
+        "d_model": 768,
+        "num_heads": 12,
+        "num_layers": 12,
+        "moe_experts": 8,
+        "vocab_size": 50000,
+        "description": "Base model for fine-tuning (~350M params)",
+    },
+    "large": {
+        "d_model": 1024,
+        "num_heads": 16,
+        "num_layers": 24,
+        "moe_experts": 16,
+        "vocab_size": 50000,
+        "description": "Large model for production (~1B params)",
+    },
+    "xlarge": {
+        "d_model": 2048,
+        "num_heads": 32,
+        "num_layers": 32,
+        "moe_experts": 32,
+        "vocab_size": 100000,
+        "description": "XLarge model for advanced tasks (~7B params)",
+    },
+    "xxlarge": {
+        "d_model": 4096,
+        "num_heads": 64,
+        "num_layers": 48,
+        "moe_experts": 64,
+        "vocab_size": 150000,
+        "description": "XXLarge model for SOTA performance (~70B params)",
+    },
+}
+
+
 class AGIConfig:
     """
     Configuration class for RT-DLM AGI model with multi-modal processing,
@@ -23,6 +76,23 @@ class AGIConfig:
         self.task_size = kwargs.get("task_size", 15)  # Task size for support and query sets (batches)
         self.prune_threshold = kwargs.get("prune_threshold", 0.01)  # Pruning threshold for MoE/Transformer/Self-Attention neurons.
         self.prune_interval = kwargs.get("prune_interval", 100)  # Pruning interval for MoE/Transformer/Self-Attention neurons.
+
+        # --- Advanced Attention Parameters ---
+        self.attention_type = kwargs.get("attention_type", "standard")  # "standard", "gqa", "mqa", "linear", "sliding"
+        self.num_kv_heads = kwargs.get("num_kv_heads", None)  # KV heads for GQA (None=MHA, 1=MQA)
+        self.position_encoding = kwargs.get("position_encoding", "rope")  # "rope", "learned", "alibi", "none"
+        self.rope_theta = kwargs.get("rope_theta", 10000.0)  # RoPE base frequency
+        self.rope_scaling = kwargs.get("rope_scaling", None)  # Extended context scaling (e.g., 2.0 for 2x length)
+        self.sliding_window_size = kwargs.get("sliding_window_size", 512)  # Window size for sliding attention
+        self.use_flash_attention = kwargs.get("use_flash_attention", False)  # Enable Flash Attention if available
+
+        # --- Graph Neural Network Parameters ---
+        self.graph_neurons_enabled = kwargs.get("graph_neurons_enabled", True)  # Enable graph-based neurons
+        self.graph_max_nodes = kwargs.get("graph_max_nodes", 64)  # Maximum nodes in dynamic graphs
+        self.graph_edge_threshold = kwargs.get("graph_edge_threshold", 0.3)  # Edge creation threshold
+        self.graph_num_hops = kwargs.get("graph_num_hops", 3)  # Multi-hop reasoning steps
+        self.graph_num_edge_types = kwargs.get("graph_num_edge_types", 8)  # Relational edge types
+        self.graph_moe_routing = kwargs.get("graph_moe_routing", True)  # Graph-based MoE routing
 
         # --- Advanced AGI Features ---
         self.max_reasoning_steps = kwargs.get("max_reasoning_steps", 10)  # Chain-of-thought reasoning steps
@@ -208,6 +278,49 @@ class AGIConfig:
             config_dict = json.load(f)
         return cls(**config_dict)
     
+    @classmethod
+    def from_preset(cls, preset_name: str, **overrides):
+        """
+        Create configuration from a preset scale.
+        
+        Available presets: tiny, small, base, large, xlarge, xxlarge
+        
+        Args:
+            preset_name: Name of the preset (e.g., 'large', 'xlarge')
+            **overrides: Additional parameters to override preset values
+            
+        Returns:
+            AGIConfig instance
+            
+        Example:
+            # Create large model config
+            config = AGIConfig.from_preset('large')
+            
+            # Create xlarge with custom learning rate
+            config = AGIConfig.from_preset('xlarge', learning_rate=5e-5)
+        """
+        if preset_name not in MODEL_PRESETS:
+            available = ', '.join(MODEL_PRESETS.keys())
+            raise ValueError(f"Unknown preset '{preset_name}'. Available: {available}")
+        
+        preset = MODEL_PRESETS[preset_name].copy()
+        preset.pop('description', None)  # Remove description from config params
+        preset.update(overrides)
+        
+        return cls(**preset)
+    
+    @staticmethod
+    def list_presets():
+        """List available model presets with descriptions."""
+        print("Available Model Presets:")
+        print("-" * 60)
+        for name, preset in MODEL_PRESETS.items():
+            desc = preset.get('description', 'No description')
+            params = f"d_model={preset['d_model']}, layers={preset['num_layers']}"
+            print(f"  {name:10s} - {desc}")
+            print(f"             {params}")
+        print("-" * 60)
+    
     def get_model_size_estimate(self):
         """Estimate model size in parameters"""
         # Rough estimate based on transformer architecture
@@ -237,7 +350,15 @@ class AGIConfig:
         print(f"  - num_heads: {self.num_heads}")
         print(f"  - num_layers: {self.num_layers}")
         print(f"  - vocab_size: {self.vocab_size}")
+        print(f"  - MoE experts: {self.moe_experts}")
         print(f"  - Estimated parameters: {self.get_model_size_estimate():,}")
+        
+        print("\nGraph Neural Networks:")
+        print(f"  - Graph neurons: {self.graph_neurons_enabled}")
+        if self.graph_neurons_enabled:
+            print(f"  - Max nodes: {self.graph_max_nodes}")
+            print(f"  - Multi-hop reasoning: {self.graph_num_hops} hops")
+            print(f"  - Graph MoE routing: {self.graph_moe_routing}")
         
         print("\nAdvanced Features:")
         print(f"  - Multi-modal: {self.multimodal_enabled}")
@@ -265,6 +386,7 @@ class AGIConfig:
         print("\nTraining:")
         print(f"  - Batch size: {self.batch_size}")
         print(f"  - Learning rate: {self.learning_rate}")
+        print(f"  - Clip norm: {self.clip_norm}")
         print(f"  - Epochs: {self.num_epochs}")
         print("=" * 60)
 

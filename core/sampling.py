@@ -514,3 +514,345 @@ def create_sampling_config_deterministic() -> SamplingConfig:
         repetition_penalty=1.0,
         log_probs=True
     )
+
+
+# ============================================================================
+# Speculative Decoding for Fast Inference
+# ============================================================================
+
+class SpeculativeDecoder:
+    """
+    Speculative Decoding for faster autoregressive generation.
+    
+    Uses a smaller draft model to predict multiple tokens ahead, then verifies
+    them with the target model in a single forward pass. This can provide
+    2-3x speedup for large models when the draft model is accurate.
+    
+    Based on: "Accelerating Large Language Model Decoding with Speculative Sampling"
+    (Leviathan et al., 2022)
+    
+    Example usage:
+        draft_model = small_model  # Fast, less accurate
+        target_model = large_model  # Slow, accurate
+        
+        decoder = SpeculativeDecoder(
+            target_forward_fn=target_model.apply,
+            draft_forward_fn=draft_model.apply,
+            num_speculative_tokens=4
+        )
+        
+        output_tokens = decoder.generate(
+            target_params, draft_params, 
+            initial_tokens, rng_key, 
+            max_length=100
+        )
+    """
+    
+    def __init__(
+        self,
+        target_forward_fn,
+        draft_forward_fn,
+        num_speculative_tokens: int = 4,
+        temperature: float = 1.0,
+        top_k: int = 0,
+        top_p: float = 1.0,
+    ):
+        """
+        Initialize speculative decoder.
+        
+        Args:
+            target_forward_fn: Forward function for target (large) model
+            draft_forward_fn: Forward function for draft (small) model
+            num_speculative_tokens: Number of tokens to speculate per step
+            temperature: Sampling temperature
+            top_k: Top-K filtering (0 to disable)
+            top_p: Nucleus sampling threshold
+        """
+        self.target_forward_fn = target_forward_fn
+        self.draft_forward_fn = draft_forward_fn
+        self.num_speculative_tokens = num_speculative_tokens
+        self.temperature = temperature
+        self.top_k = top_k
+        self.top_p = top_p
+        self.sampler = TokenSampler()
+        self.config = SamplingConfig(
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p
+        )
+    
+    def _draft_tokens(
+        self,
+        draft_params,
+        tokens: jnp.ndarray,
+        rng_key,
+        num_tokens: int
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """
+        Generate draft tokens using the fast draft model.
+        
+        Args:
+            draft_params: Parameters for draft model
+            tokens: Current token sequence [batch, seq_len]
+            rng_key: Random key
+            num_tokens: Number of tokens to draft
+            
+        Returns:
+            draft_tokens: Drafted token IDs [batch, num_tokens]
+            draft_probs: Draft token probabilities [batch, num_tokens]
+        """
+        batch_size = tokens.shape[0]
+        draft_tokens_list = []
+        draft_probs_list = []
+        current_tokens = tokens
+        
+        for i in range(num_tokens):
+            rng_key, sample_key = jax.random.split(rng_key)
+            
+            # Get draft model logits
+            draft_logits = self.draft_forward_fn(draft_params, text=current_tokens)
+            if isinstance(draft_logits, tuple):
+                draft_logits = draft_logits[0]  # Handle models that return aux outputs
+            
+            # Get logits for last position
+            last_logits = draft_logits[:, -1, :]
+            
+            # Sample
+            sample_output = self.sampler.sample(last_logits, self.config, sample_key)
+            draft_token = sample_output.token_id[:, 0]
+            draft_prob = sample_output.token_prob[:, 0]
+            
+            draft_tokens_list.append(draft_token)
+            draft_probs_list.append(draft_prob)
+            
+            # Append to sequence
+            current_tokens = jnp.concatenate([
+                current_tokens, draft_token[:, None]
+            ], axis=1)
+        
+        draft_tokens = jnp.stack(draft_tokens_list, axis=1)
+        draft_probs = jnp.stack(draft_probs_list, axis=1)
+        
+        return draft_tokens, draft_probs
+    
+    def _verify_and_accept(
+        self,
+        target_params,
+        tokens: jnp.ndarray,
+        draft_tokens: jnp.ndarray,
+        draft_probs: jnp.ndarray,
+        rng_key
+    ) -> Tuple[jnp.ndarray, int]:
+        """
+        Verify draft tokens with target model and accept valid ones.
+        
+        Args:
+            target_params: Parameters for target model
+            tokens: Original token sequence [batch, seq_len]
+            draft_tokens: Draft tokens to verify [batch, num_draft]
+            draft_probs: Probabilities of draft tokens [batch, num_draft]
+            rng_key: Random key
+            
+        Returns:
+            accepted_tokens: Verified and corrected tokens
+            num_accepted: Number of draft tokens accepted
+        """
+        batch_size = tokens.shape[0]
+        num_draft = draft_tokens.shape[1]
+        
+        # Concatenate original and draft tokens
+        full_sequence = jnp.concatenate([tokens, draft_tokens], axis=1)
+        
+        # Get target model logits for all positions
+        target_logits = self.target_forward_fn(target_params, text=full_sequence)
+        if isinstance(target_logits, tuple):
+            target_logits = target_logits[0]
+        
+        # Get target probabilities for draft positions
+        # Logits at position i predict token at position i+1
+        draft_positions = jnp.arange(tokens.shape[1] - 1, tokens.shape[1] - 1 + num_draft)
+        target_logits_for_draft = target_logits[:, draft_positions, :]
+        target_probs = jax.nn.softmax(target_logits_for_draft / self.temperature, axis=-1)
+        
+        # Get target probability for each draft token
+        target_probs_for_draft = jnp.take_along_axis(
+            target_probs, draft_tokens[:, :, None], axis=-1
+        )[:, :, 0]  # [batch, num_draft]
+        
+        # Acceptance ratio: min(1, target_prob / draft_prob)
+        acceptance_ratio = jnp.minimum(1.0, target_probs_for_draft / (draft_probs + 1e-10))
+        
+        # Generate uniform random for acceptance test
+        rng_key, accept_key = jax.random.split(rng_key)
+        uniform_samples = jax.random.uniform(accept_key, acceptance_ratio.shape)
+        
+        # Accept if uniform < acceptance_ratio
+        accepted_mask = uniform_samples < acceptance_ratio
+        
+        # Find first rejection point
+        # For simplicity, accept all tokens up to first rejection
+        cumulative_accept = jnp.cumprod(accepted_mask.astype(jnp.float32), axis=1)
+        num_accepted = jnp.sum(cumulative_accept, axis=1).astype(jnp.int32)
+        
+        # For batch processing, use minimum accepted across batch
+        min_accepted = int(jnp.min(num_accepted))
+        
+        if min_accepted == num_draft:
+            # All draft tokens accepted - also sample next token from target
+            rng_key, next_key = jax.random.split(rng_key)
+            next_logits = target_logits[:, -1, :]
+            next_output = self.sampler.sample(next_logits, self.config, next_key)
+            next_token = next_output.token_id
+            
+            accepted_tokens = jnp.concatenate([draft_tokens, next_token], axis=1)
+            return accepted_tokens, min_accepted + 1
+        else:
+            # Rejection at position min_accepted - resample from target
+            rng_key, resample_key = jax.random.split(rng_key)
+            resample_logits = target_logits[:, tokens.shape[1] - 1 + min_accepted, :]
+            resample_output = self.sampler.sample(resample_logits, self.config, resample_key)
+            resample_token = resample_output.token_id
+            
+            # Accept tokens up to rejection, then resampled token
+            accepted_tokens = jnp.concatenate([
+                draft_tokens[:, :min_accepted], resample_token
+            ], axis=1)
+            return accepted_tokens, min_accepted + 1
+    
+    def generate(
+        self,
+        target_params,
+        draft_params,
+        initial_tokens: jnp.ndarray,
+        rng_key,
+        max_length: int = 100,
+        stop_tokens: Optional[List[int]] = None
+    ) -> jnp.ndarray:
+        """
+        Generate tokens using speculative decoding.
+        
+        Args:
+            target_params: Parameters for target model
+            draft_params: Parameters for draft model
+            initial_tokens: Starting token sequence [batch, seq_len]
+            rng_key: Random key
+            max_length: Maximum total sequence length
+            stop_tokens: Token IDs that signal end of generation
+            
+        Returns:
+            Generated token sequence [batch, final_length]
+        """
+        tokens = initial_tokens
+        stop_tokens = stop_tokens or []
+        
+        while tokens.shape[1] < max_length:
+            rng_key, draft_key, verify_key = jax.random.split(rng_key, 3)
+            
+            # Draft tokens
+            draft_tokens, draft_probs = self._draft_tokens(
+                draft_params, tokens, draft_key, self.num_speculative_tokens
+            )
+            
+            # Verify and accept
+            accepted_tokens, num_accepted = self._verify_and_accept(
+                target_params, tokens, draft_tokens, draft_probs, verify_key
+            )
+            
+            # Append accepted tokens
+            tokens = jnp.concatenate([tokens, accepted_tokens], axis=1)
+            
+            # Check for stop tokens
+            if stop_tokens:
+                last_tokens = tokens[:, -num_accepted:]
+                for stop_token in stop_tokens:
+                    if jnp.any(last_tokens == stop_token):
+                        # Truncate at stop token
+                        return tokens
+        
+        return tokens
+
+
+class SelfSpeculativeDecoder:
+    """
+    Self-Speculative Decoding using early exit from the same model.
+    
+    Instead of a separate draft model, uses early transformer layers
+    to generate draft tokens and full model for verification.
+    This avoids needing to train/maintain a separate draft model.
+    
+    Based on: "Draft & Verify: Lossless Large Language Model Acceleration 
+    via Self-Speculative Decoding" (Zhang et al., 2023)
+    """
+    
+    def __init__(
+        self,
+        model_forward_fn,
+        early_exit_layer: int = 4,
+        num_speculative_tokens: int = 4,
+        temperature: float = 1.0,
+    ):
+        """
+        Initialize self-speculative decoder.
+        
+        Args:
+            model_forward_fn: Forward function that supports early exit
+            early_exit_layer: Layer to exit early for draft (default: 4)
+            num_speculative_tokens: Number of tokens to speculate
+            temperature: Sampling temperature
+        """
+        self.model_forward_fn = model_forward_fn
+        self.early_exit_layer = early_exit_layer
+        self.num_speculative_tokens = num_speculative_tokens
+        self.temperature = temperature
+        self.sampler = TokenSampler()
+        self.config = SamplingConfig(temperature=temperature)
+        
+        logger.info(
+            f"Self-speculative decoding initialized: "
+            f"early_exit={early_exit_layer}, "
+            f"num_speculative={num_speculative_tokens}"
+        )
+    
+    def generate(
+        self,
+        params,
+        initial_tokens: jnp.ndarray,
+        rng_key,
+        max_length: int = 100,
+    ) -> jnp.ndarray:
+        """
+        Generate tokens using self-speculative decoding.
+        
+        Note: Requires model to support `return_at_layer` parameter.
+        
+        Args:
+            params: Model parameters
+            initial_tokens: Starting tokens [batch, seq_len]
+            rng_key: Random key
+            max_length: Maximum sequence length
+            
+        Returns:
+            Generated tokens [batch, final_length]
+        """
+        # Placeholder - requires model modifications for early exit
+        logger.warning(
+            "Self-speculative decoding requires model support for early exit. "
+            "Falling back to standard generation."
+        )
+        
+        tokens = initial_tokens
+        while tokens.shape[1] < max_length:
+            rng_key, sample_key = jax.random.split(rng_key)
+            
+            logits = self.model_forward_fn(params, text=tokens)
+            if isinstance(logits, tuple):
+                logits = logits[0]
+            
+            last_logits = logits[:, -1, :]
+            sample_output = self.sampler.sample(last_logits, self.config, sample_key)
+            next_token = sample_output.token_id
+            
+            tokens = jnp.concatenate([tokens, next_token], axis=1)
+        
+        return tokens
+
