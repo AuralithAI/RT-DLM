@@ -44,40 +44,54 @@ This document describes the model architecture for training.
 │  │      TMSModel           │    │ │  │ HybridArchitecture  │    │ │  │  QuantumSimulator   │    │
 │  │                         │    │ │  │    Integrator       │    │ │  │                     │    │
 │  │ - SelfAttentionModel    │    │ │  │                     │    │ │  │ - PHASE gate        │    │
-│  │ - TransformerModel      │    │ │  │ - TraditionalML     │    │ │  │ - CNOT gate         │    │
-│  │ - SparseMoE             │    │ │  │   - SVMLikeClassifier│   │ │  │ - Hadamard gate     │    │
-│  │ - EthicalRewardModel    │    │ │  │   - RandomForestLike│    │ │  │ - Rotation gates    │    │
-│  └─────────────────────────┘    │ │  │   - NaiveBayesLike  │    │ │  │ - 32-qubit max      │    │
-│                                 │ │  │                     │    │ │  └─────────────────────┘    │
-│  ┌─────────────────────────┐    │ │  │ - DeepLearning      │    │ │                             │
-│  │      MemoryBank         │    │ │  │   - CNNBranch       │    │ │  ┌─────────────────────┐    │
-│  │                         │    │ │  │   - RNNBranch       │    │ │  │ VariationalQuantum  │    │
-│  │ - LTM (Long-Term)       │    │ │  │   - TransformerBranch│   │ │  │     Circuit         │    │
-│  │ - STM (Short-Term)      │    │ │  │                     │    │ │  │                     │    │
-│  │ - MTM (Meta-Task)       │    │ │  │ - SymbolicReasoning │    │ │  │ - build_layers()    │    │
-│  │ - FAISS indexing        │    │ │  │ - Probabilistic     │    │ │  │ - Parameterized     │    │
-│  │ - Adaptive forgetting   │    │ │  └─────────────────────┘    │ │  │ - Trainable params  │    │
-│  └─────────────────────────┘    │ │                             │ │  └─────────────────────┘    │
-│                                 │ │  ┌─────────────────────┐    │ │                             │
-│  ┌─────────────────────────┐    │ │  │   EnsembleFusion    │    │ │  ┌─────────────────────┐    │
-│  │      SparseMoE          │    │ │  │                     │    │ │  │ QuantumInspired     │    │
-│  │                         │    │ │  │ - Cross-paradigm    │    │ │  │    Attention        │    │
-│  │ - AdaptiveGatingNetwork │    │ │  │   interaction       │    │ │  │                     │    │
-│  │ - Top-K expert routing  │    │ │  │ - Outer-product     │    │ │  │ - Superposition     │    │
-│  │ - Load balancing loss   │    │ │  │   attention         │    │ │  │ - Entanglement      │    │
-│  │ - Specialization loss   │    │ │  │ - Adaptive fusion   │    │ │  │ - Quantum gates     │    │
-│  │ - Dynamic capacity      │    │ │  └─────────────────────┘    │ │  └─────────────────────┘    │
-│  └─────────────────────────┘    │ │                             │ │                             │
-└─────────────────────────────────┘ │  ┌─────────────────────┐    │ │  ┌─────────────────────┐    │
-                                    │  │  MultiAgentConsensus│    │ │  │QuantumNeuralNetwork │    │
-                                    │  │                     │    │ │  │                     │    │
-                                    │  │ - SpecialistAgents  │    │ │  │ - QuantumEncoder    │    │
-                                    │  │   - Reasoning       │    │ │  │ - QuantumDecoder    │    │
-                                    │  │   - Creativity      │    │ │  │ - QuantumAttention  │    │
-                                    │  │   - Analysis        │    │ │  └─────────────────────┘    │
-                                    │  │   - Synthesis       │    │ └─────────────────────────────┘
-                                    │  │ - Weighted voting   │    │
-                                    │  │ - Consensus loop    │    │
+│  │   (Advanced Attention)  │    │ │  │ - TraditionalML     │    │ │  │ - CNOT gate         │    │
+│  │ - TransformerModel      │    │ │  │   - SVMLikeClassifier│   │ │  │ - Hadamard gate     │    │
+│  │ - SparseMoE             │    │ │  │   - RandomForestLike│    │ │  │ - Rotation gates    │    │
+│  │ - EthicalRewardModel    │    │ │  │   - NaiveBayesLike  │    │ │  │ - 100+ qubits (TN)  │    │
+│  └─────────────────────────┘    │ │  │                     │    │ │  └─────────────────────┘    │
+│                                 │ │  │ - DeepLearning      │    │ │                             │
+│  ┌─────────────────────────┐    │ │  │   - CNNBranch       │    │ │  ┌─────────────────────┐    │
+│  │   Advanced Attention    │    │ │  │   - RNNBranch       │    │ │  │ VariationalQuantum  │    │
+│  │  (advanced_attention.py)│    │ │  │   - TransformerBranch│   │ │  │     Circuit         │    │
+│  │                         │    │ │  │                     │    │ │  │                     │    │
+│  │ - RoPE (Rotary Pos Emb) │    │ │  │ - SymbolicReasoning │    │ │  │ - build_layers()    │    │
+│  │ - GQA (Grouped-Query)   │    │ │  │ - Probabilistic     │    │ │  │ - Parameterized     │    │
+│  │ - MQA (Multi-Query)     │    │ │  └─────────────────────┘    │ │  │ - Trainable params  │    │
+│  │ - Sliding Window        │    │ │                             │ │  └─────────────────────┘    │
+│  │ - Linear Attention      │    │ │  ┌─────────────────────┐    │ │                             │
+│  │ - Spiking Attention     │    │ │  │   EnsembleFusion    │    │ │  ┌─────────────────────┐    │
+│  └─────────────────────────┘    │ │  │                     │    │ │  │ QuantumInspired     │    │
+│                                 │ │  │ - Cross-paradigm    │    │ │  │    Attention        │    │
+│  ┌─────────────────────────┐    │ │  │   interaction       │    │ │  │                     │    │
+│  │      MemoryBank         │    │ │  │ - Outer-product     │    │ │  │ - Superposition     │    │
+│  │                         │    │ │  │   attention         │    │ │  │ - Entanglement      │    │
+│  │ - LTM (Long-Term)       │    │ │  │ - Adaptive fusion   │    │ │  │ - Quantum gates     │    │
+│  │ - STM (Short-Term)      │    │ │  └─────────────────────┘    │ │  └─────────────────────┘    │
+│  │ - MTM (Meta-Task)       │    │ │                             │ │                             │
+│  │ - FAISS indexing        │    │ │  ┌─────────────────────┐    │ │  ┌─────────────────────┐    │
+│  │ - Adaptive forgetting   │    │ │  │  MultiAgentConsensus│    │ │  │QuantumNeuralNetwork │    │
+│  └─────────────────────────┘    │ │  │                     │    │ │  │                     │    │
+│                                 │ │  │ - SpecialistAgents  │    │ │  │ - QuantumEncoder    │    │
+│  ┌─────────────────────────┐    │ │  │   - Reasoning       │    │ │  │ - QuantumDecoder    │    │
+│  │      SparseMoE          │    │ │  │   - Creativity      │    │ │  │ - QuantumAttention  │    │
+│  │                         │    │ │  │   - Analysis        │    │ │  └─────────────────────┘    │
+│  │ - AdaptiveGatingNetwork │    │ │  │   - Synthesis       │    │ └─────────────────────────────┘
+│  │ - Top-K expert routing  │    │ │  │ - Weighted voting   │    │
+│  │ - Load balancing loss   │    │ │  │ - Consensus loop    │    │
+│  │ - Specialization loss   │    │ │  └─────────────────────┘    │
+│  │ - Dynamic capacity      │    │ │                             │
+│  │ - Router jitter         │    │ │  ┌─────────────────────┐    │
+│  └─────────────────────────┘    │ │  │   Graph Neurons     │    │
+│                                 │ │  │  (graph_neurons.py) │    │
+│  ┌─────────────────────────┐    │ │  │                     │    │
+│  │   Speculative Decoding  │    │ │  │ - GraphNeuron       │    │
+│  │    (core/sampling.py)   │    │ │  │ - GraphAttentionUnit│    │
+│  │                         │    │ │  │ - MultiHopReasoner  │    │
+│  │ - SpeculativeDecoder    │    │ │  │ - GraphMoE          │    │
+│  │ - SelfSpeculativeDecoder│    │ │  └─────────────────────┘    │
+│  │ - Draft/verify pipeline │    │ │                             │
+│  └─────────────────────────┘    │ └─────────────────────────────┘
+└─────────────────────────────────┘
                                     │  └─────────────────────┘    │
                                     └─────────────────────────────┘
 
@@ -327,15 +341,18 @@ This document describes the model architecture for training.
 ```
 rtdlm.py
 ├── core/model/model_tms.py
-│   ├── core/model/model_module_self_attention.py
+│   ├── core/model/model_module_self_attention.py  # Unified attention (RoPE, GQA, etc.)
+│   ├── core/model/advanced_attention.py           # Attention implementations
 │   ├── core/model/model_transformer_module.py
 │   ├── core/model/sparse_moe.py
 │   ├── core/model/memory_bank.py
 │   └── core/ethics/reward_model.py
+├── core/components/graph_neurons.py               # Graph neural components
 ├── modules/multimodal/fusion_module.py
 ├── modules/multimodal/hybrid_audio_module.py
 ├── modules/multimodal/hybrid_video_module.py
 ├── core/reasoning.py
+├── core/sampling.py                               # Token sampling + speculative decoding
 ├── core/quantum/quantum_agi_core.py
 ├── core/quantum/quantum_readiness.py
 ├── config/agi_config.py
@@ -353,6 +370,151 @@ modules/capabilities/integrated_agi_system.py
 ├── modules/capabilities/real_time_learning.py
 ├── modules/capabilities/zero_shot_reasoning.py
 └── core/quantum/quantum_readiness.py
+```
+
+## Advanced Attention System
+
+RT-DLM uses a unified attention system that supports multiple state-of-the-art attention mechanisms.
+
+### Attention Types
+
+| Type | Complexity | KV Cache | Best For |
+|------|------------|----------|----------|
+| **Standard MHA** | O(n²) | Full | General purpose, short sequences |
+| **GQA** | O(n²) | 2-4x smaller | Fast inference, quality maintained |
+| **MQA** | O(n²) | N/heads smaller | Maximum inference speed |
+| **Sliding Window** | O(n × w) | Window only | Very long sequences (>8k tokens) |
+| **Linear** | O(n) | None | Extreme length, approximate |
+
+### Position Encoding
+
+| Type | Description | Extrapolation |
+|------|-------------|---------------|
+| **RoPE** | Rotary Position Embedding | Excellent (recommended) |
+| **Learned** | Traditional learned embeddings | Limited |
+| **None** | No positional encoding | N/A |
+
+### Configuration Example
+
+```python
+from core.model import TMSModel
+
+# Standard MHA with RoPE (default, backward compatible)
+model = TMSModel(d_model=512, num_heads=8, attention_type="standard", ...)
+
+# GQA for 4x faster inference with minimal quality loss
+model = TMSModel(d_model=512, num_heads=8, attention_type="gqa", num_kv_heads=2, ...)
+
+# Sliding window for very long documents
+model = TMSModel(d_model=512, num_heads=8, attention_type="sliding", sliding_window_size=4096, ...)
+
+# Linear attention for extreme efficiency
+model = TMSModel(d_model=512, num_heads=8, attention_type="linear", ...)
+```
+
+### Attention Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         SelfAttentionModel (Unified)                        │
+│                    (core/model/model_module_self_attention.py)              │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                     advanced_attention.py                             │  │
+│  │                                                                       │  │
+│  │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │  │
+│  │   │    RoPE     │  │     GQA     │  │  Sliding    │  │   Linear    │  │  │
+│  │   │             │  │             │  │   Window    │  │  Attention  │  │  │
+│  │   │ - Rotary    │  │ - Grouped   │  │             │  │             │  │  │
+│  │   │   embed     │  │   KV heads  │  │ - O(n×w)    │  │ - O(n)      │  │  │
+│  │   │ - Better    │  │ - 2-4x      │  │ - Local     │  │ - Kernel    │  │  │
+│  │   │   extrap    │  │   smaller   │  │   context   │  │   approx    │  │  │
+│  │   └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│  ┌─────────────────────────────────┐  ┌─────────────────────────────────┐   │
+│  │      Spiking Attention          │  │        Pruning Manager          │   │
+│  │                                 │  │                                 │   │
+│  │ - Sparse activation             │  │ - Head usage tracking           │   │
+│  │ - Threshold-based gating        │  │ - Dynamic pruning               │   │
+│  │ - Energy efficient              │  │ - Compression analysis          │   │
+│  └─────────────────────────────────┘  └─────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Graph Neural Components
+
+Graph-based neural components for relational reasoning.
+
+### Components
+
+| Component | Description |
+|-----------|-------------|
+| **GraphNeuron** | Basic graph neural unit with message passing |
+| **GraphAttentionUnit** | Graph attention mechanism |
+| **DynamicGraphBuilder** | Learns graph structure from data |
+| **MultiHopGraphReasoner** | Multi-step relational reasoning |
+| **GraphMoE** | Graph-structured mixture of experts |
+| **GraphIntegratedTransformerBlock** | Combines transformer + graph attention |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   Graph Neural Components                        │
+│                  (core/components/graph_neurons.py)              │
+│                                                                  │
+│   Input Sequence                                                 │
+│         │                                                        │
+│         ▼                                                        │
+│   ┌───────────────────┐                                          │
+│   │ DynamicGraphBuilder│  ←── Learns adjacency from features     │
+│   └─────────┬─────────┘                                          │
+│             │                                                    │
+│             ▼                                                    │
+│   ┌───────────────────┐                                          │
+│   │    GraphNeuron    │  ←── Message passing + aggregation       │
+│   └─────────┬─────────┘                                          │
+│             │                                                    │
+│             ▼                                                    │
+│   ┌───────────────────┐                                          │
+│   │MultiHopGraphReasoner│ ←── K hops of graph reasoning          │
+│   └─────────┬─────────┘                                          │
+│             │                                                    │
+│             ▼                                                    │
+│   ┌───────────────────┐                                          │
+│   │     GraphMoE      │  ←── Expert routing via graph structure  │
+│   └─────────┬─────────┘                                          │
+│             │                                                    │
+│             ▼                                                    │
+│      Output with                                                 │
+│   relational context                                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Model Scale Presets
+
+Pre-configured model sizes from tiny to production scale.
+
+| Preset | d_model | Heads | Layers | MoE Experts | ~Parameters |
+|--------|---------|-------|--------|-------------|-------------|
+| `tiny` | 256 | 4 | 4 | 4 | ~10M |
+| `small` | 512 | 8 | 6 | 8 | ~50M |
+| `base` | 768 | 12 | 12 | 8 | ~125M |
+| `large` | 1024 | 16 | 24 | 16 | ~350M |
+| `xlarge` | 2048 | 32 | 32 | 32 | ~1.3B |
+| `xxlarge` | 4096 | 64 | 48 | 64 | ~7B |
+
+```python
+from config import AGIConfig
+
+# Load preset
+config = AGIConfig.from_preset("large")
+
+# Customize from preset
+config = AGIConfig.from_preset("base")
+config.attention_type = "gqa"
+config.num_kv_heads = 4
 ```
 
 ## Scalability & Training Modes
