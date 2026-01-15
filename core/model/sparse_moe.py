@@ -11,6 +11,66 @@ def keep_top_k(scores, k):
     mask = scores >= jnp.min(top_k_values, axis=-1, keepdims=True)
     return jnp.where(mask, scores, -1e9), top_k_indices
 
+
+def apply_router_jitter(logits: jnp.ndarray, rng_key, 
+                        jitter_noise: float = 0.1, is_training: bool = True) -> jnp.ndarray:
+    """
+    Apply router jitter for better expert utilization (Switch Transformer technique).
+    
+    During training, adds multiplicative noise to routing logits to encourage
+    exploration of different experts and prevent expert collapse.
+    
+    Args:
+        logits: Router logits [batch, seq_len, num_experts]
+        rng_key: JAX random key
+        jitter_noise: Standard deviation of multiplicative noise
+        is_training: Whether in training mode
+        
+    Returns:
+        Jittered logits
+    """
+    if not is_training or jitter_noise <= 0:
+        return logits
+    
+    # Multiplicative jitter (more effective than additive)
+    noise = jax.random.uniform(rng_key, logits.shape, minval=1.0 - jitter_noise, maxval=1.0 + jitter_noise)
+    return logits * noise
+
+
+def compute_capacity_factor_loss(
+    routing_probs: jnp.ndarray, 
+    num_experts: int,
+    capacity_factor: float = 1.25,
+) -> jnp.ndarray:
+    """
+    Compute capacity factor loss to prevent expert overflow.
+    
+    Ensures no expert receives more than capacity_factor * (tokens / num_experts) tokens.
+    This is critical for efficient batched computation.
+    
+    Args:
+        routing_probs: Routing probabilities [batch, seq_len, num_experts]
+        num_experts: Number of experts
+        capacity_factor: Maximum capacity multiplier (>1 allows overflow buffer)
+        
+    Returns:
+        Capacity overflow penalty loss
+    """
+    batch_size, seq_len, _ = routing_probs.shape
+    
+    # Count tokens routed to each expert
+    expert_loads = jnp.sum(routing_probs, axis=(0, 1))  # [num_experts]
+    
+    # Target load per expert
+    target_load = batch_size * seq_len / num_experts
+    
+    # Penalize experts that exceed capacity
+    overflow = jnp.maximum(0, expert_loads - capacity_factor * target_load)
+    overflow_loss = jnp.sum(overflow ** 2) / (batch_size * seq_len)
+    
+    return overflow_loss
+
+
 def load_balancing_loss(gating_logits, num_experts):
     """
     Compute auxiliary loss to ensure all experts get utilized.

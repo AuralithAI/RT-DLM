@@ -544,6 +544,126 @@ The system uses a **unified scalable training approach**  - **ONE model** that s
 
 **Key Design Principle**: Unlike having separate models for different parallelism modes, we use ONE unified `RTDLMAGISystem` model. The `ScalableMesh` class handles how parameters are distributed across devices, making the same model work at any scale.
 
+## Graph-Based Neural Components
+
+RT-DLM includes graph neural network components for enhanced relational reasoning:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Graph Neural Architecture                     │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                 DynamicGraphBuilder                      │    │
+│  │                                                         │    │
+│  │  Builds graphs dynamically from sequence embeddings:    │    │
+│  │  - Edge prediction via learned bilinear scoring         │    │
+│  │  - Automatic self-loop addition                         │    │
+│  │  - Configurable edge threshold                          │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                           │                                     │
+│                           ▼                                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                    GraphNeuron                           │    │
+│  │                                                         │    │
+│  │  Graph attention with residual connections:             │    │
+│  │  - Multi-head graph attention                           │    │
+│  │  - Layer normalization                                  │    │
+│  │  - Optional FFN layer                                   │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                           │                                     │
+│                           ▼                                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │              MultiHopGraphReasoner                       │    │
+│  │                                                         │    │
+│  │  Multi-hop reasoning for chain-of-thought:              │    │
+│  │  - Configurable number of hops                          │    │
+│  │  - Query-guided attention paths                         │    │
+│  │  - Tracks reasoning trajectories                        │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                   GraphMoE                               │    │
+│  │                                                         │    │
+│  │  Mixture-of-Experts with relational routing:            │    │
+│  │  - Graph-based expert selection                         │    │
+│  │  - Neighbor-aware routing decisions                     │    │
+│  │  - Combined local and relational scores                 │    │
+│  └─────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Graph Configuration
+
+```python
+from core.components import GraphConfig, GraphNeuron, create_graph_neuron
+
+# Configure graph neurons
+config = GraphConfig(
+    d_model=384,
+    num_heads=8,
+    max_nodes=64,
+    edge_threshold=0.3,
+    num_hops=3,
+    enable_relational_routing=True,
+)
+
+# Create graph neuron
+graph_neuron = create_graph_neuron(config)
+```
+
+## Model Scale Presets
+
+RT-DLM provides pre-configured model scales from development to production:
+
+| Preset | d_model | layers | heads | experts | ~Params | Use Case |
+|--------|---------|--------|-------|---------|---------|----------|
+| `tiny` | 256 | 6 | 4 | 4 | 50M | Testing |
+| `small` | 384 | 12 | 8 | 8 | 150M | Development |
+| `base` | 768 | 12 | 12 | 8 | 350M | Fine-tuning |
+| `large` | 1024 | 24 | 16 | 16 | 1B | Production |
+| `xlarge` | 2048 | 32 | 32 | 32 | 7B | Advanced |
+| `xxlarge` | 4096 | 48 | 64 | 64 | 70B | SOTA |
+
+```python
+from config.agi_config import AGIConfig
+
+# Create config from preset
+config = AGIConfig.from_preset('large')
+
+# List available presets
+AGIConfig.list_presets()
+
+# Customize preset
+config = AGIConfig.from_preset('xlarge', learning_rate=5e-5, batch_size=64)
+```
+
+## Advanced MoE Features
+
+The SparseMoE module includes advanced features for better expert utilization:
+
+- **Router Jitter**: Multiplicative noise during training to prevent expert collapse
+- **Capacity Factor Loss**: Prevents expert overflow by penalizing unbalanced loads
+- **Adaptive Gating**: Context-aware routing with expert affinity prediction
+- **Dynamic Load Balancing**: Historical usage tracking for balanced expert selection
+
+## Speculative Decoding
+
+For faster inference, the sampling module provides speculative decoding:
+
+```python
+from core.sampling import SpeculativeDecoder
+
+# Setup speculative decoding with draft model
+decoder = SpeculativeDecoder(
+    target_forward_fn=large_model.apply,
+    draft_forward_fn=small_model.apply,
+    num_speculative_tokens=4,
+)
+
+# Generate with 2-3x speedup
+tokens = decoder.generate(target_params, draft_params, initial_tokens, rng_key)
+```
+
 ## Directory Structure
 
 ```
@@ -584,7 +704,11 @@ RT-DLM/
 │   │   └── reward_model.py
 │   │
 │   ├── agi/                         # AGI sub-components
+│   │
 │   └── components/                  # Reusable components
+│       ├── __init__.py
+│       ├── reusable_components.py   # Attention, FFN, transformers
+│       └── graph_neurons.py         # Graph neural components
 │
 ├── modules/                         # Feature modules
 │   ├── __init__.py

@@ -7,6 +7,9 @@ Provides reusable components for RT-DLM AGI system including:
 - PruningManager: Centralized pruning utilities
 - ReusableFeedForward: Shared FFN implementation
 - ReusableTransformerBlock: Complete transformer layer
+- GraphNeuron: Graph-based neural components for relational reasoning
+- DynamicGraphBuilder: Build graphs from sequence embeddings
+- MultiHopGraphReasoner: Multi-hop reasoning over graph structures
 """
 
 from core.components.reusable_components import (
@@ -27,7 +30,29 @@ from core.components.reusable_components import (
     compute_attention_sparsity,
 )
 
+from core.components.graph_neurons import (
+    # Configuration
+    GraphConfig,
+    GraphOutput,
+    # Core modules
+    GraphNeuron,
+    GraphAttentionUnit,
+    DynamicGraphBuilder,
+    RelationalRouter,
+    MultiHopGraphReasoner,
+    GraphMoE,
+    GraphIntegratedTransformerBlock,
+    # Factory functions
+    create_graph_neuron,
+    create_multi_hop_reasoner,
+    create_graph_moe,
+    # Utility functions
+    compute_graph_loss,
+    compute_graph_accuracy,
+)
+
 __all__ = [
+    # Attention components
     'AttentionConfig',
     'ReusableAttention',
     'ReusableFeedForward',
@@ -38,4 +63,19 @@ __all__ = [
     'create_transformer_block',
     'apply_shared_spiking',
     'compute_attention_sparsity',
+    # Graph neural components
+    'GraphConfig',
+    'GraphOutput',
+    'GraphNeuron',
+    'GraphAttentionUnit',
+    'DynamicGraphBuilder',
+    'RelationalRouter',
+    'MultiHopGraphReasoner',
+    'GraphMoE',
+    'GraphIntegratedTransformerBlock',
+    'create_graph_neuron',
+    'create_multi_hop_reasoner',
+    'create_graph_moe',
+    'compute_graph_loss',
+    'compute_graph_accuracy',
 ]
