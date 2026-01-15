@@ -8,6 +8,22 @@ from core.quantum.quantum_readiness import (
     VariationalQuantumCircuit,
     QuantumSimulator
 )
+from core.quantum.extended_quantum_sim import (
+    ExtendedQuantumSimulator,
+    ExtendedQuantumConfig,
+    SparseStateVector,
+    ChunkedQuantumSimulator,
+    create_extended_quantum_simulator
+)
+from core.quantum.tensor_network import (
+    MatrixProductState,
+    TreeTensorNetwork,
+    TensorNetworkQuantumSimulator,
+    create_tensor_network_simulator,
+    estimate_memory_usage
+)
+# Import TensorNetworkConfig from config folder
+from config.tensor_network_config import TensorNetworkConfig
 
 __all__ = [
     'QuantumAGICore',
@@ -16,5 +32,18 @@ __all__ = [
     'AutonomousScientificDiscovery',
     'AutonomousMultiAgentSystem',
     'VariationalQuantumCircuit',
-    'QuantumSimulator'
+    'QuantumSimulator',
+    # Extended quantum simulation (64+ qubits)
+    'ExtendedQuantumSimulator',
+    'ExtendedQuantumConfig',
+    'SparseStateVector',
+    'ChunkedQuantumSimulator',
+    'create_extended_quantum_simulator',
+    # Tensor network approximations
+    'TensorNetworkConfig',
+    'MatrixProductState',
+    'TreeTensorNetwork',
+    'TensorNetworkQuantumSimulator',
+    'create_tensor_network_simulator',
+    'estimate_memory_usage',
 ]
