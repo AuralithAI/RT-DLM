@@ -202,10 +202,35 @@ This document describes the model architecture for training.
 │  └─────────────────────────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                                     │
 │  ┌─────────────────────────────────────────────────────────────────────────────────────────────┐    │
+│  │                                  SCALABILITY OPTIONS                                        │    │
+│  │                                                                                             │    │
+│  │   Standard Mode (model_parallel=False)         Model Parallel Mode (model_parallel=True)   │    │
+│  │   ─────────────────────────────────────        ────────────────────────────────────────    │    │
+│  │                                                                                             │    │
+│  │   create_rtdlm_agi(config)                     create_model_parallel_transformer()         │    │
+│  │         │                                               │                                  │    │
+│  │         ▼                                               ▼                                  │    │
+│  │   ┌─────────────────────┐                     ┌─────────────────────┐                      │    │
+│  │   │  Full AGI Model     │                     │ Sharded Transformer │                      │    │
+│  │   │                     │                     │                     │                      │    │
+│  │   │ - Consciousness     │                     │ - TensorParallel    │                      │    │
+│  │   │ - Quantum           │                     │   Attention         │                      │    │
+│  │   │ - Multimodal        │                     │ - TensorParallel    │                      │    │
+│  │   │ - Reasoning         │                     │   MLP               │                      │    │
+│  │   │ - Ethics            │                     │ - DeviceMesh        │                      │    │
+│  │   │ - Memory Bank       │                     │   sharding          │                      │    │
+│  │   └─────────────────────┘                     └─────────────────────┘                      │    │
+│  │                                                                                             │    │
+│  │   Best for: Single GPU/TPU                    Best for: Multi-GPU clusters                 │    │
+│  │   Use when: Full AGI features needed          Use when: Model too large for one device     │    │
+│  │                                                                                             │    │
+│  └─────────────────────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────────────────────────────┐    │
 │  │                            tests/test_runner.py                                             │    │
 │  │                                                                                             │    │
 │  │  - Test orchestration       - Benchmark mode          - Demo execution                      │    │
-│  │  - 244 tests (19 suites)    - Timeout handling        - Requirements check                  │    │
+│  │  - 328 tests (20+ suites)   - Timeout handling        - Requirements check                  │    │
 │  └─────────────────────────────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -319,6 +344,9 @@ rtdlm.py
 train.py
 ├── Model components (all dependencies above)
 ├── config/agi_config.py
+├── config/model_parallel_config.py      # Model parallelism settings
+├── core/model_parallel.py               # Tensor/pipeline parallelism
+├── core/training_utils.py               # Mixed precision, checkpointing
 └── core/checkpoint_manager.py
 
 modules/capabilities/integrated_agi_system.py
@@ -327,6 +355,158 @@ modules/capabilities/integrated_agi_system.py
 └── core/quantum/quantum_readiness.py
 ```
 
+## Scalability & Training Modes
+
+RT-DLM supports multiple training modes depending on your hardware and model size requirements.
+
+### Training Mode Selection
+
+```
+                              AGIConfig Settings
+                                     │
+                    ┌────────────────┼────────────────┐
+                    │                │                │
+           model_parallel=False   distributed=True  model_parallel=True
+                    │                │                │
+                    ▼                ▼                ▼
+            ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+            │   STANDARD  │   │    DATA     │   │   MODEL     │
+            │   TRAINING  │   │  PARALLEL   │   │  PARALLEL   │
+            └─────────────┘   └─────────────┘   └─────────────┘
+                    │                │                │
+                    ▼                ▼                ▼
+        create_rtdlm_agi()    pmap across       create_model_parallel_
+                │             devices           transformer()
+                ▼                │                │
+        Full AGI Model           ▼                ▼
+        - Consciousness    Same model       Sharded Model
+        - Quantum          replicated       - TensorParallelLinear
+        - Multimodal       per device       - TensorParallelAttention
+        - Reasoning                         - TensorParallelMLP
+        - Ethics                            - DeviceMesh
+```
+
+### 1. Standard Training (Default)
+
+**Use when**: Single GPU/TPU, model fits in memory
+
+```python
+config = AGIConfig(
+    model_parallel=False,      # Default
+    distributed_training=False
+)
+trainer = AGITrainer(config)
+# Uses: create_rtdlm_agi(config) → Full AGI model with all features
+```
+
+The full AGI model includes:
+- ConsciousnessSimulator
+- QuantumAGICore
+- MultiModalRTDLM
+- ReasoningEngine
+- EthicalRewardModel
+- TMSModel with MemoryBank
+
+### 2. Data Parallel Training
+
+**Use when**: Multiple GPUs, want faster training with same model
+
+```python
+config = AGIConfig(
+    distributed_training=True,
+    num_devices=4,
+    data_parallel=True
+)
+trainer = AGITrainer(config)
+# Uses: pmap to replicate model across devices
+# Each device processes different data batches
+```
+
+### 3. Model Parallel Training
+
+**Use when**: Model too large to fit on single device
+
+```python
+config = AGIConfig(
+    model_parallel=True,
+    num_devices=8
+)
+trainer = AGITrainer(config)
+# Uses: create_model_parallel_transformer(config, device_mesh)
+# Model layers are split across devices
+```
+
+**Note**: Model parallel mode uses a simplified transformer architecture (without consciousness, quantum, etc.) because sharding complex nested modules is challenging. This mode is for training very large base models that can later be extended.
+
+### Model Parallel Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ModelParallelTransformer                     │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                      DeviceMesh                           │  │
+│  │   Device 0    Device 1    Device 2    Device 3            │  │
+│  │      │           │           │           │                │  │
+│  │      └───────────┴───────────┴───────────┘                │  │
+│  │                        │                                  │  │
+│  │            Tensor Parallel Axis ("tensor")                │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  For each transformer layer:                                    │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ TensorParallelAttention                                 │    │
+│  │                                                         │    │
+│  │  Q, K, V projections: Column-parallel (split output)    │    │
+│  │  Each device computes local_num_heads = num_heads/N     │    │
+│  │  Output projection: Row-parallel (all-reduce sum)       │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                           │                                     │
+│                           ▼                                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ TensorParallelMLP                                       │    │
+│  │                                                         │    │
+│  │  FC1: Column-parallel (split d_ff across devices)       │    │
+│  │  FC2: Row-parallel (all-reduce to combine)              │    │
+│  └─────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Quantum Simulation Scalability
+
+For quantum simulation, tensor networks enable 100+ qubit simulation:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Quantum Simulation Modes                     │
+│                                                                 │
+│  Standard (quantum_max_qubits ≤ 30)    Extended (100+ qubits)   │
+│  ─────────────────────────────────     ─────────────────────    │
+│                                                                 │
+│  Full state vector                     Tensor Network Approx    │
+│  Memory: O(2^n)                        Memory: O(n × χ²)        │
+│                                                                 │
+│  QuantumSimulator                      TensorNetworkQuantum     │
+│       │                                Simulator                │
+│       ▼                                     │                   │
+│  quantum_readiness.py                       ▼                   │
+│                                        tensor_network.py        │
+│                                        - MatrixProductState     │
+│                                        - TreeTensorNetwork      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Configuration Summary
+
+| Config Flag | Effect | Model Used |
+|-------------|--------|------------|
+| `model_parallel=False` | Standard training | `create_rtdlm_agi()` - Full AGI |
+| `model_parallel=True` | Tensor parallelism | `create_model_parallel_transformer()` |
+| `distributed_training=True` | Data parallelism | Full AGI with pmap |
+| `mixed_precision=True` | FP16/BF16 compute | Any model |
+| `gradient_checkpointing=True` | Memory efficiency | Any model |
+
 ## Directory Structure
 
 ```
@@ -334,6 +514,8 @@ RT-DLM/
 ├── config/                          # Configuration
 │   ├── __init__.py
 │   ├── agi_config.py                # AGI system configuration
+│   ├── model_parallel_config.py     # Model parallelism settings
+│   ├── tensor_network_config.py     # Tensor network settings
 │   └── image_config.py              # Image generation config
 │
 ├── core/                            # Core components
@@ -341,6 +523,8 @@ RT-DLM/
 │   ├── sampling.py                  # Token sampling (Top-K, Top-P, etc.)
 │   ├── reasoning.py                 # Reasoning engine
 │   ├── checkpoint_manager.py        # SafeTensors checkpoint management
+│   ├── model_parallel.py            # Tensor/pipeline parallelism
+│   ├── training_utils.py            # Mixed precision, gradient checkpointing
 │   │
 │   ├── model/                       # Neural architecture
 │   │   ├── model_tms.py             # TMS model
@@ -351,11 +535,14 @@ RT-DLM/
 │   │   └── secure_tms.py            # Security wrapper
 │   │
 │   ├── quantum/                     # Quantum-inspired modules
-│   │   ├── quantum_agi_core.py
-│   │   └── quantum_readiness.py
+│   │   ├── quantum_agi_core.py      # Quantum attention, memory
+│   │   ├── quantum_readiness.py     # VQC, QuantumSimulator
+│   │   ├── extended_quantum_sim.py  # 64+ qubit simulation
+│   │   └── tensor_network.py        # MPS/TTN for 100+ qubits
 │   │
 │   ├── ethics/                      # Ethical AI
 │   │   ├── feedback_collector.py
+│   │   ├── ethical_adaptation.py
 │   │   └── reward_model.py
 │   │
 │   ├── agi/                         # AGI sub-components
@@ -375,21 +562,27 @@ RT-DLM/
 │   └── capabilities/                # AGI capabilities
 │       ├── integrated_agi_system.py
 │       ├── real_time_learning.py
+│       ├── advanced_algorithms.py   # EWC, continual learning
 │       └── zero_shot_reasoning.py
 │
-├── tests/                           # Test suite
+├── tests/                           # Test suite (328 tests)
 │   ├── test_framework.py            # Main test framework
 │   ├── test_runner.py               # Test orchestration
+│   ├── test_model_parallel.py       # Model parallelism tests
+│   ├── test_tensor_network.py       # Tensor network tests
 │   ├── test_config.py
 │   ├── system_validator.py
 │   ├── test_model/                  # Model tests
 │   └── demo/                        # Demo scripts
 │
 ├── docs/                            # Documentation
-│   └── ARCHITECTURE.md              # This file
+│   ├── ARCHITECTURE.md              # This file
+│   ├── SAMPLING.md                  # Sampling strategies
+│   └── QUICKSTART.md                # Getting started
 │
 ├── rtdlm.py                         # Main AGI model
 ├── train.py                         # Training script
+├── inference.py                     # Inference script
 ├── install_dependencies.py          # Dependency installer
 ├── requirements.txt                 # Python dependencies
 ├── LICENSE                          # License file

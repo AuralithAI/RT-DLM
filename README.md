@@ -48,6 +48,7 @@ Cross-modal fusion capabilities:
 - **Mixed-precision training** (bfloat16/float16) for faster training
 - **Gradient checkpointing** for memory efficiency
 - **Distributed training** support (data parallelism with pmap)
+- **Model parallelism** for very large models (tensor/pipeline parallelism)
 
 ## Quick Start
 
@@ -75,6 +76,31 @@ python train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors
 # Resume with extended epochs
 python train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors --epochs 100
 ```
+
+### Training Modes
+
+RT-DLM supports three training modes:
+
+| Mode | Config | Use Case |
+|------|--------|----------|
+| **Standard** | `model_parallel=False` | Single GPU, full AGI model |
+| **Data Parallel** | `distributed_training=True` | Multiple GPUs, same model replicated |
+| **Model Parallel** | `model_parallel=True` | Model too large for single device |
+
+```python
+from config import AGIConfig
+
+# Standard training (default) - Full AGI model
+config = AGIConfig()
+
+# Data parallel - Replicate across GPUs
+config = AGIConfig(distributed_training=True, num_devices=4)
+
+# Model parallel - Shard layers across GPUs
+config = AGIConfig(model_parallel=True, num_devices=8)
+```
+
+**Note**: Model parallel mode uses a simplified transformer architecture optimized for sharding. Standard mode includes all AGI features (consciousness, quantum, multimodal, etc.).
 
 ### Running Tests
 ```bash
