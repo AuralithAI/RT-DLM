@@ -9,6 +9,20 @@ from core.training_utils import (
     create_pmap_train_step,
     GradientAccumulator,
 )
+# Scalable training (production-ready unified approach)
+from core.scalable_training import (
+    ScalableMesh,
+    create_scalable_mesh,
+    setup_scalable_training,
+    replicate_for_data_parallel,
+    unreplicate_params,
+    estimate_model_memory,
+    recommend_parallelism,
+    get_param_sharding_spec,
+    create_sharded_params,
+    create_scalable_train_step,
+)
+# Legacy model parallel (kept for backwards compatibility)
 from core.model_parallel import (
     DeviceMesh,
     TensorParallelLinear,
@@ -35,7 +49,18 @@ __all__ = [
     'create_checkpointed_layer',
     'create_pmap_train_step',
     'GradientAccumulator',
-    # Model parallelism
+    # Scalable training (recommended)
+    'ScalableMesh',
+    'create_scalable_mesh',
+    'setup_scalable_training',
+    'replicate_for_data_parallel',
+    'unreplicate_params',
+    'estimate_model_memory',
+    'recommend_parallelism',
+    'get_param_sharding_spec',
+    'create_sharded_params',
+    'create_scalable_train_step',
+    # Legacy model parallelism (backwards compatibility)
     'ModelParallelConfig',
     'DeviceMesh',
     'TensorParallelLinear',

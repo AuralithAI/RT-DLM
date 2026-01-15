@@ -499,13 +499,50 @@ For quantum simulation, tensor networks enable 100+ qubit simulation:
 
 ### Configuration Summary
 
-| Config Flag | Effect | Model Used |
-|-------------|--------|------------|
-| `model_parallel=False` | Standard training | `create_rtdlm_agi()` - Full AGI |
-| `model_parallel=True` | Tensor parallelism | `create_model_parallel_transformer()` |
-| `distributed_training=True` | Data parallelism | Full AGI with pmap |
-| `mixed_precision=True` | FP16/BF16 compute | Any model |
-| `gradient_checkpointing=True` | Memory efficiency | Any model |
+The system uses a **unified scalable training approach**  - **ONE model** that supports both data and model parallelism through device mesh configuration:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Unified Scalable Training                    │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                    ScalableMesh                         │    │
+│  │                                                         │    │
+│  │  Configuration:                                         │    │
+│  │  - data_parallel_size: N devices for batch splitting    │    │
+│  │  - tensor_parallel_size: M devices for weight sharding  │    │
+│  │  - pipeline_parallel_size: P stages for layer splitting │    │
+│  │                                                         │    │
+│  │  Automatically handles:                                 │    │
+│  │  - Parameter sharding specs                             │    │
+│  │  - Gradient synchronization                             │    │
+│  │  - Memory estimation and recommendations                │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                           │                                     │
+│                           ▼                                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                  RTDLMAGISystem                         │    │
+│  │              (Single Unified Model)                     │    │
+│  │                                                         │    │
+│  │  Same model used for ALL configurations:                │    │
+│  │  - Single device training                               │    │
+│  │  - Multi-device data parallelism                        │    │
+│  │  - Multi-device tensor parallelism                      │    │
+│  │  - Combined data + tensor parallelism                   │    │
+│  └─────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+| Config Flag | Effect | Implementation |
+|-------------|--------|----------------|
+| `model_parallel=False` | Standard single-device training | `create_rtdlm_agi()` |
+| `model_parallel=True` | Tensor parallelism via ScalableMesh | `create_rtdlm_agi()` + mesh sharding |
+| `distributed_training=True` | Data parallelism via ScalableMesh | `create_rtdlm_agi()` + replicated params |
+| Both `True` | Combined parallelism (production-scale) | `create_rtdlm_agi()` + 2D mesh |
+| `mixed_precision=True` | FP16/BF16 compute | Applied to unified model |
+| `gradient_checkpointing=True` | Memory efficiency | Applied to unified model |
+
+**Key Design Principle**: Unlike having separate models for different parallelism modes, we use ONE unified `RTDLMAGISystem` model. The `ScalableMesh` class handles how parameters are distributed across devices, making the same model work at any scale.
 
 ## Directory Structure
 
@@ -523,7 +560,8 @@ RT-DLM/
 │   ├── sampling.py                  # Token sampling (Top-K, Top-P, etc.)
 │   ├── reasoning.py                 # Reasoning engine
 │   ├── checkpoint_manager.py        # SafeTensors checkpoint management
-│   ├── model_parallel.py            # Tensor/pipeline parallelism
+│   ├── scalable_training.py         # Production-ready unified parallelism (ScalableMesh)
+│   ├── model_parallel.py            # Legacy tensor/pipeline parallelism layers
 │   ├── training_utils.py            # Mixed precision, gradient checkpointing
 │   │
 │   ├── model/                       # Neural architecture
