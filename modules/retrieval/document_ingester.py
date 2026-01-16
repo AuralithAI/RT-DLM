@@ -21,7 +21,6 @@ from pathlib import Path
 import json
 
 import numpy as np
-import jax.numpy as jnp
 
 from config.retrieval_config import ChunkingStrategy
 
