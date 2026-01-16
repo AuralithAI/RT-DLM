@@ -16,7 +16,6 @@ import hashlib
 import re
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Callable, Iterator
-from enum import Enum
 from pathlib import Path
 import json
 
