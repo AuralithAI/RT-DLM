@@ -39,6 +39,31 @@ from core.model_parallel import (
 # Import ModelParallelConfig from config folder
 from config.model_parallel_config import ModelParallelConfig
 
+# Evaluation metrics (from core.training - recommended import path)
+# Backward-compatible re-exports via core.evaluation
+from core.training import (
+    # Metric data structures
+    BatchMetrics,
+    GradientMetrics,
+    TrainingStepMetrics,
+    ValidationMetrics,
+    # Core evaluation components
+    EvaluationMetrics,
+    GradientMonitor,
+    MetricLogger,
+    ValidationRunner,
+    # High-level integration
+    TrainingEvaluator,
+)
+
+# Decorators (from core.utils - recommended import path)
+# Backward-compatible re-exports
+from core.utils import (
+    dev_utility,
+    is_dev_utility,
+    get_dev_utility_reason,
+)
+
 __all__ = [
     # Training utilities
     'MixedPrecisionPolicy',
@@ -73,4 +98,17 @@ __all__ = [
     'create_sharded_train_step',
     'create_model_parallel_system',
     'create_model_parallel_transformer',
+    # Evaluation metrics
+    'dev_utility',
+    'is_dev_utility',
+    'get_dev_utility_reason',
+    'BatchMetrics',
+    'GradientMetrics',
+    'TrainingStepMetrics',
+    'ValidationMetrics',
+    'EvaluationMetrics',
+    'GradientMonitor',
+    'MetricLogger',
+    'ValidationRunner',
+    'TrainingEvaluator',
 ]

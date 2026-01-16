@@ -1,10 +1,13 @@
 # RT-DLM Sampling Guide
 
-This guide explains the production-ready token sampling system in RT-DLM.
+> **⚠️ Development Utility**: This module is for **testing and development only**.
+> For production inference, use optimized serving frameworks (vLLM, TGI, etc.)
+> that load RT-DLM checkpoints. Production inference requires KV caching,
+> continuous batching, and optimized kernels not present in this module.
 
 ## Overview
 
-The `core/sampling.py` module provides advanced token sampling strategies for controlling text generation quality and diversity.
+The `core/sampling.py` module provides token sampling strategies for **testing** model outputs during development. It helps validate that trained models can generate coherent text.
 
 ## Key Components
 
