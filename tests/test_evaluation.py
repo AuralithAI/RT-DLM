@@ -2,7 +2,7 @@
 Tests for evaluation module and decorators.
 
 Tests:
-- Decorators (utils.decorators)
+- Decorators (core.utils.decorators)
 - Evaluation metrics (core.training.evaluation)
 - Gradient monitoring
 - Logging and validation
@@ -22,7 +22,7 @@ class TestDevUtilityDecorator:
     
     def test_decorator_marks_function(self):
         """Test that decorator properly marks functions."""
-        from utils import dev_utility, is_dev_utility, get_dev_utility_reason
+        from core.utils import dev_utility, is_dev_utility, get_dev_utility_reason
         
         @dev_utility("Testing purposes only")
         def my_func():
@@ -34,7 +34,7 @@ class TestDevUtilityDecorator:
     
     def test_decorator_marks_class(self):
         """Test that decorator properly marks classes."""
-        from utils import dev_utility, is_dev_utility
+        from core.utils import dev_utility, is_dev_utility
         
         @dev_utility("Internal testing class")
         class MyClass:
@@ -47,7 +47,7 @@ class TestDevUtilityDecorator:
     
     def test_non_decorated_not_marked(self):
         """Test that non-decorated items are not marked."""
-        from utils import is_dev_utility
+        from core.utils import is_dev_utility
         
         def regular_func():
             return 1
@@ -74,7 +74,7 @@ class TestDeprecatedDecorator:
     
     def test_deprecated_warns(self):
         """Test that deprecated decorator emits warning."""
-        from utils import deprecated, is_deprecated
+        from core.utils import deprecated, is_deprecated
         
         @deprecated("Use new_func instead")
         def old_func():
@@ -91,7 +91,7 @@ class TestDeprecatedDecorator:
     
     def test_deprecated_class(self):
         """Test deprecated class warns on instantiation."""
-        from utils import deprecated
+        from core.utils import deprecated
         
         @deprecated("Use NewClass instead", version="2.0")
         class OldClass:
@@ -110,7 +110,7 @@ class TestExperimentalDecorator:
     
     def test_experimental_marks(self):
         """Test that experimental decorator marks functions."""
-        from utils import experimental, is_experimental
+        from core.utils import experimental, is_experimental
         
         @experimental("New quantum backend")
         def quantum_func():
@@ -125,7 +125,7 @@ class TestInternalDecorator:
     
     def test_internal_marks(self):
         """Test that internal decorator marks functions."""
-        from utils import internal, is_internal
+        from core.utils import internal, is_internal
         
         @internal("Low-level implementation")
         def _internal_func():
@@ -140,7 +140,7 @@ class TestRequiresDecorator:
     
     def test_requires_with_available_deps(self):
         """Test requires passes with available dependencies."""
-        from utils import requires
+        from core.utils import requires
         
         @requires("json", "os")  # Standard library, always available
         def func_with_deps():
@@ -150,7 +150,7 @@ class TestRequiresDecorator:
     
     def test_requires_with_missing_deps(self):
         """Test requires raises with missing dependencies."""
-        from utils import requires
+        from core.utils import requires
         
         @requires("nonexistent_package_xyz")
         def func_missing_dep():
