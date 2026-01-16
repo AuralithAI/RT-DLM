@@ -1083,10 +1083,20 @@ class RTDLMAGISystem(hk.Module):
             core_features
         )
         
-        # Integrate all features
+        # Process knowledge base for retrieval augmentation (RAG)
+        knowledge_features = None
+        if knowledge_base is not None:
+            # Encode retrieved knowledge through the hybrid integrator
+            knowledge_result = self.hybrid_integrator(
+                {"text": knowledge_base},
+                task_type="retrieval"
+            )
+            knowledge_features = knowledge_result["ensemble_output"]
+        
+        # Integrate all features including retrieval context
         all_features = self._integrate_features(
             core_features, hybrid_features, multimodal_features, 
-            reasoning_result
+            reasoning_result, knowledge_features
         )
         
         # Final AGI integration
@@ -1208,8 +1218,17 @@ class RTDLMAGISystem(hk.Module):
         return None
     
     def _integrate_features(self, core_features, hybrid_features, 
-                          multimodal_features, reasoning_result):
-        """Integrate all feature types"""
+                          multimodal_features, reasoning_result,
+                          knowledge_features=None):
+        """Integrate all feature types including retrieval context.
+        
+        Args:
+            core_features: Core TMS model features
+            hybrid_features: Hybrid architecture features
+            multimodal_features: Optional multimodal features
+            reasoning_result: Reasoning engine output
+            knowledge_features: Optional retrieved knowledge features (from RAG)
+        """
         features_list = [core_features, hybrid_features]
         
         if multimodal_features is not None:
@@ -1222,6 +1241,24 @@ class RTDLMAGISystem(hk.Module):
         # Add reasoning features
         if "reasoning_features" in reasoning_result:
             features_list.append(reasoning_result["reasoning_features"])
+        
+        # Add retrieval/knowledge features (RAG integration)
+        if knowledge_features is not None:
+            # Project knowledge features to match d_model if needed
+            if knowledge_features.shape[-1] != core_features.shape[-1]:
+                knowledge_proj = hk.Linear(core_features.shape[-1], name="knowledge_proj")
+                knowledge_features = knowledge_proj(knowledge_features)
+            
+            # Handle sequence length mismatch by pooling/broadcasting
+            if knowledge_features.ndim == 3 and core_features.ndim == 3:
+                if knowledge_features.shape[1] != core_features.shape[1]:
+                    # Pool knowledge over sequence dimension
+                    knowledge_pooled = jnp.mean(knowledge_features, axis=1, keepdims=True)
+                    knowledge_features = jnp.broadcast_to(
+                        knowledge_pooled, 
+                        (knowledge_features.shape[0], core_features.shape[1], knowledge_features.shape[-1])
+                    )
+            features_list.append(knowledge_features)
         
         # Concatenate all features
         return jnp.concatenate(features_list, axis=-1)

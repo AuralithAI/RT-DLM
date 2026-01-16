@@ -45,6 +45,14 @@ from core.scalable_training import (
     recommend_parallelism,
 )
 
+# Retrieval Augmented Generation (RAG) integration
+from config.retrieval_config import RetrievalConfig
+from modules.retrieval import (
+    HybridRetriever,
+    DocumentIngester,
+    RetrievalAugmentedTraining,
+)
+
 def cosine_similarity(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
     """Compute cosine similarity between two vectors"""
     a_flat = a.flatten()
@@ -109,6 +117,131 @@ class AGITrainer:
         self.current_task_id = "task_0"
         self.lambda_ewc = 1000.0
         
+        # Retrieval Augmented Generation (RAG) - optional
+        self.retrieval_config: Optional[RetrievalConfig] = None
+        self.retriever: Optional[HybridRetriever] = None
+        self.retrieval_training: Optional[RetrievalAugmentedTraining] = None
+        self.document_ingester: Optional[DocumentIngester] = None
+        
+    def configure_retrieval(
+        self, 
+        retrieval_config: Optional[RetrievalConfig] = None,
+        documents: Optional[List[str]] = None
+    ) -> None:
+        """
+        Configure retrieval augmentation for training.
+        
+        This is optional - retrieval can be enabled/disabled at any time.
+        Following the industry pattern where RAG is external to the base model.
+        
+        Args:
+            retrieval_config: Configuration for retrieval. Uses RetrievalConfig.for_training()
+                            if not provided and documents are given.
+            documents: Optional list of documents to ingest into the retrieval system.
+        
+        Example:
+            >>> trainer = AGITrainer(config)
+            >>> trainer.configure_retrieval(
+            ...     RetrievalConfig.for_training(augmentation_probability=0.3),
+            ...     documents=["document 1...", "document 2..."]
+            ... )
+        """
+        if retrieval_config is None and documents is not None:
+            retrieval_config = RetrievalConfig.for_training()
+        
+        if retrieval_config is None or not retrieval_config.enabled:
+            logger.info("Retrieval augmentation disabled")
+            self.retrieval_config = RetrievalConfig.disabled()
+            return
+        
+        self.retrieval_config = retrieval_config
+        logger.info("Configuring retrieval augmentation...")
+        logger.info(f"  Top-K: {retrieval_config.top_k}")
+        logger.info(f"  Hybrid retrieval: {retrieval_config.use_hybrid}")
+        logger.info(f"  Augmentation probability: {retrieval_config.augmentation_probability}")
+        
+        # Initialize retriever
+        self.retriever = HybridRetriever(
+            embedding_dim=self.config.d_model,
+            sparse_weight=retrieval_config.sparse_weight,
+            dense_weight=retrieval_config.dense_weight
+        )
+        
+        # Initialize training integration
+        self.retrieval_training = RetrievalAugmentedTraining(
+            config=retrieval_config,
+            retriever=self.retriever
+        )
+        
+        # Initialize document ingester
+        self.document_ingester = DocumentIngester(
+            chunk_size=retrieval_config.chunk_size,
+            chunk_overlap=retrieval_config.chunk_overlap,
+            chunking_strategy=retrieval_config.chunking_strategy,
+            embedding_dim=self.config.d_model
+        )
+        
+        # Ingest documents if provided
+        if documents:
+            self.ingest_documents(documents)
+        
+        logger.info("Retrieval augmentation configured successfully")
+    
+    def ingest_documents(self, documents: List[str], metadata: Optional[List[Dict]] = None) -> None:
+        """
+        Ingest documents into the retrieval system.
+        
+        Args:
+            documents: List of document texts to ingest
+            metadata: Optional metadata for each document
+        """
+        if self.document_ingester is None or self.retriever is None:
+            logger.warning("Retrieval not configured. Call configure_retrieval() first.")
+            return
+        
+        logger.info(f"Ingesting {len(documents)} documents...")
+        
+        # Format documents for the ingester
+        doc_list = []
+        for i, doc in enumerate(documents):
+            doc_dict = {"text": doc}
+            if metadata and i < len(metadata):
+                doc_dict.update(metadata[i])
+            doc_list.append(doc_dict)
+        
+        # Ingest documents using the batch method
+        stats = self.document_ingester.ingest_documents(doc_list, store_to_memory=False)
+        
+        logger.info(f"Ingestion complete: {stats['chunks_created']} chunks created")
+        
+    def _augment_batch_with_retrieval(
+        self, 
+        batch: Dict[str, jnp.ndarray],
+        rng: jax.Array
+    ) -> Dict[str, jnp.ndarray]:
+        """
+        Optionally augment a batch with retrieved context.
+        
+        Uses probabilistic augmentation based on config.augmentation_probability.
+        """
+        if (self.retrieval_training is None or 
+            self.retrieval_config is None or 
+            not self.retrieval_config.enabled):
+            return batch
+        
+        # Prepare augmented batch using the retrieval training module
+        augmented = self.retrieval_training.prepare_augmented_batch(batch, rng)
+        
+        if not augmented.augmentation_applied:
+            return batch
+        
+        # Add retrieval context to batch if available
+        augmented_batch = dict(batch)
+        if augmented.retrieved_embeddings is not None:
+            augmented_batch["retrieved_embeddings"] = augmented.retrieved_embeddings
+            augmented_batch["retrieval_mask"] = augmented.retrieval_mask
+        
+        return augmented_batch
     def initialize_model(self, sample_batch: Dict[str, jnp.ndarray]):
         """Initialize model parameters from a sample batch."""
         logger.info("Initializing RT-DLM AGI model...")
@@ -734,9 +867,17 @@ class AGITrainer:
             List of losses for the epoch
         """
         epoch_losses = []
+        retrieval_augmented_count = 0
         
         for batch_idx, batch in enumerate(batch_iterator):
-            self.rng, train_rng = jax.random.split(self.rng)
+            self.rng, train_rng, augment_rng = jax.random.split(self.rng, 3)
+            
+            # Augment batch with retrieval context
+            original_batch = batch
+            batch = self._augment_batch_with_retrieval(batch, augment_rng)
+            if batch is not original_batch:
+                retrieval_augmented_count += 1
+            
             self.params, self.opt_state, loss, _ = self.train_step(
                 self.params, self.opt_state, batch, train_rng
             )
@@ -751,6 +892,10 @@ class AGITrainer:
             
             if batch_idx % 50 == 0:
                 logger.info(f"  Batch {batch_idx + 1}/{num_batches_estimate}, Loss: {loss:.4f}")
+        
+        # Log retrieval augmentation stats
+        if retrieval_augmented_count > 0:
+            logger.info(f"  Retrieval augmented batches: {retrieval_augmented_count}/{len(epoch_losses)}")
         
         return epoch_losses
     
