@@ -15,8 +15,8 @@ Usage:
         DocumentIngester,
         HybridRetriever,
         RetrievalAugmentedForward,
+        RetrievalConfig,
     )
-    from config import RetrievalConfig
 
 Industry Context:
     - GPT-4, Claude, Gemini: Keep retrieval external/optional

@@ -20,7 +20,7 @@ class TestRetrievalConfig:
     
     def test_default_config(self):
         """Test default configuration."""
-        from modules.retrieval import RetrievalConfig
+        from config.retrieval_config import RetrievalConfig
         
         config = RetrievalConfig()
         assert config.enabled is False
@@ -29,7 +29,7 @@ class TestRetrievalConfig:
         
     def test_training_preset(self):
         """Test training preset."""
-        from modules.retrieval import RetrievalConfig
+        from config.retrieval_config import RetrievalConfig
         
         config = RetrievalConfig.for_training()
         assert config.enabled is True
@@ -38,7 +38,7 @@ class TestRetrievalConfig:
         
     def test_inference_preset(self):
         """Test inference preset."""
-        from modules.retrieval import RetrievalConfig
+        from config.retrieval_config import RetrievalConfig
         
         config = RetrievalConfig.for_inference()
         assert config.enabled is True
@@ -47,7 +47,7 @@ class TestRetrievalConfig:
         
     def test_config_validation(self):
         """Test configuration validation."""
-        from modules.retrieval import RetrievalConfig
+        from config.retrieval_config import RetrievalConfig
         
         with pytest.raises(AssertionError):
             RetrievalConfig(top_k=0)  # Must be positive
@@ -411,7 +411,7 @@ class TestTrainingIntegration:
     def test_augmented_batch_creation(self):
         """Test creating augmented batches."""
         from modules.retrieval.training_integration import RetrievalAugmentedTraining
-        from modules.retrieval import RetrievalConfig
+        from config.retrieval_config import RetrievalConfig
         
         config = RetrievalConfig(
             enabled=False,  # Disabled for this test
@@ -430,7 +430,8 @@ class TestTrainingIntegration:
     def test_augmentation_probability(self):
         """Test that augmentation respects probability setting."""
         from modules.retrieval.training_integration import RetrievalAugmentedTraining
-        from modules.retrieval import RetrievalConfig, HybridRetriever
+        from config.retrieval_config import RetrievalConfig
+        from modules.retrieval import HybridRetriever
         
         config = RetrievalConfig(
             enabled=True,
@@ -451,7 +452,7 @@ class TestTrainingIntegration:
     def test_retrieval_stats(self):
         """Test training statistics tracking."""
         from modules.retrieval.training_integration import RetrievalAugmentedTraining
-        from modules.retrieval import RetrievalConfig
+        from config.retrieval_config import RetrievalConfig
         
         config = RetrievalConfig(enabled=False)
         training = RetrievalAugmentedTraining(config)
