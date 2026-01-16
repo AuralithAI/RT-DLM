@@ -11,7 +11,7 @@ Architecture:
 """
 
 import logging
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Optional, Tuple, Dict, Any
 
 import jax
 import jax.numpy as jnp
