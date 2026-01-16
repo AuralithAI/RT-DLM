@@ -150,6 +150,61 @@ class TestRetrievalIntegration(unittest.TestCase):
         augmented = trainer._augment_batch_with_retrieval(batch, rng)
         self.assertIs(augmented, batch)
 
+    def test_batch_augmentation_enabled_with_documents(self):
+        """Test batch augmentation when retrieval is enabled with documents"""
+        import jax
+        from config.agi_config import AGIConfig
+        from config.retrieval_config import RetrievalConfig
+        from train import AGITrainer
+        
+        config = AGIConfig(
+            d_model=D_MODEL,
+            num_heads=4,
+            num_layers=2,
+            vocab_size=1000,
+            batch_size=BATCH_SIZE,
+        )
+        
+        trainer = AGITrainer(config)
+        
+        # Configure retrieval with high augmentation probability to ensure it triggers
+        # No mock needed - we now use hash-based embeddings that match d_model
+        retrieval_config = RetrievalConfig.for_training()
+        retrieval_config.augmentation_probability = 1.0  # Always augment for test
+        trainer.configure_retrieval(retrieval_config)
+        
+        # Ingest some documents
+        documents = [
+            "Machine learning is a subset of artificial intelligence that enables systems to learn.",
+            "Deep learning uses neural networks with many layers for complex pattern recognition.",
+            "Transformers revolutionized natural language processing with attention mechanisms.",
+            "Reinforcement learning trains agents through reward signals and environment interaction.",
+        ]
+        trainer.ingest_documents(documents)
+        
+        # Create sample batch
+        batch = {
+            "input_ids": jnp.ones((BATCH_SIZE, SEQ_LEN), dtype=jnp.int32),
+            "targets": jnp.ones((BATCH_SIZE, SEQ_LEN), dtype=jnp.int32),
+        }
+        
+        rng = jax.random.PRNGKey(42)
+        
+        # Augmentation should return modified batch with retrieval context
+        augmented = trainer._augment_batch_with_retrieval(batch, rng)
+        
+        # Verify augmented batch is different from original
+        self.assertIsNot(augmented, batch)
+        
+        # Verify original keys are preserved
+        self.assertIn("input_ids", augmented)
+        self.assertIn("targets", augmented)
+        
+        # Verify retrieval keys are added (if augmentation was applied)
+        # Note: These may or may not be present depending on retrieval results
+        if "retrieved_embeddings" in augmented:
+            self.assertIn("retrieval_mask", augmented)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
