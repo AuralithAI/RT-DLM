@@ -266,10 +266,11 @@ class RetrievalAugmentedTraining:
             masks = []
             
             for embeds in retrieved_embeddings:
-                if len(embeds) < max_retrieved:
-                    pad_shape = (max_retrieved - len(embeds), embeds.shape[-1])
+                orig_len = len(embeds)
+                if orig_len < max_retrieved:
+                    pad_shape = (max_retrieved - orig_len, embeds.shape[-1])
                     embeds = np.concatenate([embeds, np.zeros(pad_shape)], axis=0)
-                    mask = np.array([True] * len(embeds) + [False] * (max_retrieved - len(embeds)))
+                    mask = np.array([True] * orig_len + [False] * (max_retrieved - orig_len))
                 else:
                     mask = np.ones(max_retrieved, dtype=bool)
                 padded.append(embeds)
