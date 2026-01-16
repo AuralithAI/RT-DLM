@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from config.retrieval_config import RetrievalConfig
-from modules.retrieval.hybrid_retriever import HybridRetriever, RetrievalResult
+from modules.retrieval.hybrid_retriever import HybridRetriever
 
 logger = logging.getLogger(__name__)
 
