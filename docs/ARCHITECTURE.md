@@ -206,12 +206,14 @@ This document describes the model architecture for training.
 │  │                                                                                             │    │
 │  │  ┌─────────────────────────┐  ┌─────────────────────────┐  ┌─────────────────────────────┐  │    │
 │  │  │      AGITrainer         │  │  Training Loop          │  │  Metrics Tracking           │  │    │
-│  │  │                         │  │                         │  │                             │  │    │
-│  │  │ - Model initialization  │  │ - Epoch-based training  │  │ - Training losses           │  │    │
-│  │  │ - Optimizer setup       │  │ - Batch processing      │  │ - Validation losses         │  │    │
-│  │  │ - Parameter counting    │  │ - Gradient updates      │  │ - Reasoning accuracies      │  │    │
-│  │  │                         │  │ - Checkpoint saving     │  │ - Consciousness coherence   │  │    │
-│  │  └─────────────────────────┘  └─────────────────────────┘  │ - Multimodal alignment      │  │    │
+│  │  │                         │  │                         │  │  (core/evaluation.py)       │  │    │
+│  │  │ - Model initialization  │  │ - Epoch-based training  │  │                             │  │    │
+│  │  │ - Optimizer setup       │  │ - Batch processing      │  │ - Perplexity computation    │  │    │
+│  │  │ - Parameter counting    │  │ - Gradient updates      │  │ - Token accuracy (top-1/5)  │  │    │
+│  │  │ - Gradient clipping     │  │ - Checkpoint saving     │  │ - Gradient norm monitoring  │  │    │
+│  │  └─────────────────────────┘  └─────────────────────────┘  │ - NaN/Inf/exploding detect  │  │    │
+│  │                                                            │ - Structured JSON logging   │  │    │
+│  │                                                            │ - Validation runner         │  │    │
 │  │                                                            └─────────────────────────────┘  │    │
 │  └─────────────────────────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                                     │
@@ -352,7 +354,8 @@ rtdlm.py
 ├── modules/multimodal/hybrid_audio_module.py
 ├── modules/multimodal/hybrid_video_module.py
 ├── core/reasoning.py
-├── core/sampling.py                               # Token sampling + speculative decoding
+├── core/sampling.py                               # Token sampling (dev utility)
+├── core/evaluation.py                             # Evaluation metrics & logging
 ├── core/quantum/quantum_agi_core.py
 ├── core/quantum/quantum_readiness.py
 ├── config/agi_config.py
@@ -364,12 +367,106 @@ train.py
 ├── config/model_parallel_config.py      # Model parallelism settings
 ├── core/model_parallel.py               # Tensor/pipeline parallelism
 ├── core/training_utils.py               # Mixed precision, checkpointing
+├── core/evaluation.py                   # Perplexity, gradient monitoring
 └── core/checkpoint_manager.py
 
 modules/capabilities/integrated_agi_system.py
 ├── modules/capabilities/real_time_learning.py
 ├── modules/capabilities/zero_shot_reasoning.py
 └── core/quantum/quantum_readiness.py
+```
+
+## Evaluation System
+
+RT-DLM provides a comprehensive evaluation system for training completeness.
+
+### Metrics Tracked
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     EVALUATION SYSTEM                           │
+│                    (core/evaluation.py)                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────────────┐  ┌─────────────────────────────────┐  │
+│  │  EvaluationMetrics   │  │     GradientMonitor             │  │
+│  │                      │  │                                 │  │
+│  │  • Perplexity        │  │  • Global gradient norm         │  │
+│  │  • Token accuracy    │  │  • Per-layer norms              │  │
+│  │  • Top-5 accuracy    │  │  • NaN/Inf detection            │  │
+│  │  • Entropy           │  │  • Exploding/vanishing detect   │  │
+│  │  • Masking support   │  │  • Trend analysis               │  │
+│  └──────────────────────┘  └─────────────────────────────────┘  │
+│                                                                 │
+│  ┌──────────────────────┐  ┌─────────────────────────────────┐  │
+│  │  MetricLogger        │  │     ValidationRunner            │  │
+│  │                      │  │                                 │  │
+│  │  • JSON-lines format │  │  • Batched validation           │  │
+│  │  • Console logging   │  │  • Metric aggregation           │  │
+│  │  • Config storage    │  │  • Progress reporting           │  │
+│  │  • Best metric track │  │  • Standard deviation           │  │
+│  └──────────────────────┘  └─────────────────────────────────┘  │
+│                                                                 │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                TrainingEvaluator (High-Level API)        │   │
+│  │                                                          │   │
+│  │  Combines all components for easy training integration   │   │
+│  │  • on_train_step() - Log metrics for each training step  │   │
+│  │  • run_validation() - Periodic validation with logging   │   │
+│  │  • summary() - Training summary with best metrics        │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Usage in Training Loop
+
+```python
+from core.evaluation import TrainingEvaluator
+
+# Initialize
+evaluator = TrainingEvaluator(
+    vocab_size=50257,
+    log_dir="./logs",
+    experiment_name="my-run",
+    validate_every_n_steps=1000,
+)
+
+# Training loop
+for step, batch in enumerate(dataloader):
+    loss, logits, grads = train_step(params, batch)
+    
+    # Log all metrics
+    evaluator.on_train_step(
+        step=step,
+        loss=loss,
+        logits=logits,
+        targets=batch['targets'],
+        learning_rate=current_lr,
+        grads=grads,  # For gradient health monitoring
+    )
+    
+    # Validation
+    if evaluator.should_validate(step):
+        evaluator.run_validation(model_fn, params, val_data, step)
+
+# Summary
+print(evaluator.summary())
+```
+
+### Log Output Format
+
+```
+Step     100 | loss: 4.2341 | ppl: 68.92 | acc: 0.1234 | lr: 1.00e-04 | grad_norm: 0.8234 | 12543 tok/s
+Step     200 | loss: 3.8921 | ppl: 48.98 | acc: 0.1567 | lr: 9.95e-05 | grad_norm: 0.7891 | 13102 tok/s
+...
+============================================================
+VALIDATION at step 1000
+  Loss:       3.4521 (±0.0234)
+  Perplexity: 31.56 (±2.34)
+  Accuracy:   0.2134
+  Tokens:     512,000
+  Time:       45.2s
+============================================================
 ```
 
 ## Advanced Attention System

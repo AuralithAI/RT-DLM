@@ -1,20 +1,40 @@
 """
-Production-Ready Sampling Strategies for RT-DLM AGI
+Sampling Strategies for RT-DLM AGI
 
-This module implements advanced token sampling strategies for high-quality text generation:
+[DEV UTILITY - Testing/Development Only]
+
+This module provides token sampling and generation utilities for DEVELOPMENT
+and TESTING purposes. It is NOT part of the production training pipeline.
+
+For production inference, use a dedicated inference framework (vLLM, TGI, etc.)
+that loads RT-DLM checkpoints.
+
+This module implements:
 - Temperature scaling: Controls randomness of generation
 - Top-K filtering: Only consider K most likely tokens
 - Top-P (Nucleus) sampling: Only sample from tokens whose cumulative probability ≤ top_p
 - Repetition penalty: Discourage repeating tokens
-- Token probability logging: Track confidence of generated tokens
+- Speculative decoding: Reference implementation for testing
 
-Usage:
+Usage (development/testing only):
     from core.sampling import TokenSampler, SamplingConfig, SampleOutput
     
     sampler = TokenSampler()
     config = SamplingConfig(temperature=0.8, top_p=0.9, top_k=50)
     output = sampler.sample(logits, config, rng_key)
+
+Note:
+    For production deployment, inference should be handled by optimized 
+    serving frameworks that implement:
+    - KV cache management
+    - Continuous batching
+    - Tensor parallelism
+    - Optimized attention kernels
 """
+
+# Mark entire module as dev utility
+_MODULE_DEV_UTILITY = True
+_MODULE_DEV_REASON = "Sampling/generation is for development testing. Production inference uses separate optimized serving stack."
 
 import jax
 import jax.numpy as jnp

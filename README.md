@@ -72,12 +72,57 @@ Cross-modal fusion capabilities:
 - **Epoch-based training loop** with configurable batch size
 - **SafeTensors checkpointing** for model persistence
 - **Gradient optimization** via Optax (AdamW, learning rate scheduling)
+- **Gradient clipping** for training stability
 - **Ethics module** with feedback collection and reward modeling
 - **Mixed-precision training** (bfloat16/float16) for faster training
 - **Gradient checkpointing** for memory efficiency
 - **Distributed training** support (data parallelism with pmap)
 - **Model parallelism** for very large models (tensor/pipeline parallelism)
-- **Speculative decoding** for faster inference
+
+### Evaluation Metrics
+
+Production-grade training completeness with comprehensive evaluation:
+
+```python
+from core.evaluation import TrainingEvaluator
+
+# Initialize evaluator for training
+evaluator = TrainingEvaluator(
+    vocab_size=50257,
+    log_dir="./logs",
+    experiment_name="my-training-run",
+    validate_every_n_steps=1000,
+    config=config.__dict__,
+)
+
+# In training loop
+for step, batch in enumerate(dataloader):
+    loss, logits, grads = train_step(params, batch)
+    
+    # Log metrics: perplexity, accuracy, gradient health, throughput
+    evaluator.on_train_step(
+        step=step,
+        loss=loss,
+        logits=logits,
+        targets=batch['targets'],
+        learning_rate=current_lr,
+        grads=grads,
+    )
+    
+    # Validation
+    if evaluator.should_validate(step):
+        evaluator.run_validation(model_fn, params, val_data, step)
+
+# Training summary
+print(evaluator.summary())
+```
+
+**Metrics tracked**:
+- **Perplexity**: Core LM quality metric (lower = better)
+- **Token Accuracy**: Top-1 and Top-5 prediction accuracy
+- **Gradient Norms**: Health monitoring (NaN/Inf/exploding/vanishing detection)
+- **Throughput**: Tokens per second
+- **Loss Curves**: Structured JSON logging for analysis
 
 ### Model Scale Presets
 
@@ -168,17 +213,24 @@ pytest tests/
 - Quantum simulator (100+ qubits with tensor network approximations)
 - Variational quantum circuit
 - Multimodal fusion
-- Production-ready token sampling (Top-K, Top-P, temperature, repetition penalty)
-- **Speculative decoding** for faster inference
 - SafeTensors checkpoint management
 - Training pipeline with epoch-based loop and checkpoint resumption
 - Ethics module with feedback collection and reward modeling
 - Mixed-precision training (bfloat16/float16)
 - Gradient checkpointing for memory efficiency
+- Gradient clipping for training stability
 - Distributed training support (data parallelism)
-- Comprehensive test suite (375+ tests)
 - Model parallelism (tensor parallelism, pipeline parallelism)
 - Tensor network approximations for quantum simulation (MPS, TTN)
+- **Evaluation Metrics** (perplexity, gradient norms, structured logging)
+- **Gradient Health Monitoring** (NaN/Inf detection, exploding/vanishing detection)
+- **Validation Runner** for periodic evaluation
+- Comprehensive test suite (400+ tests)
+
+### Architecture Notes
+- **Training Focus**: This repository focuses on model architecture and training completeness
+- **Inference**: Token sampling/generation utilities are marked as `@dev_utility` for testing purposes only
+- **Production Inference**: For production deployment, use optimized serving frameworks (vLLM, TGI) that load RT-DLM checkpoints
 
 ## Requirements
 
