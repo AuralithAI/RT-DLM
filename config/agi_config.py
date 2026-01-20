@@ -126,6 +126,24 @@ class AGIConfig:
         self.working_memory_capacity = kwargs.get("working_memory_capacity", 7)  # Working memory slots
         self.memory_consolidation = kwargs.get("memory_consolidation", True)  # Memory consolidation
         
+        # --- AGI-Scale Attention Parameters ---
+        # Ring Attention for infinite context distributed across devices
+        self.use_agi_attention = kwargs.get("use_agi_attention", False)  # Enable AGI attention features
+        self.enable_ring_attention = kwargs.get("enable_ring_attention", True)  # Ring Attention for distributed infinite context
+        self.ring_block_size = kwargs.get("ring_block_size", 512)  # Block size for Ring Attention
+        self.num_ring_devices = kwargs.get("num_ring_devices", 1)  # Number of devices for distributed attention
+        
+        # Cross-Memory Attention for LTM/STM/MTM interaction
+        self.enable_memory_cross_attention = kwargs.get("enable_memory_cross_attention", True)  # Memory banks interact via attention
+        self.memory_attention_heads = kwargs.get("memory_attention_heads", 4)  # Heads for memory cross-attention
+        self.memory_dropout = kwargs.get("memory_dropout", 0.1)  # Dropout for memory attention
+        
+        # Infinite Context via hierarchical compression
+        self.enable_infinite_context = kwargs.get("enable_infinite_context", False)  # Infinite context mode
+        self.context_chunk_size = kwargs.get("context_chunk_size", 1024)  # Chunk size for infinite context
+        self.global_context_size = kwargs.get("global_context_size", 256)  # Compressed global context tokens
+        self.context_compression_ratio = kwargs.get("context_compression_ratio", 4)  # Compression ratio for chunks
+        
         # --- Continual Learning Parameters ---
         self.continual_learning = kwargs.get("continual_learning", True)  # Enable continual learning (EWC)
         self.lambda_ewc = kwargs.get("lambda_ewc", 1000.0)  # EWC regularization strength

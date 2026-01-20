@@ -539,6 +539,72 @@ model = TMSModel(d_model=512, num_heads=8, attention_type="linear", ...)
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
+## AGI-Scale Attention System
+
+RT-DLM provides advanced attention mechanisms for AGI-level capabilities with long-context reasoning and deep memory interaction.
+
+### AGI Attention Components
+
+| Component | Purpose | Key Feature |
+|-----------|---------|-------------|
+| **Ring Attention** | Infinite context | Distributed attention across devices |
+| **Cross-Memory Attention** | Memory interaction | LTM/STM/MTM interact via attention |
+| **Hierarchical Memory Fusion** | Memory consolidation | Multi-level integration |
+| **Infinite Context Attention** | Very long sequences | Hierarchical compression |
+
+### Ring Attention
+
+Ring Attention enables processing of arbitrarily long sequences by distributing attention across devices in a ring topology. Each device processes a local block while KV pairs are passed around the ring, achieving O(n/d × n) complexity where d is the number of devices.
+
+Configuration: `config/agi_attention_config.py` - `AGIAttentionConfig.for_distributed()`
+
+### Cross-Memory Attention
+
+Instead of simple weighted sums, memory banks interact via cross-attention:
+
+- **LTM ← STM**: Long-term memory queries short-term for recent updates
+- **STM ← LTM**: Short-term queries long-term for persistent context
+- **MTM ← LTM/STM**: Meta-task memory mediates between both for task fusion
+
+Configuration: `config/agi_attention_config.py` - `MemoryFusionStrategy.CROSS_ATTENTION`
+
+### Hierarchical Memory Fusion
+
+Multi-level attention-based memory integration:
+
+1. **Level 1**: Local self-attention within each memory bank
+2. **Level 2**: Cross-attention between memory banks
+3. **Level 3**: Global integration via importance-weighted fusion
+
+Configuration: `config/agi_attention_config.py` - `MemoryFusionStrategy.HIERARCHICAL`
+
+### Infinite Context Attention
+
+Hierarchical compression for processing very long sequences:
+
+- Processes input in chunks with local attention
+- Compresses each chunk into summary tokens
+- Maintains global context buffer of compressed summaries
+- Complexity: O(chunk_size² + global_size²) instead of O(n²)
+
+Configuration: `config/agi_attention_config.py` - `AGIAttentionConfig.for_long_context()`
+
+### Module Structure
+
+| File | Components |
+|------|------------|
+| `config/agi_attention_config.py` | AGIAttentionConfig, MemoryFusionStrategy, ContextStrategy |
+| `core/model/agi_attention.py` | RingAttentionBlock, CrossMemoryAttention, HierarchicalMemoryFusion, InfiniteContextAttention, AGIAttention |
+
+### Performance Comparison
+
+| Feature | Legacy Mode | AGI Mode |
+|---------|-------------|----------|
+| Memory Interaction | Weighted sum | Cross-attention |
+| Max Context | Fixed (sliding window) | Unlimited (ring) |
+| Memory Relevance | Static weights | Dynamic attention |
+| Consolidation | None | Hierarchical |
+
 ## Graph Neural Components
 
 Graph-based neural components for relational reasoning.

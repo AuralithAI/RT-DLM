@@ -7,7 +7,7 @@ import sys
 
 import optax
 
-from typing import Optional, Literal
+from typing import Optional, Literal, Dict, Any, Tuple
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -23,6 +23,13 @@ from core.components.reusable_components import (
     PruningManager,
     apply_shared_spiking,
     AttentionConfig,
+)
+
+# Import AGI-scale attention mechanisms
+from core.model.agi_attention import (
+    AGIAttention,
+    AGIAttentionConfig,
+    HierarchicalMemoryFusion,
 )
 
 class TMSModel(hk.Module):
@@ -45,6 +52,11 @@ class TMSModel(hk.Module):
     - Track and prune underutilized attention heads and FFN neurons
     - Compute compression ratios for model efficiency analysis
     
+    AGI Attention Features:
+    - Ring Attention: Distributed attention for infinite context across devices
+    - Cross-Memory Attention: Deep interaction between LTM/STM/MTM memory banks
+    - Hierarchical Memory Fusion: Attention-based memory consolidation
+    
     Example usage with shared spiking:
         # Use shared spiking utility for custom attention scores
         spiked_scores = apply_shared_spiking(scores, spike_threshold=0.1)
@@ -52,6 +64,10 @@ class TMSModel(hk.Module):
         # Or use SpikingMechanism for more control
         spiking = SpikingMechanism(spike_threshold=0.1, epsilon=1e-8)
         spiked = spiking.apply(attention_scores)
+    
+    Example usage with AGI attention:
+        # Enable cross-memory attention for memory bank interaction
+        model = TMSModel(..., use_agi_attention=True, enable_memory_cross_attention=True)
     """
     def __init__(
         self, 
@@ -72,12 +88,19 @@ class TMSModel(hk.Module):
         num_kv_heads: Optional[int] = None,
         position_encoding: Literal["rope", "learned", "none"] = "rope",
         sliding_window_size: int = 512,
+        # AGI-scale attention features
+        use_agi_attention: bool = False,
+        enable_ring_attention: bool = True,
+        enable_memory_cross_attention: bool = True,
+        enable_infinite_context: bool = False,
+        ring_block_size: int = 512,
         name: Optional[str] = None
     ):
         super().__init__(name=name)
         self.d_model = d_model
         self.num_heads = num_heads
         self.attention_type = attention_type
+        self.use_agi_attention = use_agi_attention
         self.embedding = hk.Embed(vocab_size, d_model)
         self.position_enc = hk.Embed(max_seq_length, d_model)
         
@@ -117,6 +140,27 @@ class TMSModel(hk.Module):
             head_threshold=0.01,
             ffn_threshold=0.01
         )
+        
+        # AGI-scale attention mechanisms
+        if use_agi_attention:
+            self.agi_attention_config = AGIAttentionConfig(
+                d_model=d_model,
+                num_heads=num_heads,
+                max_seq_length=max_seq_length,
+                enable_ring_attention=enable_ring_attention,
+                ring_block_size=ring_block_size,
+                enable_memory_cross_attention=enable_memory_cross_attention,
+                enable_infinite_context=enable_infinite_context,
+            )
+            self.agi_attention = AGIAttention(self.agi_attention_config)
+            
+            # Cross-memory attention for LTM/STM/MTM interaction
+            if enable_memory_cross_attention:
+                self.memory_fusion = HierarchicalMemoryFusion(
+                    d_model=d_model,
+                    num_heads=num_heads // 2,  # Use fewer heads for memory fusion
+                    dropout_rate=0.1
+                )
     
     def get_attention_config(self) -> AttentionConfig:
         """Get attention configuration for this model."""
@@ -168,36 +212,163 @@ class TMSModel(hk.Module):
             'compression': compression
         }
 
-    def __call__(self, inputs, rng=None, return_attention=False, retrieved_memory_ltm=None, retrieved_memory_stm=None, retrieved_memory_mtm=None, spike_threshold=None, epsilon=None, outputs=None, feedback_score=None):
+    def __call__(
+        self, 
+        inputs, 
+        rng=None, 
+        return_attention=False, 
+        retrieved_memory_ltm=None, 
+        retrieved_memory_stm=None, 
+        retrieved_memory_mtm=None, 
+        spike_threshold=None, 
+        epsilon=None, 
+        outputs=None, 
+        feedback_score=None,
+        use_memory_cross_attention: bool = True,
+        use_infinite_context: bool = False,
+        is_training: bool = True
+    ) -> Any:
+        """
+        Forward pass through the TMS model.
+        
+        Args:
+            inputs: Input token IDs [batch, seq_len]
+            rng: Optional random key
+            return_attention: Whether to return attention weights
+            retrieved_memory_ltm: Long-term memory [batch, d_model]
+            retrieved_memory_stm: Short-term memory [batch, d_model]
+            retrieved_memory_mtm: Meta-task memory [batch, d_model]
+            spike_threshold: Threshold for spiking attention
+            epsilon: Small constant for numerical stability
+            outputs: Optional outputs for ethical scoring
+            feedback_score: Optional feedback for reward model
+            use_memory_cross_attention: Use cross-attention for memory fusion (AGI mode)
+            use_infinite_context: Use infinite context mode for very long sequences
+            is_training: Whether in training mode
+            
+        Returns:
+            logits: Output logits [batch, seq_len, vocab_size]
+            If return_attention: Also returns attention weights and auxiliary loss
+        """
         inputs = jnp.asarray(inputs, dtype=jnp.int32, copy=True)
         x = self.embedding(inputs) + self.position_enc(jnp.arange(inputs.shape[1], dtype=jnp.int32))
 
         # ** dummy_memory is used to initialize the memory projection layers [Not to be used anywhere else] ** 
         dummy_memory = jnp.zeros((inputs.shape[0], 1, self.embedding.embed_dim), dtype=jnp.float32)
+        
+        # Memory fusion info for returning
+        memory_fusion_info = None
     
-        # Handle LTM
-        if retrieved_memory_ltm is not None:
-            retrieved_memory_ltm = self.memory_projection_ltm(jnp.repeat(jnp.expand_dims(retrieved_memory_ltm, axis=1), x.shape[1], axis=1))
-            x += self.ltm_weight * retrieved_memory_ltm
-            memory_logits = self.memory_to_logits(retrieved_memory_ltm)
+        # Check if we should use AGI attention with cross-memory fusion
+        all_memories_available = (
+            retrieved_memory_ltm is not None and 
+            retrieved_memory_stm is not None and 
+            retrieved_memory_mtm is not None
+        )
+        
+        if self.use_agi_attention and use_memory_cross_attention and all_memories_available:
+            # ==================================================================
+            # AGI MODE: Cross-Memory Attention for deep memory interaction
+            # Instead of simple weighted sums, memory banks interact via attention
+            # ==================================================================
+            
+            # Project memories to model dimension
+            ltm_projected = self.memory_projection_ltm(
+                jnp.expand_dims(retrieved_memory_ltm, axis=1)
+            ).squeeze(1)  # [batch, d_model]
+            stm_projected = self.memory_projection_stm(
+                jnp.expand_dims(retrieved_memory_stm, axis=1)
+            ).squeeze(1)  # [batch, d_model]
+            mtm_projected = self.memory_projection_mtm(
+                jnp.expand_dims(retrieved_memory_mtm, axis=1)
+            ).squeeze(1)  # [batch, d_model]
+            
+            # Apply hierarchical memory fusion with cross-attention
+            # This allows LTM/STM/MTM to interact and inform each other
+            memory_fusion_result = self.memory_fusion(
+                ltm=ltm_projected,
+                stm=stm_projected,
+                mtm=mtm_projected,
+                context=x.mean(axis=1),  # Use input as context for importance weighting
+                is_training=is_training
+            )
+            
+            # Get fused memory representation
+            fused_memory = memory_fusion_result["fused_memory"]  # [batch, d_model]
+            memory_fusion_info = {
+                "importance_weights": memory_fusion_result.get("importance_weights"),
+                "cross_attention_weights": memory_fusion_result.get("cross_attention_weights"),
+                "ltm_updated": memory_fusion_result.get("ltm_updated"),
+                "stm_updated": memory_fusion_result.get("stm_updated"),
+                "mtm_updated": memory_fusion_result.get("mtm_updated"),
+            }
+            
+            # Add fused memory to input representation
+            # Expand to sequence dimension and add with learned gating
+            fused_memory_expanded = fused_memory[:, None, :].repeat(x.shape[1], axis=1)
+            
+            # Learn a gate to control memory influence
+            memory_gate = hk.Sequential([
+                hk.Linear(self.d_model),
+                jax.nn.sigmoid
+            ], name="memory_gate")
+            gate = memory_gate(x)
+            x = x + gate * fused_memory_expanded
+            
+            # Also compute memory logits for output enhancement
+            memory_logits = self.memory_to_logits(fused_memory_expanded)
+            
         else:
-            _ = self.memory_projection_ltm(dummy_memory)
-            _ = self.memory_to_logits(dummy_memory)
-            memory_logits = None
+            # ==================================================================
+            # LEGACY MODE: Simple weighted sum of memories (original behavior)
+            # ==================================================================
+            
+            # Handle LTM
+            if retrieved_memory_ltm is not None:
+                retrieved_memory_ltm = self.memory_projection_ltm(
+                    jnp.repeat(jnp.expand_dims(retrieved_memory_ltm, axis=1), x.shape[1], axis=1)
+                )
+                x += self.ltm_weight * retrieved_memory_ltm
+                memory_logits = self.memory_to_logits(retrieved_memory_ltm)
+            else:
+                _ = self.memory_projection_ltm(dummy_memory)
+                _ = self.memory_to_logits(dummy_memory)
+                memory_logits = None
 
-        # Handle STM
-        if retrieved_memory_stm is not None:
-            retrieved_memory_stm = self.memory_projection_stm(jnp.repeat(jnp.expand_dims(retrieved_memory_stm, axis=1), x.shape[1], axis=1))
-            x += self.stm_weight * retrieved_memory_stm 
-        else:
-            _ = self.memory_projection_stm(dummy_memory)
+            # Handle STM
+            if retrieved_memory_stm is not None:
+                retrieved_memory_stm = self.memory_projection_stm(
+                    jnp.repeat(jnp.expand_dims(retrieved_memory_stm, axis=1), x.shape[1], axis=1)
+                )
+                x += self.stm_weight * retrieved_memory_stm 
+            else:
+                _ = self.memory_projection_stm(dummy_memory)
 
-        # Handle MTM
-        if retrieved_memory_mtm is not None:
-            retrieved_memory_mtm = self.memory_projection_mtm(jnp.repeat(jnp.expand_dims(retrieved_memory_mtm, axis=1), x.shape[1], axis=1))
-            x += self.mtm_weight * retrieved_memory_mtm
-        else:
-            _ = self.memory_projection_mtm(dummy_memory)
+            # Handle MTM
+            if retrieved_memory_mtm is not None:
+                retrieved_memory_mtm = self.memory_projection_mtm(
+                    jnp.repeat(jnp.expand_dims(retrieved_memory_mtm, axis=1), x.shape[1], axis=1)
+                )
+                x += self.mtm_weight * retrieved_memory_mtm
+            else:
+                _ = self.memory_projection_mtm(dummy_memory)
+
+        # ==================================================================
+        # Apply AGI attention (Ring Attention or Infinite Context)
+        # ==================================================================
+        if self.use_agi_attention and (use_infinite_context or self.agi_attention_config.enable_ring_attention):
+            # Use AGI attention for main sequence processing
+            x_agi, agi_info = self.agi_attention.forward_attention(
+                x, 
+                mask=(inputs != 0).astype(jnp.float32),
+                is_training=is_training,
+                use_infinite_context=use_infinite_context
+            )
+            x = x + x_agi  # Residual connection
+            
+            if memory_fusion_info is None:
+                memory_fusion_info = {}
+            memory_fusion_info["agi_attention_info"] = agi_info
 
         # Self-attention returns hidden states (not logits) for pipeline
         x, attn_weights_self = self.self_attention(
@@ -225,5 +396,10 @@ class TMSModel(hk.Module):
                 aux_loss += self.ethics_weight * ethical_loss
 
         if return_attention:
-            return logits, (attn_weights_self, attn_weights_transformer), top_k_expert_indices, aux_loss
+            attention_info = {
+                "self_attention": attn_weights_self,
+                "transformer": attn_weights_transformer,
+                "memory_fusion": memory_fusion_info
+            }
+            return logits, attention_info, top_k_expert_indices, aux_loss
         return logits
