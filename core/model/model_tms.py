@@ -379,7 +379,7 @@ class TMSModel(hk.Module):
             return_hidden_states=True  # Get hidden states for transformer pipeline
         )
         x, attn_weights_transformer = self.transformer(x, rng, return_attention=True, spike_threshold=spike_threshold, epsilon=epsilon)
-        x, top_k_expert_indices, aux_loss = self.moe(x, spike_threshold=spike_threshold, epsilon=epsilon)
+        x, top_k_expert_indices, aux_loss, _ = self.moe(x, spike_threshold=spike_threshold, epsilon=epsilon)
         x = self.norm(x)
         logits = self.proj(x)
 
