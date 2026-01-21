@@ -9,7 +9,24 @@ from core.training_utils import (
     create_pmap_train_step,
     GradientAccumulator,
 )
-# Scalable training (production-ready unified approach)
+# Memory management
+from core.memory_profiler import (
+    MemoryProfiler,
+    MemorySnapshot,
+    MemoryProfile,
+    estimate_memory_for_preset,
+    estimate_batch_memory,
+    get_all_preset_memory_requirements,
+    print_memory_requirements_table,
+)
+from core.gradient_accumulation import (
+    BatchGradientAccumulator,
+    create_accumulating_train_step,
+    split_batch_for_accumulation,
+    calculate_effective_batch_size,
+    recommend_accumulation_steps,
+)
+# Scalable training
 from core.scalable_training import (
     ScalableMesh,
     create_scalable_mesh,
@@ -74,6 +91,20 @@ __all__ = [
     'create_checkpointed_layer',
     'create_pmap_train_step',
     'GradientAccumulator',
+    # Memory management
+    'MemoryProfiler',
+    'MemorySnapshot',
+    'MemoryProfile',
+    'estimate_memory_for_preset',
+    'estimate_batch_memory',
+    'get_all_preset_memory_requirements',
+    'print_memory_requirements_table',
+    # Gradient accumulation
+    'BatchGradientAccumulator',
+    'create_accumulating_train_step',
+    'split_batch_for_accumulation',
+    'calculate_effective_batch_size',
+    'recommend_accumulation_steps',
     # Scalable training (recommended)
     'ScalableMesh',
     'create_scalable_mesh',

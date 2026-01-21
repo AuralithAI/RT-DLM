@@ -605,6 +605,39 @@ Pre-configured model sizes from tiny to production scale. Use `AGIConfig.from_pr
 | `xlarge` | 2048 | 32 | 32 | 32 | ~1.3B |
 | `xxlarge` | 4096 | 64 | 48 | 64 | ~7B |
 
+### Memory Requirements per Preset
+
+Estimated GPU memory for training with different configurations:
+
+| Preset | Params | FP32 Training | FP16 Training | FP16 + Checkpointing | Recommended GPU |
+|--------|--------|---------------|---------------|----------------------|-----------------|
+| `tiny` | 10M | 0.2 GB | 0.1 GB | 0.1 GB | Any GPU (4GB+) |
+| `small` | 50M | 0.8 GB | 0.5 GB | 0.4 GB | RTX 3060 (8GB) |
+| `base` | 125M | 2.0 GB | 1.2 GB | 1.0 GB | RTX 3070 (8GB) |
+| `large` | 350M | 5.5 GB | 3.3 GB | 2.8 GB | RTX 3090 (16GB) |
+| `xlarge` | 1.3B | 20.3 GB | 12.2 GB | 10.2 GB | RTX 4090 (24GB) or A100 (40GB) |
+| `xxlarge` | 7B | 109.4 GB | 65.6 GB | 54.7 GB | A100 (80GB) or Multi-GPU |
+
+**Notes:**
+- FP32 Training: Full precision, includes params + optimizer + gradients + activations
+- FP16 Training: Mixed precision with FP32 optimizer states
+- FP16 + Checkpointing: Gradient checkpointing reduces activation memory by ~65%
+- Actual memory varies with batch size and sequence length
+- For larger models, use gradient accumulation or model parallelism
+
+### Gradient Accumulation
+
+For limited GPU memory, use gradient accumulation to achieve larger effective batch sizes:
+
+| Target Batch Size | Micro Batch | Accumulation Steps | GPU Memory |
+|-------------------|-------------|-------------------|------------|
+| 64 | 8 | 8 | Low |
+| 128 | 16 | 8 | Medium |
+| 256 | 8 | 32 | Low |
+| 512 | 32 | 16 | High |
+
+Use `core.gradient_accumulation.recommend_accumulation_steps()` to find optimal settings.
+
 ## Scalability & Training Modes
 
 RT-DLM supports multiple training modes depending on your hardware and model size requirements.

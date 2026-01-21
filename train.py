@@ -45,6 +45,15 @@ from core.scalable_training import (
     recommend_parallelism,
 )
 
+# Memory profiling and gradient accumulation
+from core.memory_profiler import (
+    MemoryProfiler,
+)
+from core.gradient_accumulation import (
+    BatchGradientAccumulator,
+    calculate_effective_batch_size,
+)
+
 # Retrieval Augmented Generation (RAG) integration
 from config.retrieval_config import RetrievalConfig
 from modules.retrieval import (
@@ -111,6 +120,23 @@ class AGITrainer:
         self.reasoning_accuracies = []
         self.consciousness_coherence = []
         self.multimodal_alignment = []
+        
+        # Memory profiling (tracks GPU memory usage during training)
+        self.memory_profiler = MemoryProfiler(
+            enabled=config.enable_memory_profiling if hasattr(config, 'enable_memory_profiling') else False,
+            log_every_n_steps=100
+        )
+        
+        # Gradient accumulation settings
+        self.gradient_accumulation_steps = getattr(config, 'gradient_accumulation_steps', 1)
+        self.gradient_accumulator = None
+        if self.gradient_accumulation_steps > 1:
+            logger.info(f"Gradient accumulation enabled: {self.gradient_accumulation_steps} steps")
+            effective_batch = calculate_effective_batch_size(
+                micro_batch_size=config.batch_size,
+                accumulation_steps=self.gradient_accumulation_steps
+            )
+            logger.info(f"  Effective batch size: {effective_batch}")
         
         # Continual learning state
         self.task_memories: List[TaskMemory] = []
@@ -554,7 +580,7 @@ class AGITrainer:
         
         # Create sample inputs for initialization
         sample_inputs = {
-            "text": sample_batch["input_ids"],
+            "inputs": {"text": sample_batch["input_ids"]},
         }
         
         # Add multimodal samples if enabled
@@ -591,6 +617,21 @@ class AGITrainer:
         )
         logger.info(f"Model initialized with {param_count:,} parameters")
         logger.info(f"Estimated memory: {memory_est['total_gb']:.2f} GB")
+        
+        # Set up memory profiler with model/optimizer sizes
+        self.memory_profiler.set_model_size(
+            unreplicate_params(self.params) if self.is_distributed else self.params
+        )
+        self.memory_profiler.set_optimizer_size(self.opt_state)
+        
+        # Initialize gradient accumulator if using accumulation
+        if self.gradient_accumulation_steps > 1:
+            self.gradient_accumulator = BatchGradientAccumulator(
+                accumulation_steps=self.gradient_accumulation_steps,
+                loss_fn=self._make_loss_fn(),
+                model_apply_fn=self.model.apply,
+            )
+            logger.info("Gradient accumulator initialized")
         
         return self.params, self.opt_state
     
@@ -781,6 +822,64 @@ class AGITrainer:
         new_params = optax.apply_updates(params, updates)
         
         return new_params, new_opt_state, loss, model_output
+    
+    def _make_loss_fn(self):
+        """
+        Create a loss function for gradient accumulation.
+        
+        Returns a function that takes (outputs, batch) and returns the loss.
+        """
+        def loss_fn(outputs, batch):
+            return compute_agi_loss(
+                outputs["logits"],
+                batch["targets"],
+                aux_outputs=outputs,
+                config=self.config
+            )
+        return loss_fn
+    
+    def _compute_grads(self, params, batch, rng):
+        """
+        Compute loss and gradients for a single batch (for gradient accumulation).
+        
+        This is separated from train_step to allow gradient accumulation
+        without applying optimizer updates on every micro-batch.
+        
+        Args:
+            params: Model parameters
+            batch: Training batch
+            rng: Random key
+            
+        Returns:
+            Tuple of (loss, gradients)
+        """
+        def loss_fn(params, batch, rng):
+            model_output = self.model.apply(
+                params, rng,
+                inputs={"text": batch["input_ids"]},
+                multimodal_inputs=batch.get("multimodal_inputs"),
+                return_reasoning=True
+            )
+            
+            loss = compute_agi_loss(
+                model_output["logits"],
+                batch["targets"],
+                aux_outputs=model_output,
+                config=self.config
+            )
+            
+            return loss
+        
+        # Compute gradients
+        loss, grads = jax.value_and_grad(loss_fn)(params, batch, rng)
+        
+        # NaN check for gradients
+        grads = jax.tree_util.tree_map(
+            lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x),
+            grads
+        )
+        
+        return loss, grads
     
     def train_step_with_ewc(self, params, opt_state, batch, rng, 
                             task_memories: List[TaskMemory], lambda_ewc: float = 1000.0):
@@ -1151,6 +1250,9 @@ class AGITrainer:
         """
         Run a single training epoch.
         
+        Supports gradient accumulation for larger effective batch sizes
+        and memory profiling for tracking GPU memory usage.
+        
         Args:
             batch_iterator: Iterator over training batches
             num_batches_estimate: Estimated number of batches for logging
@@ -1161,8 +1263,14 @@ class AGITrainer:
         epoch_losses = []
         retrieval_augmented_count = 0
         
+        # Use gradient accumulator if configured
+        accum_steps = self.gradient_accumulation_steps
+        
         for batch_idx, batch in enumerate(batch_iterator):
             self.rng, train_rng, augment_rng = jax.random.split(self.rng, 3)
+            
+            # Memory profiling - record at start of step
+            self.memory_profiler.snapshot(self.step_count, phase="forward")
             
             # Augment batch with retrieval context
             original_batch = batch
@@ -1170,23 +1278,78 @@ class AGITrainer:
             if batch is not original_batch:
                 retrieval_augmented_count += 1
             
-            self.params, self.opt_state, loss, _ = self.train_step(
-                self.params, self.opt_state, batch, train_rng
-            )
-            
-            if jnp.isnan(loss) or jnp.isinf(loss):
-                logger.warning(f"NaN/Inf loss detected at batch {batch_idx}, skipping...")
-                continue
-            
-            epoch_losses.append(float(loss))
-            self.training_losses.append(float(loss))
-            self.step_count += 1
-            
-            if batch_idx % 50 == 0:
-                logger.info(f"  Batch {batch_idx + 1}/{num_batches_estimate}, Loss: {loss:.4f}")
+            if accum_steps > 1 and self.gradient_accumulator is not None:
+                # Gradient accumulation mode using BatchGradientAccumulator
+                is_complete = self.gradient_accumulator.accumulate(
+                    self.params, batch, train_rng
+                )
+                
+                # Memory profiling - after backward pass
+                self.memory_profiler.snapshot(self.step_count, phase="backward")
+                
+                # Apply updates when accumulation is complete
+                if is_complete:
+                    avg_grads = self.gradient_accumulator.get_accumulated_grads()
+                    avg_loss = self.gradient_accumulator.get_accumulated_loss()
+                    
+                    # Skip if NaN/Inf loss
+                    if jnp.isnan(avg_loss) or jnp.isinf(avg_loss):
+                        logger.warning(f"NaN/Inf loss at batch {batch_idx}, skipping...")
+                        self.gradient_accumulator.reset()
+                        continue
+                    
+                    # Apply optimizer update
+                    updates, self.opt_state = self.optimizer.update(
+                        avg_grads, self.opt_state, self.params
+                    )
+                    self.params = optax.apply_updates(self.params, updates)
+                    
+                    # Memory profiling - after optimizer step
+                    self.memory_profiler.snapshot(self.step_count, phase="optimizer")
+                    
+                    epoch_losses.append(float(avg_loss))
+                    self.training_losses.append(float(avg_loss))
+                    self.step_count += 1
+                    
+                    if batch_idx % (50 * accum_steps) == 0:
+                        logger.info(
+                            f"  Batch {batch_idx + 1}/{num_batches_estimate}, "
+                            f"Loss: {avg_loss:.4f} (accum={accum_steps})"
+                        )
+                    
+                    # Reset for next accumulation cycle
+                    self.gradient_accumulator.reset()
+            else:
+                # Standard training (no accumulation)
+                self.params, self.opt_state, loss, _ = self.train_step(
+                    self.params, self.opt_state, batch, train_rng
+                )
+                
+                # Memory profiling - after full step
+                self.memory_profiler.snapshot(self.step_count, phase="optimizer")
+                
+                if jnp.isnan(loss) or jnp.isinf(loss):
+                    logger.warning(f"NaN/Inf loss detected at batch {batch_idx}, skipping...")
+                    continue
+                
+                epoch_losses.append(float(loss))
+                self.training_losses.append(float(loss))
+                self.step_count += 1
+                
+                if batch_idx % 50 == 0:
+                    logger.info(f"  Batch {batch_idx + 1}/{num_batches_estimate}, Loss: {loss:.4f}")
         
         if retrieval_augmented_count > 0:
             logger.info(f"  Retrieval augmented batches: {retrieval_augmented_count}/{len(epoch_losses)}")
+        
+        # Log memory summary at end of epoch
+        if self.memory_profiler.enabled:
+            mem_summary = self.memory_profiler.summary()
+            if mem_summary.get("num_snapshots", 0) > 0:
+                logger.info(
+                    f"  Memory: peak={mem_summary.get('peak_memory_gb', 0):.2f}GB, "
+                    f"avg={mem_summary.get('average_memory_gb', 0):.2f}GB"
+                )
         
         return epoch_losses
     
