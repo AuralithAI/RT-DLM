@@ -87,14 +87,18 @@ def expert_specialization_loss(expert_outputs, expert_indices, num_experts):
     """
     Encourage expert specialization by maximizing inter-expert diversity.
     """
-    # Calculate expert-specific representations
+    d_model = expert_outputs.shape[-1]
+    
+    expert_outputs_flat = expert_outputs.reshape(-1, d_model)
+    expert_indices_flat = expert_indices.reshape(-1)
+    
     expert_representations = []
     for expert_id in range(num_experts):
-        expert_mask = (expert_indices == expert_id)
-        if jnp.sum(expert_mask) > 0:
-            expert_repr = jnp.mean(expert_outputs[expert_mask], axis=0)
-        else:
-            expert_repr = jnp.zeros_like(expert_outputs[0])
+        expert_mask = (expert_indices_flat == expert_id)
+        mask_sum = jnp.sum(expert_mask)
+        masked_outputs = expert_outputs_flat * expert_mask[:, None]
+        expert_repr = jnp.sum(masked_outputs, axis=0) / (mask_sum + 1e-10)
+        expert_repr = jnp.where(mask_sum > 0, expert_repr, jnp.zeros(d_model))
         expert_representations.append(expert_repr)
     
     expert_stack = jnp.stack(expert_representations)
@@ -372,8 +376,8 @@ class SparseMoE(hk.Module):
         load_balance_loss = dynamic_load_balancing_loss(gating_logits, self.expert_usage, 
                                                       self.num_experts)
         specialization_loss = expert_specialization_loss(
-            expert_outputs.reshape(-1, expert_outputs.shape[-1]),
-            top_k_indices.flatten(),
+            selected_expert_outputs.reshape(-1, selected_expert_outputs.shape[-1]),
+            top_k_indices.reshape(-1),
             self.num_experts
         )
         

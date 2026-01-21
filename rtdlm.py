@@ -944,8 +944,22 @@ class RTDLMAGISystem(hk.Module):
         self.reasoning_engine = ReasoningEngine(config)
         
         # Quantum-enhanced processing
-        if config.quantum_layers > 0:
+        self.use_quantum = config.quantum_layers > 0
+        if self.use_quantum:
             self.quantum_core = QuantumAGICore(config)
+            self.quantum_optimization = QubitAssistedOptimization(config.d_model)
+            self.vqc = VariationalQuantumCircuit(
+                num_qubits=min(6, config.quantum_layers + 4), 
+                num_layers=config.quantum_layers
+            )
+            self.vqc_input_projection = hk.Linear(
+                2 ** min(6, config.quantum_layers + 4), 
+                name="vqc_input_projection"
+            )
+            self.vqc_output_projection = hk.Linear(
+                config.d_model, 
+                name="vqc_output_projection"
+            )
         
         # Consciousness simulation
         if config.consciousness_simulation:
@@ -953,26 +967,6 @@ class RTDLMAGISystem(hk.Module):
         
         # Scientific discovery engine
         self.scientific_discovery = ScientificDiscoveryEngine(config.d_model)
-        
-        # Quantum optimization capabilities
-        self.quantum_optimization = QubitAssistedOptimization(config.d_model)
-        
-        # Variational Quantum Circuit for feature optimization
-        # Use 6 qubits and 3 layers for balanced expressibility and efficiency
-        self.vqc = VariationalQuantumCircuit(
-            num_qubits=min(6, config.quantum_layers + 4), 
-            num_layers=config.quantum_layers
-        )
-        
-        # VQC projection layers
-        self.vqc_input_projection = hk.Linear(
-            2 ** min(6, config.quantum_layers + 4), 
-            name="vqc_input_projection"
-        )
-        self.vqc_output_projection = hk.Linear(
-            config.d_model, 
-            name="vqc_output_projection"
-        )
         
         # Self-evolving architecture
         self.self_evolution = SelfEvolvingArchitecture(config.d_model)
@@ -1063,7 +1057,16 @@ class RTDLMAGISystem(hk.Module):
             epsilon=self.config.EPSILON
         )
         
-        core_features = tms_output if not isinstance(tms_output, tuple) else tms_output[0]
+        # Extract hidden states for feature processing
+        if isinstance(tms_output, dict):
+            core_features = tms_output["hidden_states"]
+            tms_logits = tms_output["logits"]
+        elif isinstance(tms_output, tuple):
+            core_features = tms_output[0]
+            tms_logits = None
+        else:
+            core_features = tms_output
+            tms_logits = None
         
         # Hybrid architecture integration
         hybrid_result = self.hybrid_integrator(
@@ -1083,35 +1086,44 @@ class RTDLMAGISystem(hk.Module):
             core_features
         )
         
-        # Integrate all features
+        # Process knowledge base for retrieval augmentation (RAG)
+        knowledge_features = None
+        if knowledge_base is not None:
+            # Encode retrieved knowledge through the hybrid integrator
+            knowledge_result = self.hybrid_integrator(
+                {"text": knowledge_base},
+                task_type="retrieval"
+            )
+            knowledge_features = knowledge_result["ensemble_output"]
+        
+        # Integrate all features including retrieval context
         all_features = self._integrate_features(
             core_features, hybrid_features, multimodal_features, 
-            reasoning_result
+            reasoning_result, knowledge_features
         )
         
         # Final AGI integration
         integrated_features = self.agi_integrator(all_features)
         
-        # Quantum optimization processing with Variational Quantum Circuit
+        # Quantum optimization processing
         quantum_results = None
-        try:
-            # Standard quantum-assisted optimization
-            quantum_optimal_decision, quantum_search_probs = self.quantum_optimization(
-                hybrid_features, reasoning_result
-            )
-            
-            # Enhanced VQC-based optimization for feature refinement
-            vqc_enhanced_features = self._apply_vqc_optimization(
-                integrated_features, quantum_search_probs
-            )
-            
-            quantum_results = {
-                "optimal_decision": quantum_optimal_decision,
-                "search_probabilities": quantum_search_probs,
-                "vqc_enhanced_features": vqc_enhanced_features
-            }
-        except Exception as e:
-            logger.warning(f"Quantum processing failed: {e}")
+        if self.use_quantum:
+            try:
+                quantum_optimal_decision, quantum_search_probs = self.quantum_optimization(
+                    hybrid_features, reasoning_result
+                )
+                
+                vqc_enhanced_features = self._apply_vqc_optimization(
+                    integrated_features, quantum_search_probs
+                )
+                
+                quantum_results = {
+                    "optimal_decision": quantum_optimal_decision,
+                    "search_probabilities": quantum_search_probs,
+                    "vqc_enhanced_features": vqc_enhanced_features
+                }
+            except Exception as e:
+                logger.warning(f"Quantum processing failed: {e}")
         
         # Self-evolving architecture processing
         architecture_results = None
@@ -1208,11 +1220,37 @@ class RTDLMAGISystem(hk.Module):
         return None
     
     def _integrate_features(self, core_features, hybrid_features, 
-                          multimodal_features, reasoning_result):
-        """Integrate all feature types"""
+                          multimodal_features, reasoning_result,
+                          knowledge_features=None):
+        """Integrate all feature types including retrieval context.
+        
+        Args:
+            core_features: Core TMS model features [batch, seq, d_model]
+            hybrid_features: Hybrid architecture features [batch, d_model] or [batch, seq, d_model]
+            multimodal_features: Optional multimodal features
+            reasoning_result: Reasoning engine output
+            knowledge_features: Optional retrieved knowledge features (from RAG)
+        """
+        # Ensure all features are 3D [batch, seq, d_model]
+        batch_size = core_features.shape[0]
+        seq_len = core_features.shape[1]
+        
+        # Helper to expand 2D to 3D
+        def ensure_3d(features, name="features"):
+            if features.ndim == 2:
+                return jnp.broadcast_to(
+                    features[:, None, :], 
+                    (batch_size, seq_len, features.shape[-1])
+                )
+            return features
+        
+        # Ensure hybrid_features is 3D
+        hybrid_features = ensure_3d(hybrid_features, "hybrid_features")
+        
         features_list = [core_features, hybrid_features]
         
         if multimodal_features is not None:
+            multimodal_features = ensure_3d(multimodal_features, "multimodal_features")
             # Ensure compatible shapes
             if multimodal_features.shape[-1] != core_features.shape[-1]:
                 projection = hk.Linear(core_features.shape[-1], name="multimodal_proj")
@@ -1221,7 +1259,27 @@ class RTDLMAGISystem(hk.Module):
         
         # Add reasoning features
         if "reasoning_features" in reasoning_result:
-            features_list.append(reasoning_result["reasoning_features"])
+            reasoning_features = reasoning_result["reasoning_features"]
+            reasoning_features = ensure_3d(reasoning_features, "reasoning_features")
+            features_list.append(reasoning_features)
+        
+        # Add retrieval/knowledge features (RAG integration)
+        if knowledge_features is not None:
+            knowledge_features = ensure_3d(knowledge_features, "knowledge_features")
+            # Project knowledge features to match d_model if needed
+            if knowledge_features.shape[-1] != core_features.shape[-1]:
+                knowledge_proj = hk.Linear(core_features.shape[-1], name="knowledge_proj")
+                knowledge_features = knowledge_proj(knowledge_features)
+            
+            # Handle sequence length mismatch by pooling/broadcasting
+            if knowledge_features.shape[1] != seq_len:
+                # Pool knowledge over sequence dimension
+                knowledge_pooled = jnp.mean(knowledge_features, axis=1, keepdims=True)
+                knowledge_features = jnp.broadcast_to(
+                    knowledge_pooled, 
+                    (batch_size, seq_len, knowledge_features.shape[-1])
+                )
+            features_list.append(knowledge_features)
         
         # Concatenate all features
         return jnp.concatenate(features_list, axis=-1)

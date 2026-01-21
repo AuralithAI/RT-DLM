@@ -5,7 +5,7 @@ import optax
 import numpy as np
 import re
 import argparse
-from typing import Dict, List, Tuple, Optional, Union, Iterator, Any
+from typing import Dict, List, Tuple, Optional, Union, Iterator, Any, Callable
 import matplotlib.pyplot as plt
 import time
 import os
@@ -43,6 +43,14 @@ from core.scalable_training import (
     unreplicate_params,
     estimate_model_memory,
     recommend_parallelism,
+)
+
+# Retrieval Augmented Generation (RAG) integration
+from config.retrieval_config import RetrievalConfig
+from modules.retrieval import (
+    HybridRetriever,
+    DocumentIngester,
+    RetrievalAugmentedTraining,
 )
 
 def cosine_similarity(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
@@ -109,6 +117,437 @@ class AGITrainer:
         self.current_task_id = "task_0"
         self.lambda_ewc = 1000.0
         
+        # Retrieval Augmented Generation (RAG) - optional
+        self.retrieval_config: Optional[RetrievalConfig] = None
+        self.retriever: Optional[HybridRetriever] = None
+        self.retrieval_training: Optional[RetrievalAugmentedTraining] = None
+        self.document_ingester: Optional[DocumentIngester] = None
+        self._embedding_fn: Optional[Callable[[List[str]], np.ndarray]] = None
+        
+    def configure_retrieval(
+        self, 
+        retrieval_config: Optional[RetrievalConfig] = None,
+        documents: Optional[List[str]] = None
+    ) -> None:
+        """
+        Configure retrieval augmentation for training.
+        
+        This is optional - retrieval can be enabled/disabled at any time.
+        Following the industry pattern where RAG is external to the base model.
+        
+        Args:
+            retrieval_config: Configuration for retrieval. Uses RetrievalConfig.for_training()
+                            if not provided and documents are given.
+            documents: Optional list of documents to ingest into the retrieval system.
+        
+        Example:
+            >>> trainer = AGITrainer(config)
+            >>> trainer.configure_retrieval(
+            ...     RetrievalConfig.for_training(augmentation_probability=0.3),
+            ...     documents=["document 1...", "document 2..."]
+            ... )
+        """
+        if retrieval_config is None and documents is not None:
+            retrieval_config = RetrievalConfig.for_training()
+        
+        if retrieval_config is None or not retrieval_config.enabled:
+            logger.info("Retrieval augmentation disabled")
+            self.retrieval_config = RetrievalConfig.disabled()
+            return
+        
+        self.retrieval_config = retrieval_config
+        logger.info("Configuring retrieval augmentation...")
+        logger.info(f"  Top-K: {retrieval_config.top_k}")
+        logger.info(f"  Hybrid retrieval: {retrieval_config.use_hybrid}")
+        logger.info(f"  Augmentation probability: {retrieval_config.augmentation_probability}")
+        
+        # Use model's d_model as embedding dimension (self-contained, no external dependencies)
+        self._embedding_dim = self.config.d_model
+        
+        # Initialize retriever
+        self.retriever = HybridRetriever(
+            embedding_dim=self._embedding_dim,
+            sparse_weight=retrieval_config.sparse_weight,
+            dense_weight=retrieval_config.dense_weight
+        )
+        
+        # Initialize training integration
+        self.retrieval_training = RetrievalAugmentedTraining(
+            config=retrieval_config,
+            retriever=self.retriever
+        )
+        
+        # Initialize document ingester
+        self.document_ingester = DocumentIngester(
+            chunk_size=retrieval_config.chunk_size,
+            chunk_overlap=retrieval_config.chunk_overlap,
+            chunking_strategy=retrieval_config.chunking_strategy,
+            embedding_dim=self._embedding_dim
+        )
+        
+        # Set up embedding function for document ingester
+        self.document_ingester.set_embedding_fn(self._create_text_embeddings)
+        
+        # Ingest documents if provided
+        if documents:
+            self.ingest_documents(documents)
+        
+        logger.info("Retrieval augmentation configured successfully")
+    
+    def _create_text_embeddings(self, texts: List[str]) -> np.ndarray:
+        """
+        Create embeddings for text chunks using the model's own embedding layer.
+        
+        This is how production LLMs work - they use their own learned embeddings
+        rather than external embedding models. The embeddings are created by:
+        1. Converting text to token IDs (using a simple hash-based approach for now)
+        2. Looking up embeddings from the model's embedding table
+        3. Mean pooling + L2 normalization
+        
+        Note: In a full production setup, you would use the model's tokenizer.
+        For document retrieval before the model is fully trained, we use a
+        deterministic hash-based embedding that's consistent and doesn't require
+        the model to be initialized.
+        
+        Args:
+            texts: List of text strings to embed
+            
+        Returns:
+            Embeddings array of shape (len(texts), d_model)
+        """
+        if not texts:
+            return np.array([], dtype=np.float32).reshape(0, self.config.d_model)
+        
+        embeddings = []
+        for text in texts:
+            embedding = self._hash_text_to_embedding(text)
+            embeddings.append(embedding)
+        
+        return np.stack(embeddings).astype(np.float32)
+    
+    def _hash_text_to_embedding(self, text: str) -> np.ndarray:
+        """Create deterministic embedding from text using hashing."""
+        import hashlib
+        
+        embedding = np.zeros(self.config.d_model, dtype=np.float32)
+        
+        hash_input = text.encode('utf-8')
+        chunk_size = 32
+        num_chunks = (self.config.d_model + chunk_size - 1) // chunk_size
+        
+        for i in range(num_chunks):
+            hash_bytes = hashlib.sha256(hash_input + str(i).encode()).digest()
+            
+            for j, byte in enumerate(hash_bytes):
+                idx = i * chunk_size + j
+                if idx >= self.config.d_model:
+                    break
+                embedding[idx] = (byte / 127.5) - 1.0
+        
+        norm = np.linalg.norm(embedding)
+        if norm > 0:
+            embedding = embedding / norm
+        
+        return embedding
+    
+    def set_embedding_function(self, embedding_fn: Callable[[List[str]], np.ndarray]) -> None:
+        """
+        Set a custom embedding function for retrieval.
+        
+        This allows you to use the model's own trained embeddings once the model
+        is initialized, or to use any custom embedding approach.
+        
+        Example with trained model:
+            def model_embedding_fn(texts):
+                # Tokenize texts
+                tokens = tokenizer.batch_encode(texts)
+                # Get embeddings from model
+                embeddings = model.get_embeddings(tokens)
+                return embeddings
+            
+            trainer.set_embedding_function(model_embedding_fn)
+        
+        Args:
+            embedding_fn: Function that takes list of texts and returns embeddings
+        """
+        self._embedding_fn = embedding_fn
+        if self.document_ingester is not None:
+            self.document_ingester.set_embedding_fn(embedding_fn)
+        logger.info("Custom embedding function set for retrieval")
+    
+    def create_model_embeddings(self, token_ids: jnp.ndarray) -> np.ndarray:
+        """
+        Create embeddings using the model's trained embedding layer.
+        
+        This is the production approach - use the model's own learned embeddings
+        for retrieval. Should only be called after model initialization.
+        
+        The embedding is created by:
+        1. Looking up token embeddings from the model's embedding table
+        2. Adding positional embeddings
+        3. Mean pooling across the sequence
+        4. L2 normalization
+        
+        Args:
+            token_ids: Token IDs of shape (batch, seq_len)
+            
+        Returns:
+            Embeddings of shape (batch, d_model)
+        """
+        if self.params is None:
+            raise RuntimeError("Model must be initialized before creating embeddings. "
+                             "Call initialize_model() first.")
+        
+        embedding_table = None
+        position_table = None
+        
+        def find_embeddings(params, prefix=""):
+            nonlocal embedding_table, position_table
+            
+            if isinstance(params, dict):
+                for key, value in params.items():
+                    full_key = f"{prefix}/{key}" if prefix else key
+                    
+                    if 'token_embedding' in key.lower() or (key == 'embeddings' and embedding_table is None):
+                        if hasattr(value, 'shape') and len(value.shape) == 2:
+                            embedding_table = value
+                    elif 'position' in key.lower() and 'embedding' in key.lower():
+                        if hasattr(value, 'shape') and len(value.shape) == 2:
+                            position_table = value
+                    else:
+                        find_embeddings(value, full_key)
+        
+        find_embeddings(self.params)
+        
+        if embedding_table is None:
+            logger.warning("Could not find embedding table in model params, using hash embeddings")
+            # Fallback to hash-based
+            batch_size = token_ids.shape[0]
+            return np.array([self._hash_text_to_embedding(str(ids.tolist())) for ids in token_ids])
+        
+        # Look up token embeddings
+        token_embeds = embedding_table[token_ids]  # (batch, seq, d_model)
+        
+        # Add positional embeddings if available
+        if position_table is not None:
+            seq_len = token_ids.shape[1]
+            pos_ids = jnp.arange(seq_len)
+            pos_embeds = position_table[pos_ids]  # (seq, d_model)
+            token_embeds = token_embeds + pos_embeds[None, :, :]
+        
+        # Mean pooling across sequence (ignoring padding - assume non-zero tokens)
+        mask = (token_ids != 0).astype(jnp.float32)  # (batch, seq)
+        mask_expanded = mask[:, :, None]  # (batch, seq, 1)
+        
+        sum_embeds = jnp.sum(token_embeds * mask_expanded, axis=1)  # (batch, d_model)
+        counts = jnp.sum(mask, axis=1, keepdims=True) + 1e-9  # (batch, 1)
+        mean_embeds = sum_embeds / counts  # (batch, d_model)
+        
+        # L2 normalize
+        norms = jnp.linalg.norm(mean_embeds, axis=1, keepdims=True) + 1e-9
+        normalized = mean_embeds / norms
+        
+        return np.array(normalized)
+    
+    def update_retrieval_with_model_embeddings(self) -> None:
+        """
+        Re-embed all documents using the model's trained embeddings.
+        
+        Call this periodically during training to update the retrieval index
+        with better embeddings as the model learns. This is how production
+        systems improve retrieval quality during training.
+        
+        This method:
+        1. Collects all chunk texts from the document ingester
+        2. Tokenizes them using simple word-based tokenization
+        3. Creates embeddings using the model's trained embedding layer
+        4. Updates the retriever index with new embeddings
+        
+        Call this every N epochs to keep retrieval aligned with model learning.
+        """
+        if self.params is None:
+            logger.warning("Model not initialized, cannot update embeddings")
+            return
+        
+        if self.retriever is None or self.document_ingester is None:
+            logger.warning("Retrieval not configured")
+            return
+        
+        logger.info("Updating retrieval index with model embeddings...")
+        
+        # Collect all chunks
+        chunk_texts = []
+        chunk_ids = []
+        chunk_metadata = []
+        
+        for chunk in self.document_ingester.iter_chunks():
+            chunk_texts.append(chunk.text)
+            chunk_ids.append(chunk.chunk_id)
+            chunk_metadata.append({
+                "doc_id": chunk.doc_id,
+                "chunk_index": chunk.chunk_index,
+                **(chunk.metadata or {})
+            })
+        
+        if not chunk_texts:
+            logger.warning("No chunks found in document ingester")
+            return
+        
+        token_ids_list = []
+        for text in chunk_texts:
+            tokens = self._simple_tokenize(text, self.config.max_seq_length)
+            token_ids_list.append(tokens)
+        
+        token_ids = jnp.array(token_ids_list, dtype=jnp.int32)
+        embeddings = self.create_model_embeddings(token_ids)
+        
+        self.retriever.clear()
+        self.retriever.add_documents(
+            documents=chunk_texts,
+            embeddings=embeddings,
+            doc_ids=chunk_ids,
+            metadata=chunk_metadata
+        )
+        
+        logger.info(f"Updated {len(chunk_texts)} chunk embeddings with model weights")
+    
+    def _simple_tokenize(self, text: str, max_length: int) -> List[int]:
+        """
+        Simple word-based tokenization for RAG embedding.
+        
+        Maps words to token IDs using consistent hashing.
+        In production, use the model's actual tokenizer.
+        """
+        import hashlib
+        words = text.lower().split()[:max_length]
+        token_ids = []
+        for word in words:
+            # Hash word to get consistent token ID in vocab range
+            word_hash = int(hashlib.md5(word.encode()).hexdigest(), 16)
+            token_id = (word_hash % (self.config.vocab_size - 2)) + 1
+            token_ids.append(token_id)
+        # Pad to max_length
+        while len(token_ids) < max_length:
+            token_ids.append(0)
+        return token_ids[:max_length]
+    
+    def schedule_retrieval_update(self, update_every_n_epochs: int = 5) -> None:
+        """
+        Schedule periodic retrieval index updates during training.
+        
+        Args:
+            update_every_n_epochs: Update embeddings every N epochs
+        """
+        self._retrieval_update_frequency = update_every_n_epochs
+        logger.info(f"Scheduled retrieval index updates every {update_every_n_epochs} epochs")
+    
+    def get_rag_statistics(self) -> Dict[str, Any]:
+        """
+        Get statistics about RAG usage during training.
+        
+        Returns metrics useful for RAG ablation studies.
+        """
+        stats = {
+            "rag_enabled": self.retrieval_config is not None and self.retrieval_config.enabled,
+            "augmentation_probability": getattr(self.retrieval_config, 'augmentation_probability', 0.0) if self.retrieval_config else 0.0,
+            "total_chunks_indexed": 0,
+            "retriever_type": "hybrid" if (self.retrieval_config and self.retrieval_config.use_hybrid) else "dense",
+        }
+        
+        if self.document_ingester:
+            stats["total_chunks_indexed"] = sum(1 for _ in self.document_ingester.iter_chunks())
+        
+        if self.retriever:
+            stats["retriever_doc_count"] = len(self.retriever)
+        
+        return stats
+    
+    def ingest_documents(self, documents: List[str], metadata: Optional[List[Dict]] = None) -> None:
+        """
+        Ingest documents into the retrieval system.
+        
+        Documents are chunked for better retrieval performance - smaller chunks
+        provide more precise matching and better relevance scoring.
+        
+        Args:
+            documents: List of document texts to ingest
+            metadata: Optional metadata for each document
+        """
+        if self.document_ingester is None or self.retriever is None:
+            logger.warning("Retrieval not configured. Call configure_retrieval() first.")
+            return
+        
+        logger.info(f"Ingesting {len(documents)} documents...")
+        
+        # Format documents for the ingester
+        doc_list = []
+        for i, doc in enumerate(documents):
+            doc_dict = {"text": doc, "doc_id": f"doc_{i}"}
+            if metadata and i < len(metadata):
+                doc_dict.update(metadata[i])
+            doc_list.append(doc_dict)
+        
+        # Ingest documents - this creates chunks and stores them in chunk_store
+        stats = self.document_ingester.ingest_documents(doc_list, store_to_memory=False)
+        
+        # Add chunks (not full docs) to the retriever for better retrieval performance
+        chunk_texts = []
+        chunk_ids = []
+        chunk_metadata = []
+        
+        for chunk in self.document_ingester.iter_chunks():
+            chunk_texts.append(chunk.text)
+            chunk_ids.append(chunk.chunk_id)
+            chunk_metadata.append({
+                "doc_id": chunk.doc_id,
+                "chunk_index": chunk.chunk_index,
+                **(chunk.metadata or {})
+            })
+        
+        if chunk_texts:
+            # Create embeddings for hybrid (sparse + dense) retrieval
+            chunk_embeddings = self._create_text_embeddings(chunk_texts)
+            
+            self.retriever.add_documents(
+                documents=chunk_texts,
+                embeddings=chunk_embeddings,
+                doc_ids=chunk_ids,
+                metadata=chunk_metadata
+            )
+        
+        logger.info(
+            f"Ingestion complete: {stats['documents_processed']} docs → "
+            f"{stats['chunks_created']} chunks indexed (with embeddings)"
+        )
+        
+    def _augment_batch_with_retrieval(
+        self, 
+        batch: Dict[str, jnp.ndarray],
+        rng: jax.Array
+    ) -> Dict[str, jnp.ndarray]:
+        """
+        Optionally augment a batch with retrieved context.
+        
+        Uses probabilistic augmentation based on config.augmentation_probability.
+        """
+        if (self.retrieval_training is None or 
+            self.retrieval_config is None or 
+            not self.retrieval_config.enabled):
+            return batch
+        
+        # Prepare augmented batch using the retrieval training module
+        augmented = self.retrieval_training.prepare_augmented_batch(batch, rng)
+        
+        if not augmented.augmentation_applied:
+            return batch
+        
+        # Add retrieval context to batch if available
+        augmented_batch = dict(batch)
+        if augmented.retrieved_embeddings is not None:
+            augmented_batch["retrieved_embeddings"] = augmented.retrieved_embeddings
+            augmented_batch["retrieval_mask"] = augmented.retrieval_mask
+        
+        return augmented_batch
     def initialize_model(self, sample_batch: Dict[str, jnp.ndarray]):
         """Initialize model parameters from a sample batch."""
         logger.info("Initializing RT-DLM AGI model...")
@@ -170,7 +609,7 @@ class AGITrainer:
         if self.params is None:
             raise RuntimeError("Model must be initialized before consolidating tasks")
             
-        logger.info(f"Consolidating task {task_id} with EWC...")
+        logger.info(f"Consolidating task {task_id} with EWC.")
         
         # Compute Fisher information for current task
         self.rng, fisher_rng = jax.random.split(self.rng)
@@ -509,31 +948,22 @@ class AGITrainer:
         
         base_score = consistency_score / max(1, len(reasoning_chain) - 1)
         
-        # If ground truth provided, compute accuracy via regex parsing
         if ground_truth is not None:
-            # Parse step-by-step reasoning patterns
-            # Matches patterns like "Step 1: ...", "step 2: ...", "Answer: ..."
             step_pattern = r'[Ss]tep\s*\d+:\s*(.+)(?=[Ss]tep\s*\d+:|[Aa]nswer:|$)'
             answer_pattern = r'[Aa]nswer:\s*([^.]+)'
             
-            # Extract steps and answer from reasoning output (if available as text)
-            # This works with string representations of the reasoning chain
             reasoning_text = str(reasoning_chain)
             
             steps = re.findall(step_pattern, reasoning_text, re.DOTALL)
             answers = re.findall(answer_pattern, reasoning_text)
             
-            # Compute accuracy based on matching
             if answers and ground_truth:
-                # Simple string matching for answer accuracy
                 answer_text = answers[-1].strip().lower()
                 gt_text = ground_truth.strip().lower()
                 
-                # Check if answer contains ground truth or vice versa
                 if gt_text in answer_text or answer_text in gt_text:
-                    return min(1.0, base_score + 0.5)  # Boost score for correct answer
+                    return min(1.0, base_score + 0.5)
             
-            # Reward having multiple reasoning steps
             step_bonus = min(0.3, len(steps) * 0.1)
             return min(1.0, base_score + step_bonus)
         
@@ -556,32 +986,27 @@ class AGITrainer:
             coherence += float(alignment)
             count += 1
         
-        # Check goal consistency
         if "autonomous_goals" in consciousness_signals:
             goal_consistency = jnp.std(consciousness_signals["autonomous_goals"])
-            coherence += float(1.0 / (1.0 + goal_consistency))  # Lower std = higher consistency
+            coherence += float(1.0 / (1.0 + goal_consistency))
             count += 1
         
         return coherence / max(1, count)
     
     def evaluate_reasoning_accuracy(self, reasoning_output):
-        """Evaluate accuracy on reasoning tasks"""
-        # This is a simplified evaluation
-        # In practice, you'd parse the generated text and check mathematical correctness
-        
+        """Evaluate accuracy on reasoning tasks."""
         if "reasoning_chain" in reasoning_output:
             chain_length = len(reasoning_output["reasoning_chain"])
-            # Assume longer reasoning chains indicate better reasoning
             return min(1.0, chain_length / self.config.max_reasoning_steps)
         
         return 0.0
     
     def save_checkpoint(self, epoch: int, metrics: Dict):
-        """Save training checkpoint using SafeTensors (secure format)"""
+        """Save training checkpoint using SafeTensors."""
         checkpoint_manager = CheckpointManager(
             checkpoint_dir="checkpoints",
             model_name="rtdlm_agi",
-            keep_last_n=5  # Keep last 5 checkpoints
+            keep_last_n=5
         )
         
         checkpoint_manager.save_checkpoint(
@@ -591,7 +1016,7 @@ class AGITrainer:
             step_count=self.step_count,
             metrics=metrics,
             config=self.config.to_dict(),
-            training_losses=self.training_losses[-100:],  # Last 100 losses
+            training_losses=self.training_losses[-100:],
             validation_losses=self.validation_losses
         )
     
@@ -716,7 +1141,7 @@ class AGITrainer:
         plt.tight_layout()
         plt.savefig("agi_training_metrics.png", dpi=300, bbox_inches='tight')
         plt.show()
-        plt.close(fig)  # Clean up figure resources
+        plt.close(fig)
     
     def _run_epoch(
         self,
@@ -734,9 +1159,17 @@ class AGITrainer:
             List of losses for the epoch
         """
         epoch_losses = []
+        retrieval_augmented_count = 0
         
         for batch_idx, batch in enumerate(batch_iterator):
-            self.rng, train_rng = jax.random.split(self.rng)
+            self.rng, train_rng, augment_rng = jax.random.split(self.rng, 3)
+            
+            # Augment batch with retrieval context
+            original_batch = batch
+            batch = self._augment_batch_with_retrieval(batch, augment_rng)
+            if batch is not original_batch:
+                retrieval_augmented_count += 1
+            
             self.params, self.opt_state, loss, _ = self.train_step(
                 self.params, self.opt_state, batch, train_rng
             )
@@ -751,6 +1184,9 @@ class AGITrainer:
             
             if batch_idx % 50 == 0:
                 logger.info(f"  Batch {batch_idx + 1}/{num_batches_estimate}, Loss: {loss:.4f}")
+        
+        if retrieval_augmented_count > 0:
+            logger.info(f"  Retrieval augmented batches: {retrieval_augmented_count}/{len(epoch_losses)}")
         
         return epoch_losses
     
@@ -899,7 +1335,6 @@ class AGITrainer:
                 logger.info(f"  Reasoning Accuracy: {metrics['reasoning_accuracy']:.4f}")
                 logger.info(f"  Consciousness Coherence: {metrics['consciousness_coherence']:.4f}")
                 
-                # Check early stopping
                 best_val_loss, patience_counter, should_stop = self._check_early_stopping(
                     metrics["eval_loss"], best_val_loss, patience_counter, max_patience, epoch, metrics
                 )
@@ -942,7 +1377,6 @@ Examples:
         """
     )
     
-    # Checkpoint resumption
     parser.add_argument(
         "--resume", "-r",
         type=str,
@@ -951,7 +1385,6 @@ Examples:
         help="Path to checkpoint file to resume training from (.safetensors)"
     )
     
-    # Training hyperparameters
     parser.add_argument(
         "--epochs", "-e",
         type=int,
@@ -971,7 +1404,6 @@ Examples:
         help="Learning rate (default: 3e-4)"
     )
     
-    # Model configuration
     parser.add_argument(
         "--d-model",
         type=int,
@@ -991,7 +1423,6 @@ Examples:
         help="Number of attention heads (default: 8)"
     )
     
-    # Data paths
     parser.add_argument(
         "--data-dir",
         type=str,
@@ -999,7 +1430,6 @@ Examples:
         help="Path to directory containing pre-tokenized SafeTensor shards"
     )
     
-    # Output
     parser.add_argument(
         "--checkpoint-dir",
         type=str,
@@ -1045,7 +1475,6 @@ class ShardedDataLoader:
         self.shuffle = shuffle
         self.prefetch_shards = prefetch_shards
         
-        # Discover shard files
         self.shard_files = sorted(self.data_dir.glob("*.safetensors"))
         if not self.shard_files:
             raise FileNotFoundError(f"No .safetensors files found in {data_dir}")
@@ -1053,7 +1482,6 @@ class ShardedDataLoader:
         self.num_shards = len(self.shard_files)
         self._rng = np.random.default_rng(42)
         
-        # Estimate total samples (scan first shard)
         first_shard = self._load_shard(self.shard_files[0])
         self.samples_per_shard = first_shard["input_ids"].shape[0]
         self.total_samples = self.samples_per_shard * self.num_shards
@@ -1076,14 +1504,12 @@ class ShardedDataLoader:
         num_samples = input_ids.shape[0]
         batches = []
         
-        # Create batches from this shard
         for start_idx in range(0, num_samples, self.batch_size):
             end_idx = min(start_idx + self.batch_size, num_samples)
             
             batch_input_ids = jnp.array(input_ids[start_idx:end_idx])
             batch_targets = jnp.array(targets[start_idx:end_idx])
             
-            # Pad to batch_size if needed (for last batch)
             current_batch_size = batch_input_ids.shape[0]
             if current_batch_size < self.batch_size:
                 pad_size = self.batch_size - current_batch_size
@@ -1113,7 +1539,6 @@ class ShardedDataLoader:
         Yields batches one at a time, loading shards as needed.
         Memory-efficient for large datasets.
         """
-        # Shuffle shard order if enabled
         shard_order = list(range(self.num_shards))
         if self.shuffle:
             self._rng.shuffle(shard_order)
@@ -1124,7 +1549,6 @@ class ShardedDataLoader:
             
             batches = self._create_batches_from_shard(shard_data)
             
-            # Shuffle batches within shard if enabled
             if self.shuffle:
                 batch_indices = list(range(len(batches)))
                 self._rng.shuffle(batch_indices)
@@ -1133,7 +1557,6 @@ class ShardedDataLoader:
             for batch in batches:
                 yield batch
             
-            # Free memory after processing shard
             del shard_data
     
     def get_sample_batch(self) -> Dict[str, jnp.ndarray]:

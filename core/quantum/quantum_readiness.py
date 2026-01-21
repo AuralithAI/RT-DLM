@@ -1,6 +1,11 @@
 """
-Quantum Readiness Components for RT-DLM AGI
-Quantum-enhanced neural networks and hybrid classical-quantum computation.
+Quantum Readiness Components for RT-DLM AGI.
+
+IMPORTANT: CLASSICAL SIMULATION ONLY - Not actual quantum hardware.
+Provides quantum-inspired optimization and variational circuits using
+JAX/NumPy mathematical simulation of quantum gates.
+
+To disable: Set config.quantum_layers=0 in AGIConfig.
 """
 
 import haiku as hk
@@ -1139,7 +1144,8 @@ class AutonomousScientificDiscovery(hk.Module):
         
         # Cross-domain knowledge synthesizer
         self.knowledge_synthesizer = hk.MultiHeadAttention(
-            num_heads=12, key_size=theory_dimensions//12, name="knowledge_synthesizer"
+            num_heads=12, key_size=theory_dimensions//12, name="knowledge_synthesizer",
+            w_init=hk.initializers.VarianceScaling(1.0)
         )
         
     def generate_theories(self, existing_knowledge, observation_data):
@@ -1196,7 +1202,8 @@ class AutonomousMultiAgentSystem(hk.Module):
         
         # Message routing system
         self.message_router = hk.MultiHeadAttention(
-            num_heads=8, key_size=coordination_dim//8, name="message_router"
+            num_heads=8, key_size=coordination_dim//8, name="message_router",
+            w_init=hk.initializers.VarianceScaling(1.0)
         )
         
         # Consensus mechanism

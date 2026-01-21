@@ -57,17 +57,18 @@ class ReasoningStep(hk.Module):
         Single reasoning step
         
         Args:
-            query: Current question/problem [batch, seq_len, d_model]
+            query: Current question/problem [batch, seq_len, d_model] or [batch, d_model]
             context: Available context/knowledge [batch, context_len, d_model]
-            previous_thoughts: Previous reasoning steps [batch, num_thoughts, d_model]
+            previous_thoughts: Previous reasoning steps [batch, num_thoughts, d_model] or [batch, d_model]
         """
+        if query.ndim == 2:
+            query = query[:, None, :]
+        
         # Encode the question
         encoded_query = self.question_encoder(query)
         
         # Working memory: attend to relevant context
-        working_mem, attention_weights = self.working_memory(
-            encoded_query, context, context, return_attention_weights=True
-        )
+        working_mem = self.working_memory(encoded_query, context, context)
         
         # Combine query with working memory
         combined_input = jnp.concatenate([encoded_query, working_mem], axis=-1)
@@ -77,6 +78,8 @@ class ReasoningStep(hk.Module):
         
         # Integrate with previous thoughts if available
         if previous_thoughts is not None:
+            if previous_thoughts.ndim == 2:
+                previous_thoughts = previous_thoughts[:, None, :]
             thought_context = jnp.concatenate([previous_thoughts, hypothesis], axis=1)
             integrated_thoughts = self.working_memory(hypothesis, thought_context, thought_context)
             hypothesis = hypothesis + integrated_thoughts
@@ -91,7 +94,6 @@ class ReasoningStep(hk.Module):
             "hypothesis": hypothesis,
             "confidence": confidence,
             "thought_representation": thought_representation,
-            "attention_weights": attention_weights,
             "working_memory": working_mem
         }
 
@@ -150,12 +152,16 @@ class ChainOfThoughtReasoning(hk.Module):
         Perform chain-of-thought reasoning
         
         Args:
-            query: Question to reason about [batch, seq_len, d_model]
+            query: Question to reason about [batch, seq_len, d_model] or [batch, d_model]
             context: Available knowledge [batch, context_len, d_model]
             max_steps: Override max reasoning steps
         """
         if max_steps is None:
             max_steps = self.max_reasoning_steps
+        
+        # Ensure query is 3D for consistent processing
+        if query.ndim == 2:
+            query = query[:, None, :]
             
         thoughts = []
         confidences = []
@@ -172,8 +178,6 @@ class ChainOfThoughtReasoning(hk.Module):
             
             thoughts.append(step_result["thought_representation"])
             confidences.append(step_result["confidence"])
-            attention_maps.append(step_result["attention_weights"])
-            
             # Update for next step
             current_query = step_result["hypothesis"]
             if previous_thoughts is None:
@@ -183,11 +187,13 @@ class ChainOfThoughtReasoning(hk.Module):
                     previous_thoughts, step_result["thought_representation"]
                 ], axis=1)
             
-            # Decide whether to continue
-            _ = self.step_selector(step_result["hypothesis"].mean(axis=1, keepdims=True))
+            # Early stopping based on confidence and stop probability
+            stop_input = step_result["hypothesis"].mean(axis=1, keepdims=True)
+            stop_probability = self.step_selector(stop_input).mean()
             
-            # For simplicity, we'll continue until max_steps
-            # In practice, you could implement early stopping based on stop_probability
+            # Stop if stop probability is high (>0.8) and we've done at least 2 steps
+            if step >= 2 and stop_probability > 0.8:
+                break
         
         # Synthesize final answer
         all_thoughts = jnp.stack(thoughts, axis=1)  # [batch, num_steps, seq_len, d_model]
@@ -401,10 +407,19 @@ class SelfImprovementModule(hk.Module):
         best_experiences = self.experience_memory[top_indices].mean(axis=0)
         
         # Encode current task
-        task_encoding = self.experience_encoder(target_task.mean(axis=1))
+        if target_task.ndim == 2:
+            task_encoding = self.experience_encoder(target_task)
+        else:
+            task_encoding = self.experience_encoder(target_task.mean(axis=1))
+        
+        # Broadcast best_experiences to match batch size
+        batch_size = task_encoding.shape[0]
+        best_experiences_batched = jnp.broadcast_to(
+            best_experiences, (batch_size, best_experiences.shape[-1])
+        )
         
         # Generate improvement strategy
-        combined_input = jnp.concatenate([best_experiences, task_encoding], axis=-1)
+        combined_input = jnp.concatenate([best_experiences_batched, task_encoding], axis=-1)
         strategy = self.strategy_generator(combined_input)
         
         # Predict expected performance improvement

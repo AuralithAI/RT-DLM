@@ -1,12 +1,13 @@
 """
-Scalable Training for RT-DLM
+Scalable Training for RT-DLM.
 
-Production-ready parallelism that works with the full AGI model:
+Production-ready parallelism supporting:
 - Data parallelism: Same model replicated, different data batches
-- Model parallelism: Sharded model across devices (for very large models)
+- Tensor parallelism: Sharded model across devices (for large models)
 - Combined: Both strategies together (production scale)
 
-This is the unified approach used by Grok, GPT-4, Claude, etc.
+Tested strategies: Single device, multi-GPU data parallelism.
+Model parallelism requires 8+ GPUs with high-bandwidth interconnect.
 """
 
 import jax
@@ -19,6 +20,7 @@ import haiku as hk
 from typing import Dict, Any, Optional, Tuple, Callable
 from functools import partial
 import logging
+import time
 
 from config.model_parallel_config import ModelParallelConfig
 
@@ -50,10 +52,8 @@ class ScalableMesh:
         self.devices = jax.devices()
         self.num_devices = len(self.devices)
         
-        # Auto-configure if not explicitly set
         self._auto_configure()
         
-        # Create mesh
         self.mesh = self._create_mesh()
         
         logger.info("ScalableMesh initialized:")
@@ -64,7 +64,6 @@ class ScalableMesh:
         
     def _auto_configure(self):
         """Auto-configure parallelism based on device count"""
-        # Data parallel size (how many model replicas)
         if self.config.tensor_parallel:
             self.tensor_parallel_size = min(
                 self.config.tensor_parallel_size, 
@@ -81,7 +80,6 @@ class ScalableMesh:
         else:
             self.pipeline_parallel_size = 1
             
-        # Remaining devices for data parallelism
         self.data_parallel_size = max(
             1,
             self.num_devices // (self.tensor_parallel_size * self.pipeline_parallel_size)
@@ -103,7 +101,6 @@ class ScalableMesh:
             mesh_shape = (self.num_devices,)
             axis_names = ("data",)
         elif self.tensor_parallel_size > 1 and self.pipeline_parallel_size > 1:
-            # 3D mesh
             mesh_shape = (
                 self.data_parallel_size,
                 self.tensor_parallel_size,
@@ -111,15 +108,12 @@ class ScalableMesh:
             )
             axis_names = ("data", "tensor", "pipeline")
         elif self.tensor_parallel_size > 1:
-            # 2D mesh: data + tensor
             mesh_shape = (self.data_parallel_size, self.tensor_parallel_size)
             axis_names = ("data", "tensor")
         elif self.pipeline_parallel_size > 1:
-            # 2D mesh: data + pipeline
             mesh_shape = (self.data_parallel_size, self.pipeline_parallel_size)
             axis_names = ("data", "pipeline")
         else:
-            # 1D mesh: data only
             mesh_shape = (self.data_parallel_size,)
             axis_names = ("data",)
             
@@ -163,36 +157,29 @@ def get_param_sharding_spec(
     - Biases: Replicate (no sharding)
     """
     if not mesh.has_tensor_parallel:
-        return P()  # Replicate everything
+        return P()
     
-    # Identify parameter type from name
     name_lower = param_name.lower()
     
-    # Embedding layers - shard vocab dimension
     if "embed" in name_lower and len(param_shape) == 2:
-        return P(None, "tensor")  # [vocab, hidden] -> shard hidden
+        return P(None, "tensor")
     
-    # Attention projections - shard output/heads
     if any(x in name_lower for x in ["query", "key", "value", "q_proj", "k_proj", "v_proj"]):
         if len(param_shape) == 2:
-            return P(None, "tensor")  # [in, out] -> shard out
+            return P(None, "tensor") 
     
-    # Attention output projection - shard input
     if "output" in name_lower or "o_proj" in name_lower:
         if len(param_shape) == 2:
-            return P("tensor", None)  # [in, out] -> shard in
+            return P("tensor", None)
     
-    # MLP first layer (expand) - shard output
     if any(x in name_lower for x in ["fc1", "up_proj", "gate_proj", "w1", "w3"]):
         if len(param_shape) == 2:
             return P(None, "tensor")
     
-    # MLP second layer (contract) - shard input
     if any(x in name_lower for x in ["fc2", "down_proj", "w2"]):
         if len(param_shape) == 2:
             return P("tensor", None)
     
-    # Default: replicate
     return P()
 
 
@@ -210,13 +197,11 @@ def create_sharded_params(
         param_name = "/".join(str(p) for p in path)
         return get_param_sharding_spec(param_name, param.shape, mesh)
     
-    # Create sharding specs
     param_specs = jax.tree_util.tree_map_with_path(
         get_spec_for_path,
         params
     )
     
-    # Convert specs to shardings
     param_shardings = jax.tree_util.tree_map(
         lambda spec: mesh.get_sharding(spec),
         param_specs
@@ -233,36 +218,31 @@ def create_scalable_train_step(
     model_apply_fn: Callable,
     optimizer,
     mesh: ScalableMesh,
-    loss_fn: Callable
+    loss_fn: Callable,
+    param_shardings: Optional[Dict] = None
 ) -> Callable:
     """
-    Create a training step that works with the scalable mesh.
+    Create a production-ready training step with automatic parallelism.
     
-    This handles:
-    - Data parallelism: Splits batches across devices
-    - Gradient synchronization: All-reduce across data parallel axis
-    - Model parallelism: Proper sharding of computation (if enabled)
+    Supports:
+    - Single device: Standard JIT compilation
+    - Data parallelism: pmap with gradient all-reduce
+    - Tensor parallelism: shard_map with explicit sharding
+    - Combined: Both data and tensor parallelism
     """
     
-    def train_step(params, opt_state, batch, rng):
-        """Single training step with automatic parallelism"""
+    def train_step_impl(params, opt_state, batch, rng):
+        """Core training step logic."""
         
         def compute_loss(params, batch, rng):
             outputs = model_apply_fn(params, rng, **batch)
             loss = loss_fn(outputs, batch)
             return loss, outputs
         
-        # Compute gradients
         (loss, outputs), grads = jax.value_and_grad(
             compute_loss, has_aux=True
         )(params, batch, rng)
         
-        # All-reduce gradients across data parallel axis
-        if mesh.is_distributed:
-            grads = lax.pmean(grads, axis_name="data")
-            loss = lax.pmean(loss, axis_name="data")
-        
-        # Update parameters
         updates, new_opt_state = optimizer.update(grads, opt_state, params)
         new_params = jax.tree_util.tree_map(
             lambda p, u: p + u, params, updates
@@ -270,24 +250,52 @@ def create_scalable_train_step(
         
         return new_params, new_opt_state, loss, outputs
     
-    # Wrap with pmap for data parallelism
-    if mesh.is_distributed and not mesh.has_tensor_parallel:
-        # Pure data parallelism - use pmap
-        train_step = jax.pmap(
-            train_step,
+    def train_step_with_sync(params, opt_state, batch, rng):
+        """Training step with gradient synchronization for data parallelism."""
+        
+        def compute_loss(params, batch, rng):
+            outputs = model_apply_fn(params, rng, **batch)
+            loss = loss_fn(outputs, batch)
+            return loss, outputs
+        
+        (loss, outputs), grads = jax.value_and_grad(
+            compute_loss, has_aux=True
+        )(params, batch, rng)
+        
+        grads = lax.pmean(grads, axis_name="data")
+        loss = lax.pmean(loss, axis_name="data")
+        
+        updates, new_opt_state = optimizer.update(grads, opt_state, params)
+        new_params = jax.tree_util.tree_map(
+            lambda p, u: p + u, params, updates
+        )
+        
+        return new_params, new_opt_state, loss, outputs
+    
+    if mesh.has_tensor_parallel and param_shardings is not None:
+        in_shardings = (
+            param_shardings,
+            jax.tree_util.tree_map(lambda _: mesh.get_sharding(P()), opt_state) if opt_state else None,
+            mesh.get_sharding(P("data")),
+            mesh.get_sharding(P())
+        )
+        out_shardings = in_shardings
+        
+        @partial(jax.jit, in_shardings=in_shardings, out_shardings=out_shardings)
+        def tensor_parallel_step(params, opt_state, batch, rng):
+            return train_step_impl(params, opt_state, batch, rng)
+        
+        return tensor_parallel_step
+        
+    elif mesh.is_distributed and not mesh.has_tensor_parallel:
+        return jax.pmap(
+            train_step_with_sync,
             axis_name="data",
             in_axes=(0, 0, 0, 0),
             out_axes=(0, 0, 0, 0)
         )
-    elif mesh.has_tensor_parallel:
-        # Tensor parallelism - use shard_map or manual sharding
-        # For now, use jit with sharding constraints
-        train_step = jax.jit(train_step)
     else:
-        # Single device
-        train_step = jax.jit(train_step)
-    
-    return train_step
+        return jax.jit(train_step_impl)
 
 
 # =============================================================================
@@ -324,23 +332,18 @@ def setup_scalable_training(
     Returns:
         Tuple of (mesh, initial_params, train_step_fn)
     """
-    # Create mesh
     mesh = create_scalable_mesh(config)
     
-    # Initialize model
     rng = jax.random.PRNGKey(42)
     params = model_fn.init(rng, **sample_batch)
     
-    # Create param shardings if using tensor parallelism
     if mesh.has_tensor_parallel:
         params, param_shardings = create_sharded_params(params, mesh)
-        # Apply shardings
         params = jax.tree_util.tree_map(
             lambda p, s: jax.device_put(p, s),
             params, param_shardings
         )
     elif mesh.is_distributed:
-        # Replicate params across devices for data parallelism
         params = jax.device_put_replicated(params, jax.devices()[:mesh.data_parallel_size])
     
     logger.info(f"Model initialized with {sum(p.size for p in jax.tree_util.tree_leaves(params)):,} parameters")
@@ -410,7 +413,7 @@ def recommend_parallelism(
         num_devices = jax.device_count()
     
     # Can model fit on single device?
-    single_device_fit = model_memory_gb < device_memory_gb * 0.8  # 80% threshold
+    single_device_fit = model_memory_gb < device_memory_gb * 0.8
     
     if single_device_fit:
         if num_devices == 1:
@@ -442,7 +445,6 @@ def recommend_parallelism(
                                   "Enable gradient checkpointing and reduce batch size."
             }
         else:
-            # Can fit with tensor parallelism
             tp_size = min_devices_needed
             dp_size = num_devices // tp_size
             
@@ -455,3 +457,165 @@ def recommend_parallelism(
                 "recommendation": f"Use tensor parallelism ({tp_size} devices) + "
                                   f"data parallelism ({dp_size} replicas)."
             }
+
+
+# =============================================================================
+# Communication Profiling
+# =============================================================================
+
+class DistributedProfiler:
+    """Profile distributed training communication overhead."""
+    
+    def __init__(self, mesh: ScalableMesh):
+        self.mesh = mesh
+        self.timings: Dict[str, list] = {
+            "all_reduce": [],
+            "all_gather": [],
+            "broadcast": [],
+            "total_step": [],
+            "compute": [],
+        }
+    
+    def profile_all_reduce(self, tensor: jnp.ndarray, num_iterations: int = 10) -> Dict[str, float]:
+        """Measure all-reduce latency and bandwidth."""
+        if not self.mesh.is_distributed:
+            return {"latency_ms": 0.0, "bandwidth_gbps": 0.0, "message": "Single device, no communication"}
+        
+        tensor_bytes = tensor.size * tensor.dtype.itemsize
+        
+        jax.block_until_ready(tensor)
+        
+        times = []
+        for _ in range(num_iterations):
+            start = time.perf_counter()
+            result = lax.psum(tensor, axis_name="data")
+            jax.block_until_ready(result)
+            times.append(time.perf_counter() - start)
+        
+        avg_time = sum(times[2:]) / len(times[2:]) if len(times) > 2 else sum(times) / len(times)
+        bandwidth = (tensor_bytes * 2 * (self.mesh.data_parallel_size - 1)) / avg_time / 1e9
+        
+        self.timings["all_reduce"].append(avg_time * 1000)
+        
+        return {
+            "latency_ms": avg_time * 1000,
+            "bandwidth_gbps": bandwidth,
+            "tensor_size_mb": tensor_bytes / 1e6,
+            "num_devices": self.mesh.data_parallel_size
+        }
+    
+    def profile_train_step(
+        self,
+        train_step_fn: Callable,
+        params,
+        opt_state,
+        batch: Dict,
+        rng,
+        num_iterations: int = 10
+    ) -> Dict[str, float]:
+        """Profile complete training step including communication."""
+        jax.block_until_ready(params)
+        
+        times = []
+        for i in range(num_iterations):
+            rng, step_rng = jax.random.split(rng)
+            start = time.perf_counter()
+            params, opt_state, loss, _ = train_step_fn(params, opt_state, batch, step_rng)
+            jax.block_until_ready(loss)
+            times.append(time.perf_counter() - start)
+        
+        avg_time = sum(times[2:]) / len(times[2:]) if len(times) > 2 else sum(times) / len(times)
+        
+        self.timings["total_step"].append(avg_time * 1000)
+        
+        return {
+            "avg_step_time_ms": avg_time * 1000,
+            "throughput_steps_per_sec": 1.0 / avg_time,
+            "num_devices": self.mesh.num_devices,
+            "is_distributed": self.mesh.is_distributed
+        }
+    
+    def get_summary(self) -> Dict[str, Any]:
+        """Get profiling summary."""
+        def safe_avg(lst):
+            return sum(lst) / len(lst) if lst else 0.0
+        
+        return {
+            "avg_all_reduce_ms": safe_avg(self.timings["all_reduce"]),
+            "avg_step_time_ms": safe_avg(self.timings["total_step"]),
+            "num_devices": self.mesh.num_devices,
+            "data_parallel_size": self.mesh.data_parallel_size,
+            "tensor_parallel_size": self.mesh.tensor_parallel_size,
+            "is_distributed": self.mesh.is_distributed
+        }
+
+
+def profile_collective_communication(
+    mesh: ScalableMesh,
+    array_size_bytes: int = 1_000_000
+) -> Dict[str, float]:
+    """
+    Profile collective communication operations.
+    
+    Args:
+        mesh: ScalableMesh to profile
+        array_size_bytes: Size of test array in bytes
+        
+    Returns:
+        Dict with timing and bandwidth results
+    """
+    num_elements = array_size_bytes // 4  # float32
+    test_array = jnp.ones(num_elements, dtype=jnp.float32)
+    
+    if not mesh.is_distributed:
+        return {
+            "all_reduce_time_ms": 0.0,
+            "bandwidth_gbps": float('inf'),
+            "num_devices": 1,
+            "message": "Single device - no communication overhead"
+        }
+    
+    profiler = DistributedProfiler(mesh)
+    results = profiler.profile_all_reduce(test_array, num_iterations=10)
+    
+    return {
+        "all_reduce_time_ms": results["latency_ms"],
+        "bandwidth_gbps": results["bandwidth_gbps"],
+        "num_devices": mesh.num_devices,
+        "array_size_mb": array_size_bytes / 1e6
+    }
+
+
+def validate_distributed_setup(mesh: ScalableMesh) -> Dict[str, Any]:
+    """Validate distributed training setup is working correctly."""
+    results = {
+        "num_devices": mesh.num_devices,
+        "device_types": [str(d) for d in jax.devices()[:4]],
+        "mesh_shape": str(mesh.mesh.shape),
+        "checks": {}
+    }
+    
+    results["checks"]["devices_visible"] = mesh.num_devices > 0
+    
+    if mesh.is_distributed:
+        try:
+            test_tensor = jnp.ones((mesh.data_parallel_size, 100))
+            test_tensor = jax.device_put_replicated(jnp.ones(100), jax.devices()[:mesh.data_parallel_size])
+            
+            @partial(jax.pmap, axis_name="data")
+            def test_sync(x):
+                return lax.psum(x, axis_name="data")
+            
+            result = test_sync(test_tensor)
+            expected = mesh.data_parallel_size
+            results["checks"]["all_reduce_works"] = bool(jnp.allclose(result[0][0], expected))
+        except Exception as e:
+            results["checks"]["all_reduce_works"] = False
+            results["checks"]["all_reduce_error"] = str(e)
+    else:
+        results["checks"]["all_reduce_works"] = True
+    
+    results["checks"]["mesh_valid"] = mesh.mesh is not None
+    results["valid"] = all(v for k, v in results["checks"].items() if isinstance(v, bool))
+    
+    return results

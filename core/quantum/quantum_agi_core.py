@@ -1,3 +1,15 @@
+"""
+Quantum-Inspired AGI Core Module.
+
+IMPORTANT: This module provides CLASSICAL SIMULATION of quantum concepts,
+NOT actual quantum hardware execution. Uses JAX/NumPy to simulate quantum
+gates mathematically. Designed for research exploration of quantum-inspired
+attention and optimization patterns.
+
+To disable: Set config.quantum_layers=0 for faster training.
+Future: Architecture supports swapping simulation for real hardware (Qiskit, Braket, Cirq).
+"""
+
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -6,7 +18,7 @@ from typing import Dict, List, Tuple, Optional
 import math
 
 class QuantumInspiredAttention(hk.Module):
-    """Quantum-inspired attention mechanism using superposition and entanglement concepts"""
+    """Quantum-inspired attention using superposition and entanglement concepts."""
     
     def __init__(self, d_model: int, num_heads: int, num_qubits: int = 8, name=None):
         super().__init__(name=name)
