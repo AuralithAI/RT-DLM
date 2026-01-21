@@ -8,7 +8,6 @@ Provides utilities for:
 """
 
 import jax
-import jax.numpy as jnp
 from typing import Dict, Any, Optional, Tuple, List
 from dataclasses import dataclass, field
 import logging
