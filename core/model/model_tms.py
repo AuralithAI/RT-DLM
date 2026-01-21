@@ -401,5 +401,12 @@ class TMSModel(hk.Module):
                 "transformer": attn_weights_transformer,
                 "memory_fusion": memory_fusion_info
             }
-            return logits, attention_info, top_k_expert_indices, aux_loss
+            # Return dict with both logits and hidden states for downstream use
+            return {
+                "logits": logits,
+                "hidden_states": x,
+                "attention_info": attention_info,
+                "top_k_expert_indices": top_k_expert_indices,
+                "aux_loss": aux_loss
+            }
         return logits

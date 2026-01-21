@@ -200,7 +200,7 @@ class RetrievalAugmentedAttention(hk.Module):
         self_attn = hk.MultiHeadAttention(
             num_heads=self.num_heads,
             key_size=self.d_model // self.num_heads,
-            w_init_scale=1.0,
+            w_init=hk.initializers.VarianceScaling(1.0),
             name="self_attention",
         )
         

@@ -1063,7 +1063,16 @@ class RTDLMAGISystem(hk.Module):
             epsilon=self.config.EPSILON
         )
         
-        core_features = tms_output if not isinstance(tms_output, tuple) else tms_output[0]
+        # Extract hidden states for feature processing
+        if isinstance(tms_output, dict):
+            core_features = tms_output["hidden_states"]
+            tms_logits = tms_output["logits"]
+        elif isinstance(tms_output, tuple):
+            core_features = tms_output[0]
+            tms_logits = None
+        else:
+            core_features = tms_output
+            tms_logits = None
         
         # Hybrid architecture integration
         hybrid_result = self.hybrid_integrator(
@@ -1223,15 +1232,32 @@ class RTDLMAGISystem(hk.Module):
         """Integrate all feature types including retrieval context.
         
         Args:
-            core_features: Core TMS model features
-            hybrid_features: Hybrid architecture features
+            core_features: Core TMS model features [batch, seq, d_model]
+            hybrid_features: Hybrid architecture features [batch, d_model] or [batch, seq, d_model]
             multimodal_features: Optional multimodal features
             reasoning_result: Reasoning engine output
             knowledge_features: Optional retrieved knowledge features (from RAG)
         """
+        # Ensure all features are 3D [batch, seq, d_model]
+        batch_size = core_features.shape[0]
+        seq_len = core_features.shape[1]
+        
+        # Helper to expand 2D to 3D
+        def ensure_3d(features, name="features"):
+            if features.ndim == 2:
+                return jnp.broadcast_to(
+                    features[:, None, :], 
+                    (batch_size, seq_len, features.shape[-1])
+                )
+            return features
+        
+        # Ensure hybrid_features is 3D
+        hybrid_features = ensure_3d(hybrid_features, "hybrid_features")
+        
         features_list = [core_features, hybrid_features]
         
         if multimodal_features is not None:
+            multimodal_features = ensure_3d(multimodal_features, "multimodal_features")
             # Ensure compatible shapes
             if multimodal_features.shape[-1] != core_features.shape[-1]:
                 projection = hk.Linear(core_features.shape[-1], name="multimodal_proj")
@@ -1240,24 +1266,26 @@ class RTDLMAGISystem(hk.Module):
         
         # Add reasoning features
         if "reasoning_features" in reasoning_result:
-            features_list.append(reasoning_result["reasoning_features"])
+            reasoning_features = reasoning_result["reasoning_features"]
+            reasoning_features = ensure_3d(reasoning_features, "reasoning_features")
+            features_list.append(reasoning_features)
         
         # Add retrieval/knowledge features (RAG integration)
         if knowledge_features is not None:
+            knowledge_features = ensure_3d(knowledge_features, "knowledge_features")
             # Project knowledge features to match d_model if needed
             if knowledge_features.shape[-1] != core_features.shape[-1]:
                 knowledge_proj = hk.Linear(core_features.shape[-1], name="knowledge_proj")
                 knowledge_features = knowledge_proj(knowledge_features)
             
             # Handle sequence length mismatch by pooling/broadcasting
-            if knowledge_features.ndim == 3 and core_features.ndim == 3:
-                if knowledge_features.shape[1] != core_features.shape[1]:
-                    # Pool knowledge over sequence dimension
-                    knowledge_pooled = jnp.mean(knowledge_features, axis=1, keepdims=True)
-                    knowledge_features = jnp.broadcast_to(
-                        knowledge_pooled, 
-                        (knowledge_features.shape[0], core_features.shape[1], knowledge_features.shape[-1])
-                    )
+            if knowledge_features.shape[1] != seq_len:
+                # Pool knowledge over sequence dimension
+                knowledge_pooled = jnp.mean(knowledge_features, axis=1, keepdims=True)
+                knowledge_features = jnp.broadcast_to(
+                    knowledge_pooled, 
+                    (batch_size, seq_len, knowledge_features.shape[-1])
+                )
             features_list.append(knowledge_features)
         
         # Concatenate all features

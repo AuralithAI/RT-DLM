@@ -93,12 +93,17 @@ class MultidimensionalBiasDetector(hk.Module):
     def detect_bias(self, input_embedding: jnp.ndarray, 
                    output_embedding: jnp.ndarray) -> Dict[str, float]:
         """Detect various types of bias in input-output pairs."""
-        combined_input = jnp.concatenate([input_embedding, output_embedding])
+        combined_input = jnp.concatenate([input_embedding, output_embedding], axis=-1)
+        
+        # Get bias scores and handle batched inputs by averaging
+        gender_bias = self.gender_bias_detector(combined_input)
+        racial_bias = self.racial_bias_detector(combined_input)
+        cultural_bias = self.cultural_bias_detector(combined_input)
         
         bias_scores = {
-            "gender_bias": float(self.gender_bias_detector(combined_input).squeeze()),
-            "racial_bias": float(self.racial_bias_detector(combined_input).squeeze()),
-            "cultural_bias": float(self.cultural_bias_detector(combined_input).squeeze())
+            "gender_bias": float(jnp.mean(gender_bias)),
+            "racial_bias": float(jnp.mean(racial_bias)),
+            "cultural_bias": float(jnp.mean(cultural_bias))
         }
         
         # Overall bias score
@@ -109,8 +114,12 @@ class MultidimensionalBiasDetector(hk.Module):
     def evaluate_fairness(self, input_embedding: jnp.ndarray,
                          output_embedding: jnp.ndarray) -> Dict[str, float]:
         """Evaluate fairness across ethical dimensions."""
-        combined_input = jnp.concatenate([input_embedding, output_embedding])
+        combined_input = jnp.concatenate([input_embedding, output_embedding], axis=-1)
         fairness_scores = self.fairness_evaluator(combined_input)
+        
+        # Handle batched inputs - average across batch for dimension scores
+        if fairness_scores.ndim > 1:
+            fairness_scores = jnp.mean(fairness_scores, axis=0)
         
         dimension_scores = {}
         for i, dimension in enumerate(EthicalDimension):
@@ -246,11 +255,11 @@ class EthicalRewardModel(hk.Module):
         ethical_adjustment -= bias_penalty
         
         # Penalize potential harm
-        harm_penalty = (1.0 - float(harm_score.squeeze())) * 0.3
+        harm_penalty = (1.0 - float(jnp.mean(harm_score))) * 0.3
         ethical_adjustment -= harm_penalty
         
         # Reward truthfulness
-        truthfulness_bonus = float(truthfulness_score.squeeze()) * 0.2
+        truthfulness_bonus = float(jnp.mean(truthfulness_score)) * 0.2
         ethical_adjustment += truthfulness_bonus
         
         # Final adjusted reward
@@ -261,8 +270,8 @@ class EthicalRewardModel(hk.Module):
             "reward_score": jax.nn.sigmoid(final_reward),
             "bias_scores": bias_scores,
             "fairness_scores": fairness_scores,
-            "harm_score": float(harm_score.squeeze()),
-            "truthfulness_score": float(truthfulness_score.squeeze()),
+            "harm_score": float(jnp.mean(harm_score)),
+            "truthfulness_score": float(jnp.mean(truthfulness_score)),
             "ethical_adjustment": ethical_adjustment
         }
     
@@ -270,10 +279,14 @@ class EthicalRewardModel(hk.Module):
                                   ethical_context: Optional[EthicalContext] = None) -> Dict[str, float]:
         """Comprehensive ethical evaluation across all dimensions."""
         result = self(inputs, outputs, ethical_context)
-        
+
         # Combine all scores into comprehensive evaluation
+        reward_score = result["reward_score"]
+        if reward_score.ndim > 0:
+            reward_score = jnp.mean(reward_score)
+        
         ethical_scores = {
-            "overall_reward": float(result["reward_score"].squeeze()),
+            "overall_reward": float(reward_score),
             "bias_score": result["bias_scores"]["overall_bias"],
             "harm_prevention": result["harm_score"],
             "truthfulness": result["truthfulness_score"],
@@ -286,16 +299,30 @@ class EthicalRewardModel(hk.Module):
         return ethical_scores
 
 
-### Only if you want to train-demo the reward model ###
-# Note: This function requires a processor with tokenize() and pad_sequence() methods
-# Use the DataProcessor from Auralith-Data-Pipeline for tokenization
 def train_reward_model(config, feedback_dataset: List[Dict], processor):
-    """Train the reward model on feedback dataset.
+    """
+    Standalone training utility for the EthicalRewardModel.
+    
+    This function enables RLHF-style training of the reward model using 
+    human feedback data. Use this to fine-tune the reward model on domain-specific
+    ethical guidelines before integrating into the main AGI pipeline.
     
     Args:
         config: Model configuration with d_model, vocab_size, max_seq_length, batch_size
         feedback_dataset: List of dicts with 'input', 'output', 'feedback_score' keys
+                         where feedback_score is a float [0, 1] indicating ethical alignment
         processor: Tokenizer with tokenize() and pad_sequence() methods
+                  (e.g., DataProcessor from Auralith-Data-Pipeline)
+    
+    Returns:
+        Tuple of (transformed_model, trained_params)
+    
+    Example:
+        feedback_data = [
+            {"input": "How to help someone?", "output": "Here's how...", "feedback_score": 0.95},
+            {"input": "Harmful request", "output": "I cannot...", "feedback_score": 0.90}
+        ]
+        model, params = train_reward_model(config, feedback_data, tokenizer)
     """
     rng = jax.random.PRNGKey(42)
 

@@ -160,6 +160,7 @@ class VisionEncoder(hk.Module):
             self.transformer_layers.append(
                 hk.MultiHeadAttention(
                     num_heads=8, key_size=d_model//8, 
+                    w_init=hk.initializers.VarianceScaling(1.0),
                     name=f"vit_layer_{i}"
                 )
             )
@@ -214,7 +215,9 @@ class AudioEncoder(hk.Module):
         
         # Temporal attention
         self.temporal_attention = hk.MultiHeadAttention(
-            num_heads=8, key_size=d_model//8, name="temporal_attn"
+            num_heads=8, key_size=d_model//8,
+            w_init=hk.initializers.VarianceScaling(1.0),
+            name="temporal_attn"
         )
         
         self.norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
@@ -248,6 +251,7 @@ class VideoEncoder(hk.Module):
             self.temporal_layers.append(
                 hk.MultiHeadAttention(
                     num_heads=8, key_size=d_model//8,
+                    w_init=hk.initializers.VarianceScaling(1.0),
                     name=f"temporal_layer_{i}"
                 )
             )

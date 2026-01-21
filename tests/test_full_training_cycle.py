@@ -485,18 +485,20 @@ class TestTrainScriptIntegration:
     def config(self):
         return TrainingConfig()
     
-    def test_train_step_function_signature(self):
-        """Verify train.py train_step matches expected signature."""
+    def test_agi_trainer_train_step_exists(self):
+        """Verify AGITrainer has train_step method with correct signature."""
         try:
-            from train import train_step
+            from train import AGITrainer
             import inspect
-            sig = inspect.signature(train_step)
+            assert hasattr(AGITrainer, 'train_step'), "AGITrainer should have train_step method" 
+            sig = inspect.signature(AGITrainer.train_step)
             params = list(sig.parameters.keys())
-            
-            assert 'params' in params or len(params) >= 1
-            print(f"\ntrain_step signature: {sig}")
-        except ImportError:
-            pytest.skip("train.py not importable as module")
+            assert 'params' in params, "train_step should have 'params' parameter"
+            assert 'batch' in params, "train_step should have 'batch' parameter"
+            assert 'rng' in params, "train_step should have 'rng' parameter"
+            print(f"\nAGITrainer.train_step signature: {sig}")
+        except ImportError as e:
+            pytest.skip(f"train.py not importable: {e}")
     
     def test_synthetic_batch_creation(self, config):
         """Verify create_synthetic_batches function works."""
