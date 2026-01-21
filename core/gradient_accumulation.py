@@ -134,6 +134,9 @@ class BatchGradientAccumulator:
         # NaN check for gradients - zero out NaN gradients to prevent contamination
         grads = _zero_nan_grads(grads)
         
+        # NaN check for loss - replace NaN loss with 0.0 to avoid contaminating averages
+        loss = jnp.where(jnp.isnan(loss), jnp.zeros_like(loss), loss)
+        
         return loss, grads
     
     def get_accumulated_grads(self) -> Dict:
