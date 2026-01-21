@@ -6,7 +6,6 @@ Tests memory tracking, preset estimation, and batch memory calculations.
 
 import pytest
 import jax.numpy as jnp
-from unittest.mock import patch, MagicMock
 
 from core.memory_profiler import (
     MemorySnapshot,
