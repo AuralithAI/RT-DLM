@@ -220,59 +220,30 @@ class AGITrainer:
         
         embeddings = []
         for text in texts:
-            # Create deterministic embedding using hash-based approach
-            # This simulates what the model's embedding layer would produce
-            # but works even before model initialization
             embedding = self._hash_text_to_embedding(text)
             embeddings.append(embedding)
         
         return np.stack(embeddings).astype(np.float32)
     
     def _hash_text_to_embedding(self, text: str) -> np.ndarray:
-        """
-        Create a deterministic embedding from text using hashing.
-        
-        This produces consistent embeddings that work for retrieval without
-        requiring external dependencies or model initialization. The embeddings
-        are designed to:
-        - Be deterministic (same text = same embedding)
-        - Have good distribution properties for similarity search
-        - Match the model's d_model dimension
-        
-        In production with a trained model, you would instead:
-        1. Tokenize text with the model's tokenizer
-        2. Pass through model's embedding layer
-        3. Mean pool the token embeddings
-        
-        Args:
-            text: Text string to embed
-            
-        Returns:
-            Normalized embedding of shape (d_model,)
-        """
+        """Create deterministic embedding from text using hashing."""
         import hashlib
         
-        # Use multiple hash passes to fill d_model dimensions
         embedding = np.zeros(self.config.d_model, dtype=np.float32)
         
-        # Generate embedding using SHA-256 hash chain
         hash_input = text.encode('utf-8')
-        chunk_size = 32  # SHA-256 produces 32 bytes
+        chunk_size = 32
         num_chunks = (self.config.d_model + chunk_size - 1) // chunk_size
         
         for i in range(num_chunks):
-            # Chain hashes for each chunk
             hash_bytes = hashlib.sha256(hash_input + str(i).encode()).digest()
             
-            # Convert bytes to floats in range [-1, 1]
             for j, byte in enumerate(hash_bytes):
                 idx = i * chunk_size + j
                 if idx >= self.config.d_model:
                     break
-                # Map byte (0-255) to float (-1 to 1)
                 embedding[idx] = (byte / 127.5) - 1.0
         
-        # L2 normalize for cosine similarity
         norm = np.linalg.norm(embedding)
         if norm > 0:
             embedding = embedding / norm
@@ -327,13 +298,10 @@ class AGITrainer:
             raise RuntimeError("Model must be initialized before creating embeddings. "
                              "Call initialize_model() first.")
         
-        # Extract embedding weights from model parameters
-        # The embedding table is stored in params under the model's namespace
         embedding_table = None
         position_table = None
         
         def find_embeddings(params, prefix=""):
-            """Recursively find embedding tables in params"""
             nonlocal embedding_table, position_table
             
             if isinstance(params, dict):
@@ -389,8 +357,13 @@ class AGITrainer:
         with better embeddings as the model learns. This is how production
         systems improve retrieval quality during training.
         
-        Note: Requires a tokenizer to convert text back to token IDs.
-        For now, this is a placeholder showing the pattern.
+        This method:
+        1. Collects all chunk texts from the document ingester
+        2. Tokenizes them using simple word-based tokenization
+        3. Creates embeddings using the model's trained embedding layer
+        4. Updates the retriever index with new embeddings
+        
+        Call this every N epochs to keep retrieval aligned with model learning.
         """
         if self.params is None:
             logger.warning("Model not initialized, cannot update embeddings")
@@ -401,9 +374,93 @@ class AGITrainer:
             return
         
         logger.info("Updating retrieval index with model embeddings...")
-        # This would require re-tokenizing all documents and re-embedding
-        # For production, you'd implement this with your tokenizer
-        logger.info("Note: Full implementation requires tokenizer integration")
+        
+        # Collect all chunks
+        chunk_texts = []
+        chunk_ids = []
+        chunk_metadata = []
+        
+        for chunk in self.document_ingester.iter_chunks():
+            chunk_texts.append(chunk.text)
+            chunk_ids.append(chunk.chunk_id)
+            chunk_metadata.append({
+                "doc_id": chunk.doc_id,
+                "chunk_index": chunk.chunk_index,
+                **(chunk.metadata or {})
+            })
+        
+        if not chunk_texts:
+            logger.warning("No chunks found in document ingester")
+            return
+        
+        token_ids_list = []
+        for text in chunk_texts:
+            tokens = self._simple_tokenize(text, self.config.max_seq_length)
+            token_ids_list.append(tokens)
+        
+        token_ids = jnp.array(token_ids_list, dtype=jnp.int32)
+        embeddings = self.create_model_embeddings(token_ids)
+        
+        self.retriever.clear()
+        self.retriever.add_documents(
+            documents=chunk_texts,
+            embeddings=embeddings,
+            doc_ids=chunk_ids,
+            metadata=chunk_metadata
+        )
+        
+        logger.info(f"Updated {len(chunk_texts)} chunk embeddings with model weights")
+    
+    def _simple_tokenize(self, text: str, max_length: int) -> List[int]:
+        """
+        Simple word-based tokenization for RAG embedding.
+        
+        Maps words to token IDs using consistent hashing.
+        In production, use the model's actual tokenizer.
+        """
+        import hashlib
+        words = text.lower().split()[:max_length]
+        token_ids = []
+        for word in words:
+            # Hash word to get consistent token ID in vocab range
+            word_hash = int(hashlib.md5(word.encode()).hexdigest(), 16)
+            token_id = (word_hash % (self.config.vocab_size - 2)) + 1
+            token_ids.append(token_id)
+        # Pad to max_length
+        while len(token_ids) < max_length:
+            token_ids.append(0)
+        return token_ids[:max_length]
+    
+    def schedule_retrieval_update(self, update_every_n_epochs: int = 5) -> None:
+        """
+        Schedule periodic retrieval index updates during training.
+        
+        Args:
+            update_every_n_epochs: Update embeddings every N epochs
+        """
+        self._retrieval_update_frequency = update_every_n_epochs
+        logger.info(f"Scheduled retrieval index updates every {update_every_n_epochs} epochs")
+    
+    def get_rag_statistics(self) -> Dict[str, Any]:
+        """
+        Get statistics about RAG usage during training.
+        
+        Returns metrics useful for RAG ablation studies.
+        """
+        stats = {
+            "rag_enabled": self.retrieval_config is not None and self.retrieval_config.enabled,
+            "augmentation_probability": getattr(self.retrieval_config, 'augmentation_probability', 0.0) if self.retrieval_config else 0.0,
+            "total_chunks_indexed": 0,
+            "retriever_type": "hybrid" if (self.retrieval_config and self.retrieval_config.use_hybrid) else "dense",
+        }
+        
+        if self.document_ingester:
+            stats["total_chunks_indexed"] = sum(1 for _ in self.document_ingester.iter_chunks())
+        
+        if self.retriever:
+            stats["retriever_doc_count"] = len(self.retriever)
+        
+        return stats
     
     def ingest_documents(self, documents: List[str], metadata: Optional[List[Dict]] = None) -> None:
         """
@@ -453,7 +510,7 @@ class AGITrainer:
             
             self.retriever.add_documents(
                 documents=chunk_texts,
-                embeddings=chunk_embeddings,  # Enable dense retrieval
+                embeddings=chunk_embeddings,
                 doc_ids=chunk_ids,
                 metadata=chunk_metadata
             )
@@ -552,7 +609,7 @@ class AGITrainer:
         if self.params is None:
             raise RuntimeError("Model must be initialized before consolidating tasks")
             
-        logger.info(f"Consolidating task {task_id} with EWC...")
+        logger.info(f"Consolidating task {task_id} with EWC.")
         
         # Compute Fisher information for current task
         self.rng, fisher_rng = jax.random.split(self.rng)
@@ -891,31 +948,22 @@ class AGITrainer:
         
         base_score = consistency_score / max(1, len(reasoning_chain) - 1)
         
-        # If ground truth provided, compute accuracy via regex parsing
         if ground_truth is not None:
-            # Parse step-by-step reasoning patterns
-            # Matches patterns like "Step 1: ...", "step 2: ...", "Answer: ..."
             step_pattern = r'[Ss]tep\s*\d+:\s*(.+)(?=[Ss]tep\s*\d+:|[Aa]nswer:|$)'
             answer_pattern = r'[Aa]nswer:\s*([^.]+)'
             
-            # Extract steps and answer from reasoning output (if available as text)
-            # This works with string representations of the reasoning chain
             reasoning_text = str(reasoning_chain)
             
             steps = re.findall(step_pattern, reasoning_text, re.DOTALL)
             answers = re.findall(answer_pattern, reasoning_text)
             
-            # Compute accuracy based on matching
             if answers and ground_truth:
-                # Simple string matching for answer accuracy
                 answer_text = answers[-1].strip().lower()
                 gt_text = ground_truth.strip().lower()
                 
-                # Check if answer contains ground truth or vice versa
                 if gt_text in answer_text or answer_text in gt_text:
-                    return min(1.0, base_score + 0.5)  # Boost score for correct answer
+                    return min(1.0, base_score + 0.5)
             
-            # Reward having multiple reasoning steps
             step_bonus = min(0.3, len(steps) * 0.1)
             return min(1.0, base_score + step_bonus)
         
@@ -938,32 +986,27 @@ class AGITrainer:
             coherence += float(alignment)
             count += 1
         
-        # Check goal consistency
         if "autonomous_goals" in consciousness_signals:
             goal_consistency = jnp.std(consciousness_signals["autonomous_goals"])
-            coherence += float(1.0 / (1.0 + goal_consistency))  # Lower std = higher consistency
+            coherence += float(1.0 / (1.0 + goal_consistency))
             count += 1
         
         return coherence / max(1, count)
     
     def evaluate_reasoning_accuracy(self, reasoning_output):
-        """Evaluate accuracy on reasoning tasks"""
-        # This is a simplified evaluation
-        # In practice, you'd parse the generated text and check mathematical correctness
-        
+        """Evaluate accuracy on reasoning tasks."""
         if "reasoning_chain" in reasoning_output:
             chain_length = len(reasoning_output["reasoning_chain"])
-            # Assume longer reasoning chains indicate better reasoning
             return min(1.0, chain_length / self.config.max_reasoning_steps)
         
         return 0.0
     
     def save_checkpoint(self, epoch: int, metrics: Dict):
-        """Save training checkpoint using SafeTensors (secure format)"""
+        """Save training checkpoint using SafeTensors."""
         checkpoint_manager = CheckpointManager(
             checkpoint_dir="checkpoints",
             model_name="rtdlm_agi",
-            keep_last_n=5  # Keep last 5 checkpoints
+            keep_last_n=5
         )
         
         checkpoint_manager.save_checkpoint(
@@ -973,7 +1016,7 @@ class AGITrainer:
             step_count=self.step_count,
             metrics=metrics,
             config=self.config.to_dict(),
-            training_losses=self.training_losses[-100:],  # Last 100 losses
+            training_losses=self.training_losses[-100:],
             validation_losses=self.validation_losses
         )
     
@@ -1098,7 +1141,7 @@ class AGITrainer:
         plt.tight_layout()
         plt.savefig("agi_training_metrics.png", dpi=300, bbox_inches='tight')
         plt.show()
-        plt.close(fig)  # Clean up figure resources
+        plt.close(fig)
     
     def _run_epoch(
         self,
@@ -1142,7 +1185,6 @@ class AGITrainer:
             if batch_idx % 50 == 0:
                 logger.info(f"  Batch {batch_idx + 1}/{num_batches_estimate}, Loss: {loss:.4f}")
         
-        # Log retrieval augmentation stats
         if retrieval_augmented_count > 0:
             logger.info(f"  Retrieval augmented batches: {retrieval_augmented_count}/{len(epoch_losses)}")
         
@@ -1293,7 +1335,6 @@ class AGITrainer:
                 logger.info(f"  Reasoning Accuracy: {metrics['reasoning_accuracy']:.4f}")
                 logger.info(f"  Consciousness Coherence: {metrics['consciousness_coherence']:.4f}")
                 
-                # Check early stopping
                 best_val_loss, patience_counter, should_stop = self._check_early_stopping(
                     metrics["eval_loss"], best_val_loss, patience_counter, max_patience, epoch, metrics
                 )
@@ -1336,7 +1377,6 @@ Examples:
         """
     )
     
-    # Checkpoint resumption
     parser.add_argument(
         "--resume", "-r",
         type=str,
@@ -1345,7 +1385,6 @@ Examples:
         help="Path to checkpoint file to resume training from (.safetensors)"
     )
     
-    # Training hyperparameters
     parser.add_argument(
         "--epochs", "-e",
         type=int,
@@ -1365,7 +1404,6 @@ Examples:
         help="Learning rate (default: 3e-4)"
     )
     
-    # Model configuration
     parser.add_argument(
         "--d-model",
         type=int,
@@ -1385,7 +1423,6 @@ Examples:
         help="Number of attention heads (default: 8)"
     )
     
-    # Data paths
     parser.add_argument(
         "--data-dir",
         type=str,
@@ -1393,7 +1430,6 @@ Examples:
         help="Path to directory containing pre-tokenized SafeTensor shards"
     )
     
-    # Output
     parser.add_argument(
         "--checkpoint-dir",
         type=str,
@@ -1439,7 +1475,6 @@ class ShardedDataLoader:
         self.shuffle = shuffle
         self.prefetch_shards = prefetch_shards
         
-        # Discover shard files
         self.shard_files = sorted(self.data_dir.glob("*.safetensors"))
         if not self.shard_files:
             raise FileNotFoundError(f"No .safetensors files found in {data_dir}")
@@ -1447,7 +1482,6 @@ class ShardedDataLoader:
         self.num_shards = len(self.shard_files)
         self._rng = np.random.default_rng(42)
         
-        # Estimate total samples (scan first shard)
         first_shard = self._load_shard(self.shard_files[0])
         self.samples_per_shard = first_shard["input_ids"].shape[0]
         self.total_samples = self.samples_per_shard * self.num_shards
@@ -1470,14 +1504,12 @@ class ShardedDataLoader:
         num_samples = input_ids.shape[0]
         batches = []
         
-        # Create batches from this shard
         for start_idx in range(0, num_samples, self.batch_size):
             end_idx = min(start_idx + self.batch_size, num_samples)
             
             batch_input_ids = jnp.array(input_ids[start_idx:end_idx])
             batch_targets = jnp.array(targets[start_idx:end_idx])
             
-            # Pad to batch_size if needed (for last batch)
             current_batch_size = batch_input_ids.shape[0]
             if current_batch_size < self.batch_size:
                 pad_size = self.batch_size - current_batch_size
@@ -1507,7 +1539,6 @@ class ShardedDataLoader:
         Yields batches one at a time, loading shards as needed.
         Memory-efficient for large datasets.
         """
-        # Shuffle shard order if enabled
         shard_order = list(range(self.num_shards))
         if self.shuffle:
             self._rng.shuffle(shard_order)
@@ -1518,7 +1549,6 @@ class ShardedDataLoader:
             
             batches = self._create_batches_from_shard(shard_data)
             
-            # Shuffle batches within shard if enabled
             if self.shuffle:
                 batch_indices = list(range(len(batches)))
                 self._rng.shuffle(batch_indices)
@@ -1527,7 +1557,6 @@ class ShardedDataLoader:
             for batch in batches:
                 yield batch
             
-            # Free memory after processing shard
             del shard_data
     
     def get_sample_batch(self) -> Dict[str, jnp.ndarray]:

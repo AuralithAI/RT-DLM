@@ -553,3 +553,28 @@ class HybridRetriever:
     def num_documents(self) -> int:
         """Number of indexed documents."""
         return len(self.sparse_retriever.documents)
+    
+    def __len__(self) -> int:
+        """Return number of indexed documents."""
+        return self.num_documents
+    
+    def clear(self) -> None:
+        """
+        Clear all indexed documents from both retrievers.
+        
+        Used when re-indexing with updated embeddings.
+        """
+        self.sparse_retriever.documents = []
+        self.sparse_retriever.doc_ids = []
+        self.sparse_retriever.metadata = []
+        if hasattr(self.sparse_retriever, 'bm25'):
+            self.sparse_retriever.bm25 = None
+        
+        self.dense_retriever.documents = []
+        self.dense_retriever.doc_ids = []
+        self.dense_retriever.metadata = []
+        self.dense_retriever.embeddings = None
+        if hasattr(self.dense_retriever, 'index'):
+            self.dense_retriever.index = None
+        
+        logger.info("Cleared hybrid retriever index")
