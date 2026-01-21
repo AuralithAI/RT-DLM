@@ -231,6 +231,7 @@ class AGIConfig:
         self.data_parallel = kwargs.get("data_parallel", True)  # Data parallelism
         self.model_parallel = kwargs.get("model_parallel", False)  # Model parallelism
         self.gradient_accumulation_steps = kwargs.get("gradient_accumulation_steps", 1)  # Gradient accumulation
+        self.enable_memory_profiling = kwargs.get("enable_memory_profiling", False)  # Enable memory profiling
         
         # Extended Quantum Simulation
         self.quantum_max_qubits = kwargs.get("quantum_max_qubits", 64)  # Extended qubit simulation limit

@@ -62,6 +62,16 @@ python train.py --data-dir ./shards --resume checkpoints/rtdlm_epoch_10.safetens
 
 Training configuration is in `config/agi_config.py`.
 
+## Distributed Training
+
+For multi-GPU training, use `core.scalable_training`:
+
+- `recommend_parallelism()` - Get optimal strategy for your hardware
+- `estimate_model_memory()` - Estimate GPU memory requirements  
+- `ScalableMesh` - Configure data and tensor parallelism
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed distributed training documentation.
+
 ## Running Tests
 
 ### Full Test Suite
@@ -85,24 +95,18 @@ pytest tests/test_framework.py::test_function_name
 
 # Run with verbose output
 pytest tests/ -v
+
+# Run distributed training tests
+pytest tests/distributed/ -v
 ```
 
 ## Configuration
 
-Model configuration is in `config/agi_config.py`:
+Model configuration is in `config/agi_config.py`. Use `AGIConfig` with parameters like `vocab_size`, `hidden_dim`, `num_heads`, `num_layers`, and `max_seq_len`.
 
-```python
-from config.agi_config import AGIConfig
+### Quantum Simulation (Optional)
 
-config = AGIConfig(
-    vocab_size=50000,
-    hidden_dim=512,
-    num_heads=8,
-    num_layers=6,
-    max_seq_len=1024,
-    # ... more options
-)
-```
+Quantum-inspired layers are optional and add computational overhead. Use `estimate_quantum_overhead()` from `core.quantum` to check memory requirements. Set `quantum_layers=0` to disable.
 
 ## Next Steps
 

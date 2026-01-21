@@ -206,5 +206,116 @@ class TestRetrievalIntegration(unittest.TestCase):
             self.assertIn("retrieval_mask", augmented)
 
 
+class TestMemoryProfilerIntegration(unittest.TestCase):
+    """Test memory profiler integration in training"""
+    
+    def test_memory_profiler_initialization(self):
+        """Test memory profiler is initialized in trainer"""
+        from config.agi_config import AGIConfig
+        from train import AGITrainer
+        
+        config = AGIConfig(
+            d_model=D_MODEL,
+            num_heads=4,
+            num_layers=2,
+            vocab_size=1000,
+            batch_size=BATCH_SIZE,
+            enable_memory_profiling=True,
+        )
+        
+        trainer = AGITrainer(config)
+        
+        # Memory profiler should be initialized
+        self.assertIsNotNone(trainer.memory_profiler)
+        self.assertTrue(trainer.memory_profiler.enabled)
+    
+    def test_memory_profiler_disabled_by_default(self):
+        """Test memory profiler is disabled by default"""
+        from config.agi_config import AGIConfig
+        from train import AGITrainer
+        
+        config = AGIConfig(
+            d_model=D_MODEL,
+            num_heads=4,
+            num_layers=2,
+            vocab_size=1000,
+            batch_size=BATCH_SIZE,
+        )
+        
+        trainer = AGITrainer(config)
+        
+        # Memory profiler should exist but be disabled
+        self.assertIsNotNone(trainer.memory_profiler)
+        self.assertFalse(trainer.memory_profiler.enabled)
+
+
+class TestGradientAccumulationIntegration(unittest.TestCase):
+    """Test gradient accumulation integration in training"""
+    
+    def test_gradient_accumulation_default(self):
+        """Test gradient accumulation defaults to 1 (disabled)"""
+        from config.agi_config import AGIConfig
+        from train import AGITrainer
+        
+        config = AGIConfig(
+            d_model=D_MODEL,
+            num_heads=4,
+            num_layers=2,
+            vocab_size=1000,
+            batch_size=BATCH_SIZE,
+        )
+        
+        trainer = AGITrainer(config)
+        
+        # Default should be 1 (no accumulation)
+        self.assertEqual(trainer.gradient_accumulation_steps, 1)
+    
+    def test_gradient_accumulation_configured(self):
+        """Test gradient accumulation when configured"""
+        from config.agi_config import AGIConfig
+        from train import AGITrainer
+        
+        config = AGIConfig(
+            d_model=D_MODEL,
+            num_heads=4,
+            num_layers=2,
+            vocab_size=1000,
+            batch_size=BATCH_SIZE,
+            gradient_accumulation_steps=4,
+        )
+        
+        trainer = AGITrainer(config)
+        
+        # Should match config
+        self.assertEqual(trainer.gradient_accumulation_steps, 4)
+    
+    def test_compute_grads_method(self):
+        """Test _compute_grads method exists and has correct signature"""
+        import inspect
+        from config.agi_config import AGIConfig
+        from train import AGITrainer
+        
+        config = AGIConfig(
+            d_model=D_MODEL,
+            num_heads=4,
+            num_layers=2,
+            vocab_size=1000,
+            batch_size=BATCH_SIZE,
+        )
+        
+        trainer = AGITrainer(config)
+        
+        # Verify _compute_grads method exists
+        self.assertTrue(hasattr(trainer, '_compute_grads'))
+        self.assertTrue(callable(trainer._compute_grads))
+        
+        # Check method signature has expected parameters
+        sig = inspect.signature(trainer._compute_grads)
+        params = list(sig.parameters.keys())
+        self.assertIn('params', params)
+        self.assertIn('batch', params)
+        self.assertIn('rng', params)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
