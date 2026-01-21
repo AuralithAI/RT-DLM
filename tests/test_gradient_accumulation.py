@@ -376,7 +376,7 @@ class TestNaNGradientHandling:
         def nan_producing_model_apply_fn(params: Dict, rng: jnp.ndarray, **batch) -> Dict:
             """Model that produces NaN in predictions under certain conditions."""
             x = batch["input"]
-            # Create NaN when first element of input is negative by dividing by zero
+            # Create NaN when first element of input is negative
             mask = x[:, 0:1] < 0  # Shape (batch_size, 1)
             # Compute normal predictions
             base_predictions = jnp.dot(x, params["w"]) + params["b"]
