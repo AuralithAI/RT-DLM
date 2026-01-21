@@ -1,5 +1,11 @@
 # RT-DLM: Real-Time Deep Learning Model
 
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![JAX](https://img.shields.io/badge/JAX-0.4.35+-orange.svg)](https://github.com/google/jax)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-600%2B%20passing-brightgreen.svg)](tests/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 A JAX/Haiku-based neural architecture for training, combining transformer models, mixture of experts, quantum-inspired computing, and multi-paradigm hybrid learning.
 
 > **Note**: This repository focuses on **model architecture and training**. Data collection, tokenization, and processing are handled by the standalone [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline) repository.
@@ -28,17 +34,7 @@ State-of-the-art attention mechanisms for efficiency and scalability:
 - **Linear Attention**: Approximate attention with O(n) complexity
 - **Spiking Attention**: Sparse activation for efficiency
 
-```python
-# Configure attention variant in TMSModel
-model = TMSModel(
-    d_model=512,
-    num_heads=8,
-    attention_type="gqa",      # "standard", "gqa", "mqa", "sliding", "linear"
-    num_kv_heads=2,            # For GQA: 4x KV cache reduction
-    position_encoding="rope",  # "rope", "learned", "none"
-    ...
-)
-```
+Configure via `TMSModel(attention_type="gqa", num_kv_heads=2, position_encoding="rope", ...)`.
 
 #### Graph-Based Neural Components
 Relational reasoning with graph neural networks:
@@ -76,48 +72,38 @@ Cross-modal fusion capabilities:
 - **Ethics module** with feedback collection and reward modeling
 - **Mixed-precision training** (bfloat16/float16) for faster training
 - **Gradient checkpointing** for memory efficiency
-- **Distributed training** support (data parallelism with pmap)
-- **Model parallelism** for very large models (tensor/pipeline parallelism)
+
+### Distributed Training
+
+RT-DLM provides production-ready distributed training via `ScalableMesh`:
+
+| Strategy | Use Case | API |
+|----------|----------|-----|
+| **Data Parallel** | Multiple GPUs, same model | `jax.pmap` with gradient sync |
+| **Tensor Parallel** | Large models (>7B params) | Sharded parameters via `NamedSharding` |
+| **Combined** | Production scale | Data + Tensor parallelism |
+
+Key utilities in `core.scalable_training`:
+- `recommend_parallelism()` - Auto-detect optimal strategy for your hardware
+- `estimate_model_memory()` - Estimate GPU memory requirements
+- `profile_collective_communication()` - Measure all-reduce latency/bandwidth
+
+### Quantum Cost Analysis
+
+The quantum module provides resource estimation via `estimate_quantum_overhead()`:
+
+| Qubits | Mode | Memory |
+|--------|------|--------|
+| ≤16 | Full State | ~1 MB |
+| 17-24 | Full State | 256 MB - 16 GB |
+| 30+ | Tensor Network | O(n×χ²) |
+
+**Note**: Quantum simulation is classical emulation. Set `quantum_layers=0` in config to disable.
 
 ### Evaluation Metrics
 
-Production-grade training completeness with comprehensive evaluation:
+Production-grade training with comprehensive evaluation via `TrainingEvaluator`:
 
-```python
-from core.evaluation import TrainingEvaluator
-
-# Initialize evaluator for training
-evaluator = TrainingEvaluator(
-    vocab_size=50257,
-    log_dir="./logs",
-    experiment_name="my-training-run",
-    validate_every_n_steps=1000,
-    config=config.__dict__,
-)
-
-# In training loop
-for step, batch in enumerate(dataloader):
-    loss, logits, grads = train_step(params, batch)
-    
-    # Log metrics: perplexity, accuracy, gradient health, throughput
-    evaluator.on_train_step(
-        step=step,
-        loss=loss,
-        logits=logits,
-        targets=batch['targets'],
-        learning_rate=current_lr,
-        grads=grads,
-    )
-    
-    # Validation
-    if evaluator.should_validate(step):
-        evaluator.run_validation(model_fn, params, val_data, step)
-
-# Training summary
-print(evaluator.summary())
-```
-
-**Metrics tracked**:
 - **Perplexity**: Core LM quality metric (lower = better)
 - **Token Accuracy**: Top-1 and Top-5 prediction accuracy
 - **Gradient Norms**: Health monitoring (NaN/Inf/exploding/vanishing detection)
@@ -126,7 +112,7 @@ print(evaluator.summary())
 
 ### Model Scale Presets
 
-Pre-configured model sizes for different use cases:
+Pre-configured model sizes via `AGIConfig.from_preset()`:
 
 | Preset | d_model | Heads | Layers | Parameters |
 |--------|---------|-------|--------|------------|
@@ -136,13 +122,6 @@ Pre-configured model sizes for different use cases:
 | `large` | 1024 | 16 | 24 | ~350M |
 | `xlarge` | 2048 | 32 | 32 | ~1.3B |
 | `xxlarge` | 4096 | 64 | 48 | ~7B |
-
-```python
-from config import AGIConfig
-
-# Use a preset
-config = AGIConfig.from_preset("large")
-```
 
 ## Quick Start
 
@@ -173,33 +152,16 @@ python train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors --epochs 100
 
 ### Training Modes
 
-RT-DLM supports three training modes:
+RT-DLM supports multiple training modes with automatic optimization:
 
-| Mode | Config | Use Case |
-|------|--------|----------|
-| **Standard** | `model_parallel=False` | Single GPU, full AGI model |
-| **Data Parallel** | `distributed_training=True` | Multiple GPUs, same model replicated |
-| **Model Parallel** | `model_parallel=True` | Model too large for single device |
+| Mode | Config | Use Case | Devices |
+|------|--------|----------|---------|
+| **Standard** | Default | Development, single GPU | 1 |
+| **Data Parallel** | `distributed_training=True` | Faster training, batch scaling | 2-8 |
+| **Tensor Parallel** | `tensor_parallel=True` | Models >7B params | 4+ |
+| **Combined** | Both flags | Production scale | 8+ |
 
-```python
-from config import AGIConfig
-
-# Standard training (default) - Full AGI model
-config = AGIConfig()
-
-# Data parallel - Replicate across GPUs
-config = AGIConfig(distributed_training=True, num_devices=4)
-
-# Model parallel - Shard layers across GPUs
-config = AGIConfig(model_parallel=True, num_devices=8)
-```
-
-**Note**: Model parallel mode uses a simplified transformer architecture optimized for sharding. Standard mode includes all AGI features (consciousness, quantum, multimodal, etc.).
-
-### Running Tests
-```bash
-pytest tests/
-```
+Set `quantum_layers=0` to disable quantum simulation for faster training.
 
 ## Implementation Status
 
@@ -211,7 +173,7 @@ pytest tests/
 - Hybrid architecture with four ML paradigms
 - Ensemble fusion with cross-paradigm interaction
 - Quantum simulator (100+ qubits with tensor network approximations)
-- Variational quantum circuit
+- Variational quantum circuit with cost estimation API
 - Multimodal fusion
 - SafeTensors checkpoint management
 - Training pipeline with epoch-based loop and checkpoint resumption
@@ -219,27 +181,19 @@ pytest tests/
 - Mixed-precision training (bfloat16/float16)
 - Gradient checkpointing for memory efficiency
 - Gradient clipping for training stability
-- Distributed training support (data parallelism)
-- Model parallelism (tensor parallelism, pipeline parallelism)
+- **Distributed Training** (`ScalableMesh` with data + tensor parallelism)
+- **Memory & Parallelism Estimation** (`estimate_model_memory`, `recommend_parallelism`)
+- **Communication Profiling** (`profile_collective_communication`)
 - Tensor network approximations for quantum simulation (MPS, TTN)
 - **Evaluation Metrics** (perplexity, gradient norms, structured logging)
 - **Gradient Health Monitoring** (NaN/Inf detection, exploding/vanishing detection)
 - **Validation Runner** for periodic evaluation
-- Comprehensive test suite (400+ tests)
+- Comprehensive test suite (600+ tests)
 
 ### Architecture Notes
 - **Training Focus**: This repository focuses on model architecture and training completeness
 - **Inference**: Token sampling/generation utilities are marked as `@dev_utility` for testing purposes only
 - **Production Inference**: For production deployment, use optimized serving frameworks (vLLM, TGI) that load RT-DLM checkpoints
-
-## Requirements
-
-- Python 3.10+
-- JAX 0.4.35+
-- Haiku 0.0.13+
-- Optax (optimizer)
-- SafeTensors (checkpoints)
-- NumPy
 
 ## Related Repositories
 

@@ -418,56 +418,9 @@ RT-DLM provides a comprehensive evaluation system for training completeness.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Usage in Training Loop
+### Usage
 
-```python
-from core.evaluation import TrainingEvaluator
-
-# Initialize
-evaluator = TrainingEvaluator(
-    vocab_size=50257,
-    log_dir="./logs",
-    experiment_name="my-run",
-    validate_every_n_steps=1000,
-)
-
-# Training loop
-for step, batch in enumerate(dataloader):
-    loss, logits, grads = train_step(params, batch)
-    
-    # Log all metrics
-    evaluator.on_train_step(
-        step=step,
-        loss=loss,
-        logits=logits,
-        targets=batch['targets'],
-        learning_rate=current_lr,
-        grads=grads,  # For gradient health monitoring
-    )
-    
-    # Validation
-    if evaluator.should_validate(step):
-        evaluator.run_validation(model_fn, params, val_data, step)
-
-# Summary
-print(evaluator.summary())
-```
-
-### Log Output Format
-
-```
-Step     100 | loss: 4.2341 | ppl: 68.92 | acc: 0.1234 | lr: 1.00e-04 | grad_norm: 0.8234 | 12543 tok/s
-Step     200 | loss: 3.8921 | ppl: 48.98 | acc: 0.1567 | lr: 9.95e-05 | grad_norm: 0.7891 | 13102 tok/s
-...
-============================================================
-VALIDATION at step 1000
-  Loss:       3.4521 (±0.0234)
-  Perplexity: 31.56 (±2.34)
-  Accuracy:   0.2134
-  Tokens:     512,000
-  Time:       45.2s
-============================================================
-```
+See `core/evaluation.py` for the `TrainingEvaluator` API. Metrics tracked include perplexity, token accuracy, gradient norms, and throughput.
 
 ## Advanced Attention System
 
@@ -491,23 +444,7 @@ RT-DLM uses a unified attention system that supports multiple state-of-the-art a
 | **Learned** | Traditional learned embeddings | Limited |
 | **None** | No positional encoding | N/A |
 
-### Configuration Example
-
-```python
-from core.model import TMSModel
-
-# Standard MHA with RoPE (default, backward compatible)
-model = TMSModel(d_model=512, num_heads=8, attention_type="standard", ...)
-
-# GQA for 4x faster inference with minimal quality loss
-model = TMSModel(d_model=512, num_heads=8, attention_type="gqa", num_kv_heads=2, ...)
-
-# Sliding window for very long documents
-model = TMSModel(d_model=512, num_heads=8, attention_type="sliding", sliding_window_size=4096, ...)
-
-# Linear attention for extreme efficiency
-model = TMSModel(d_model=512, num_heads=8, attention_type="linear", ...)
-```
+Configure via `TMSModel(attention_type="gqa", num_kv_heads=2, position_encoding="rope", ...)`.
 
 ### Attention Architecture
 
@@ -657,7 +594,7 @@ Graph-based neural components for relational reasoning.
 
 ## Model Scale Presets
 
-Pre-configured model sizes from tiny to production scale.
+Pre-configured model sizes from tiny to production scale. Use `AGIConfig.from_preset("large")`.
 
 | Preset | d_model | Heads | Layers | MoE Experts | ~Parameters |
 |--------|---------|-------|--------|-------------|-------------|
@@ -667,18 +604,6 @@ Pre-configured model sizes from tiny to production scale.
 | `large` | 1024 | 16 | 24 | 16 | ~350M |
 | `xlarge` | 2048 | 32 | 32 | 32 | ~1.3B |
 | `xxlarge` | 4096 | 64 | 48 | 64 | ~7B |
-
-```python
-from config import AGIConfig
-
-# Load preset
-config = AGIConfig.from_preset("large")
-
-# Customize from preset
-config = AGIConfig.from_preset("base")
-config.attention_type = "gqa"
-config.num_kv_heads = 4
-```
 
 ## Scalability & Training Modes
 
@@ -711,57 +636,17 @@ RT-DLM supports multiple training modes depending on your hardware and model siz
         - Ethics                            - DeviceMesh
 ```
 
-### 1. Standard Training (Default)
+### Training Mode Summary
 
-**Use when**: Single GPU/TPU, model fits in memory
+| Mode | Use Case | Config |
+|------|----------|--------|
+| **Standard** | Single GPU, model fits in memory | Default |
+| **Data Parallel** | Multiple GPUs, faster training | `distributed_training=True` |
+| **Model Parallel** | Model too large for single device | `model_parallel=True` |
 
-```python
-config = AGIConfig(
-    model_parallel=False,      # Default
-    distributed_training=False
-)
-trainer = AGITrainer(config)
-# Uses: create_rtdlm_agi(config) → Full AGI model with all features
-```
+The full AGI model includes ConsciousnessSimulator, QuantumAGICore, MultiModalRTDLM, ReasoningEngine, EthicalRewardModel, and TMSModel with MemoryBank.
 
-The full AGI model includes:
-- ConsciousnessSimulator
-- QuantumAGICore
-- MultiModalRTDLM
-- ReasoningEngine
-- EthicalRewardModel
-- TMSModel with MemoryBank
-
-### 2. Data Parallel Training
-
-**Use when**: Multiple GPUs, want faster training with same model
-
-```python
-config = AGIConfig(
-    distributed_training=True,
-    num_devices=4,
-    data_parallel=True
-)
-trainer = AGITrainer(config)
-# Uses: pmap to replicate model across devices
-# Each device processes different data batches
-```
-
-### 3. Model Parallel Training
-
-**Use when**: Model too large to fit on single device
-
-```python
-config = AGIConfig(
-    model_parallel=True,
-    num_devices=8
-)
-trainer = AGITrainer(config)
-# Uses: create_model_parallel_transformer(config, device_mesh)
-# Model layers are split across devices
-```
-
-**Note**: Model parallel mode uses a simplified transformer architecture (without consciousness, quantum, etc.) because sharding complex nested modules is challenging. This mode is for training very large base models that can later be extended.
+**Note**: Model parallel mode uses a simplified transformer architecture optimized for sharding.
 
 ### Model Parallel Architecture
 
@@ -850,18 +735,7 @@ For quantum simulation, tensor networks enable 100+ qubit simulation:
 | 25-30 | Full State + Sparse | 16 GB+ | ~400 | Requires high-memory GPU |
 | 30+ | Tensor Network | O(n×χ²) ≈ 6.4 MB | ~500 | Required for 30+ qubits |
 
-**To estimate overhead programmatically:**
-```python
-from core.quantum import estimate_quantum_overhead
-
-# Get memory/compute estimates
-estimate = estimate_quantum_overhead(num_qubits=16, num_layers=4, d_model=384)
-print(f"Memory: {estimate['state_memory_mb']:.2f} MB")
-print(f"Parameters: {estimate['total_trainable_params']}")
-```
-
-**Benchmarking recommendation:** Compare training with `quantum_layers=0` vs `quantum_layers=4` 
-to measure actual impact on model quality vs computational cost for your specific use case.
+Use `estimate_quantum_overhead()` from `core.quantum` to get memory/compute estimates programmatically. Set `quantum_layers=0` to disable quantum simulation for faster training.
 
 ### Configuration Summary
 
@@ -909,6 +783,18 @@ The system uses a **unified scalable training approach**  - **ONE model** that s
 | `gradient_checkpointing=True` | Memory efficiency | Applied to unified model |
 
 **Key Design Principle**: Unlike having separate models for different parallelism modes, we use ONE unified `RTDLMAGISystem` model. The `ScalableMesh` class handles how parameters are distributed across devices, making the same model work at any scale.
+
+### Distributed Training Utilities
+
+The `core.scalable_training` module provides production utilities:
+
+| Function | Purpose |
+|----------|---------|
+| `estimate_model_memory(params)` | Estimate GPU memory requirements |
+| `recommend_parallelism(memory_gb, device_gb, num_devices)` | Get optimal parallelism strategy |
+| `profile_collective_communication(mesh)` | Measure all-reduce latency/bandwidth |
+| `validate_distributed_setup(mesh)` | Verify multi-device configuration |
+| `unreplicate_params(params)` | Extract single copy from replicated state |
 
 ## Graph-Based Neural Components
 
@@ -960,48 +846,7 @@ RT-DLM includes graph neural network components for enhanced relational reasonin
 
 ### Graph Configuration
 
-```python
-from core.components import GraphConfig, GraphNeuron, create_graph_neuron
-
-# Configure graph neurons
-config = GraphConfig(
-    d_model=384,
-    num_heads=8,
-    max_nodes=64,
-    edge_threshold=0.3,
-    num_hops=3,
-    enable_relational_routing=True,
-)
-
-# Create graph neuron
-graph_neuron = create_graph_neuron(config)
-```
-
-## Model Scale Presets
-
-RT-DLM provides pre-configured model scales from development to production:
-
-| Preset | d_model | layers | heads | experts | ~Params | Use Case |
-|--------|---------|--------|-------|---------|---------|----------|
-| `tiny` | 256 | 6 | 4 | 4 | 50M | Testing |
-| `small` | 384 | 12 | 8 | 8 | 150M | Development |
-| `base` | 768 | 12 | 12 | 8 | 350M | Fine-tuning |
-| `large` | 1024 | 24 | 16 | 16 | 1B | Production |
-| `xlarge` | 2048 | 32 | 32 | 32 | 7B | Advanced |
-| `xxlarge` | 4096 | 48 | 64 | 64 | 70B | SOTA |
-
-```python
-from config.agi_config import AGIConfig
-
-# Create config from preset
-config = AGIConfig.from_preset('large')
-
-# List available presets
-AGIConfig.list_presets()
-
-# Customize preset
-config = AGIConfig.from_preset('xlarge', learning_rate=5e-5, batch_size=64)
-```
+Configure graph neurons via `GraphConfig` in `core.components`. Key parameters: `d_model`, `num_heads`, `max_nodes`, `edge_threshold`, and `num_hops`.
 
 ## Advanced MoE Features
 
@@ -1014,21 +859,7 @@ The SparseMoE module includes advanced features for better expert utilization:
 
 ## Speculative Decoding
 
-For faster inference, the sampling module provides speculative decoding:
-
-```python
-from core.sampling import SpeculativeDecoder
-
-# Setup speculative decoding with draft model
-decoder = SpeculativeDecoder(
-    target_forward_fn=large_model.apply,
-    draft_forward_fn=small_model.apply,
-    num_speculative_tokens=4,
-)
-
-# Generate with 2-3x speedup
-tokens = decoder.generate(target_params, draft_params, initial_tokens, rng_key)
-```
+For faster inference, the `core.sampling` module provides `SpeculativeDecoder` and `SelfSpeculativeDecoder` with draft-verify pipeline for 2-3x generation speedup.
 
 ## Directory Structure
 
