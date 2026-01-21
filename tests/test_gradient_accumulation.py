@@ -7,7 +7,7 @@ Tests gradient accumulation, batch splitting, and training step wrapping.
 import pytest
 import jax
 import jax.numpy as jnp
-from typing import Dict, Any, Tuple
+from typing import Dict
 
 from core.gradient_accumulation import (
     BatchGradientAccumulator,
