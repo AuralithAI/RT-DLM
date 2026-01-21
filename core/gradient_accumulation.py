@@ -110,6 +110,15 @@ class BatchGradientAccumulator:
             return self.loss_fn(outputs, batch)
         
         loss, grads = jax.value_and_grad(loss_wrapper)(params)
+        
+        # NaN check for gradients - zero out NaN gradients to prevent contamination
+        def zero_nan_grads(g):
+            return jax.tree_util.tree_map(
+                lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x), 
+                g
+            )
+        grads = zero_nan_grads(grads)
+        
         return loss, grads
     
     def get_accumulated_grads(self) -> Dict:
@@ -165,6 +174,15 @@ def create_accumulating_train_step(
             return loss_fn(outputs, batch)
         
         loss, grads = jax.value_and_grad(loss_wrapper)(params)
+        
+        # NaN check for gradients - zero out NaN gradients to prevent contamination
+        def zero_nan_grads(g):
+            return jax.tree_util.tree_map(
+                lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x), 
+                g
+            )
+        grads = zero_nan_grads(grads)
+        
         return loss, grads
     
     @jax.jit

@@ -368,6 +368,82 @@ class TestRecommendAccumulationSteps:
         assert micro_batch <= 8
 
 
+class TestNaNGradientHandling:
+    """Tests for NaN gradient handling during accumulation."""
+    
+    def test_nan_gradients_are_zeroed_out(self):
+        """Test that NaN gradients are replaced with zeros during accumulation."""
+        def nan_producing_model_apply_fn(params: Dict, rng: jnp.ndarray, **batch) -> Dict:
+            """Model that produces NaN in predictions under certain conditions."""
+            x = batch["input"]
+            # Create NaN when first element of input is negative by dividing by zero
+            mask = x[:, 0:1] < 0  # Shape (batch_size, 1)
+            # Compute normal predictions
+            base_predictions = jnp.dot(x, params["w"]) + params["b"]
+            # Replace with NaN where mask is True
+            predictions = jnp.where(
+                jnp.broadcast_to(mask, base_predictions.shape),
+                jnp.full_like(base_predictions, jnp.nan),
+                base_predictions
+            )
+            return {"predictions": predictions}
+        
+        accumulator = BatchGradientAccumulator(
+            accumulation_steps=2,
+            loss_fn=mock_loss_fn,
+            model_apply_fn=nan_producing_model_apply_fn,
+        )
+        
+        params = {"w": jnp.ones((4, 2)), "b": jnp.zeros((2,))}
+        rng = jax.random.PRNGKey(0)
+        
+        # First batch produces NaN gradients
+        batch1 = {"input": jnp.ones((3, 4)) * -1, "labels": jnp.zeros((3, 2))}
+        accumulator.accumulate(params, batch1, rng)
+        
+        # Second batch produces valid gradients
+        batch2 = {"input": jnp.ones((3, 4)), "labels": jnp.zeros((3, 2))}
+        done = accumulator.accumulate(params, batch2, rng)
+        
+        assert done
+        
+        # Get accumulated gradients - should not contain NaN
+        grads = accumulator.get_accumulated_grads()
+        
+        # Verify no NaN values in gradients
+        for key in grads:
+            assert not jnp.any(jnp.isnan(grads[key])), f"Gradient '{key}' contains NaN values"
+    
+    def test_all_nan_gradients_result_in_zero_grads(self):
+        """Test that when all micro-batches produce NaN, result is zero gradients."""
+        def nan_producing_model_apply_fn(params: Dict, rng: jnp.ndarray, **batch) -> Dict:
+            """Model that always produces NaN."""
+            x = batch["input"]
+            predictions = jnp.ones_like(jnp.dot(x, params["w"]) + params["b"]) * jnp.nan
+            return {"predictions": predictions}
+        
+        accumulator = BatchGradientAccumulator(
+            accumulation_steps=2,
+            loss_fn=mock_loss_fn,
+            model_apply_fn=nan_producing_model_apply_fn,
+        )
+        
+        params = {"w": jnp.ones((4, 2)), "b": jnp.zeros((2,))}
+        rng = jax.random.PRNGKey(0)
+        batch = {"input": jnp.ones((3, 4)), "labels": jnp.zeros((3, 2))}
+        
+        accumulator.accumulate(params, batch, rng)
+        done = accumulator.accumulate(params, batch, rng)
+        
+        assert done
+        
+        # Get accumulated gradients - should be all zeros
+        grads = accumulator.get_accumulated_grads()
+        
+        for key in grads:
+            assert jnp.allclose(grads[key], 0.0), f"Gradient '{key}' should be all zeros"
+
+
 class TestBatchGradientAccumulatorIntegration:
     """Integration tests for gradient accumulation workflow."""
     
