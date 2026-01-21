@@ -7,7 +7,7 @@ by accumulating gradients over multiple micro-batches.
 
 import jax
 import jax.numpy as jnp
-from typing import Dict, Any, Callable, Tuple, Optional
+from typing import Dict, Any, Callable, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
