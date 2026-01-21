@@ -73,6 +73,18 @@ from core.training import (
     TrainingEvaluator,
 )
 
+# Benchmark evaluation (production metrics)
+from core.benchmark_evaluation import (
+    BenchmarkResult,
+    CalibrationResult,
+    ComputeMetrics,
+    ProductionMetrics,
+    CalibrationTracker,
+    ComputeEfficiencyTracker,
+    PerplexityTracker,
+    BenchmarkEvaluator,
+)
+
 # Decorators (from core.utils - recommended import path)
 # Backward-compatible re-exports
 from core.utils import (
@@ -142,4 +154,13 @@ __all__ = [
     'MetricLogger',
     'ValidationRunner',
     'TrainingEvaluator',
+    # Benchmark evaluation (production metrics)
+    'BenchmarkResult',
+    'CalibrationResult',
+    'ComputeMetrics',
+    'ProductionMetrics',
+    'CalibrationTracker',
+    'ComputeEfficiencyTracker',
+    'PerplexityTracker',
+    'BenchmarkEvaluator',
 ]

@@ -54,6 +54,19 @@ from core.gradient_accumulation import (
     calculate_effective_batch_size,
 )
 
+# Evaluation metrics and tracking
+from core.training.evaluation import (
+    EvaluationMetrics,
+    TrainingEvaluator,
+    GradientMonitor,
+)
+from core.benchmark_evaluation import (
+    PerplexityTracker,
+    CalibrationTracker,
+    ComputeEfficiencyTracker,
+)
+from core.ethics import FairnessAnalyzer, FairnessConfig
+
 # Retrieval Augmented Generation (RAG) integration
 from config.retrieval_config import RetrievalConfig
 from modules.retrieval import (
@@ -149,6 +162,24 @@ class AGITrainer:
         self.retrieval_training: Optional[RetrievalAugmentedTraining] = None
         self.document_ingester: Optional[DocumentIngester] = None
         self._embedding_fn: Optional[Callable[[List[str]], np.ndarray]] = None
+        
+        # Production evaluation metrics
+        self.perplexity_tracker = PerplexityTracker(window_size=100)
+        self.calibration_tracker = CalibrationTracker(num_bins=10)
+        self.compute_tracker = ComputeEfficiencyTracker(
+            model_config={'d_model': config.d_model, 'num_layers': config.num_layers}
+        )
+        self.gradient_monitor = GradientMonitor(
+            exploding_threshold=100.0,
+            vanishing_threshold=1e-7,
+            track_per_layer=False,
+        )
+        
+        # Fairness tracking (optional)
+        self.fairness_analyzer: Optional[FairnessAnalyzer] = None
+        if getattr(config, 'enable_fairness_tracking', False):
+            self.fairness_analyzer = FairnessAnalyzer(FairnessConfig())
+            logger.info("Fairness tracking enabled")
         
     def configure_retrieval(
         self, 
@@ -838,49 +869,6 @@ class AGITrainer:
             )
         return loss_fn
     
-    def _compute_grads(self, params, batch, rng):
-        """
-        Compute loss and gradients for a single batch (for gradient accumulation).
-        
-        This is separated from train_step to allow gradient accumulation
-        without applying optimizer updates on every micro-batch.
-        
-        Args:
-            params: Model parameters
-            batch: Training batch
-            rng: Random key
-            
-        Returns:
-            Tuple of (loss, gradients)
-        """
-        def loss_fn(params, batch, rng):
-            model_output = self.model.apply(
-                params, rng,
-                inputs={"text": batch["input_ids"]},
-                multimodal_inputs=batch.get("multimodal_inputs"),
-                return_reasoning=True
-            )
-            
-            loss = compute_agi_loss(
-                model_output["logits"],
-                batch["targets"],
-                aux_outputs=model_output,
-                config=self.config
-            )
-            
-            return loss
-        
-        # Compute gradients
-        loss, grads = jax.value_and_grad(loss_fn)(params, batch, rng)
-        
-        # NaN check for gradients
-        grads = jax.tree_util.tree_map(
-            lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x),
-            grads
-        )
-        
-        return loss, grads
-    
     def train_step_with_ewc(self, params, opt_state, batch, rng, 
                             task_memories: List[TaskMemory], lambda_ewc: float = 1000.0):
         """
@@ -1242,6 +1230,82 @@ class AGITrainer:
         plt.show()
         plt.close(fig)
     
+    def get_production_metrics(self) -> Dict[str, Any]:
+        """
+        Get production evaluation metrics summary.
+        
+        Returns comprehensive metrics including:
+        - Perplexity (running average)
+        - Calibration (ECE, MCE)
+        - Compute efficiency (throughput, latency)
+        - Gradient health
+        - Fairness (if enabled)
+        
+        Returns:
+            Dictionary with all production metrics
+        """
+        metrics = {}
+        
+        # Perplexity
+        metrics['perplexity'] = self.perplexity_tracker.get_perplexity()
+        metrics['avg_loss'] = self.perplexity_tracker.get_loss()
+        
+        # Calibration
+        cal_result = self.calibration_tracker.compute()
+        metrics['calibration'] = {
+            'ece': cal_result.expected_calibration_error,
+            'mce': cal_result.maximum_calibration_error,
+            'avg_confidence': cal_result.average_confidence,
+            'avg_accuracy': cal_result.average_accuracy,
+        }
+        
+        # Compute efficiency
+        compute_result = self.compute_tracker.compute()
+        metrics['compute'] = {
+            'tokens_per_second': compute_result.tokens_per_second,
+            'samples_per_second': compute_result.samples_per_second,
+            'avg_latency_ms': compute_result.avg_latency_ms,
+            'p95_latency_ms': compute_result.p95_latency_ms,
+        }
+        if compute_result.peak_memory_gb:
+            metrics['compute']['peak_memory_gb'] = compute_result.peak_memory_gb
+        
+        # Gradient health
+        grad_trend = self.gradient_monitor.get_trend()
+        metrics['gradients'] = grad_trend
+        
+        # Fairness (if enabled)
+        if self.fairness_analyzer is not None:
+            metrics['fairness'] = {
+                'enabled': True,
+                'note': 'Call analyze_fairness() with predictions and sensitive features'
+            }
+        
+        return metrics
+    
+    def print_production_metrics(self):
+        """Print production metrics summary to console."""
+        metrics = self.get_production_metrics()
+        
+        print("\n" + "="*60)
+        print("PRODUCTION EVALUATION METRICS")
+        print("="*60)
+        print(f"Perplexity:      {metrics['perplexity']:.2f}")
+        print(f"Avg Loss:        {metrics['avg_loss']:.4f}")
+        print()
+        print("Calibration:")
+        print(f"  ECE:           {metrics['calibration']['ece']:.4f}")
+        print(f"  Avg Accuracy:  {metrics['calibration']['avg_accuracy']:.2%}")
+        print()
+        print("Compute Efficiency:")
+        print(f"  Throughput:    {metrics['compute']['tokens_per_second']:.0f} tok/s")
+        print(f"  Avg Latency:   {metrics['compute']['avg_latency_ms']:.2f}ms")
+        print()
+        print("Gradient Health:")
+        print(f"  Trend:         {metrics['gradients'].get('trend', 0):.6f}")
+        print(f"  Volatility:    {metrics['gradients'].get('volatility', 0):.4f}")
+        print("="*60 + "\n")
+
     def _run_epoch(
         self,
         batch_iterator: Iterator[Dict[str, jnp.ndarray]],
@@ -1280,9 +1344,21 @@ class AGITrainer:
             
             if accum_steps > 1 and self.gradient_accumulator is not None:
                 # Gradient accumulation mode using BatchGradientAccumulator
+                self.compute_tracker.start_batch()
+                
+                structured_batch = {
+                    "inputs": {"text": batch["input_ids"]},
+                    "multimodal_inputs": batch.get("multimodal_inputs"),
+                    "targets": batch["targets"],
+                }
+                
                 is_complete = self.gradient_accumulator.accumulate(
-                    self.params, batch, train_rng
+                    self.params, structured_batch, train_rng
                 )
+                
+                # Track tokens processed
+                num_tokens = int(jnp.sum(batch["targets"] != 0))
+                self.compute_tracker.end_batch(num_tokens, batch["input_ids"].shape[0])
                 
                 # Memory profiling - after backward pass
                 self.memory_profiler.snapshot(self.step_count, phase="backward")
@@ -1291,6 +1367,13 @@ class AGITrainer:
                 if is_complete:
                     avg_grads = self.gradient_accumulator.get_accumulated_grads()
                     avg_loss = self.gradient_accumulator.get_accumulated_loss()
+                    
+                    # Track gradient health
+                    grad_metrics = self.gradient_monitor.compute_gradient_metrics(avg_grads)
+                    if grad_metrics.has_nan or grad_metrics.has_inf:
+                        logger.warning(f"NaN/Inf gradients at batch {batch_idx}, skipping...")
+                        self.gradient_accumulator.reset()
+                        continue
                     
                     # Skip if NaN/Inf loss
                     if jnp.isnan(avg_loss) or jnp.isinf(avg_loss):
@@ -1307,23 +1390,35 @@ class AGITrainer:
                     # Memory profiling - after optimizer step
                     self.memory_profiler.snapshot(self.step_count, phase="optimizer")
                     
+                    # Track perplexity
+                    self.perplexity_tracker.update(float(avg_loss), num_tokens * accum_steps)
+                    
                     epoch_losses.append(float(avg_loss))
                     self.training_losses.append(float(avg_loss))
                     self.step_count += 1
                     
-                    if batch_idx % (50 * accum_steps) == 0:
+                    # Log every 50 optimization steps (not micro-batches)
+                    if self.step_count % 50 == 0:
+                        ppl = self.perplexity_tracker.get_perplexity()
                         logger.info(
-                            f"  Batch {batch_idx + 1}/{num_batches_estimate}, "
-                            f"Loss: {avg_loss:.4f} (accum={accum_steps})"
+                            f"  Step {self.step_count}, "
+                            f"Loss: {avg_loss:.4f}, PPL: {ppl:.2f} (accum={accum_steps})"
                         )
                     
                     # Reset for next accumulation cycle
                     self.gradient_accumulator.reset()
             else:
                 # Standard training (no accumulation)
-                self.params, self.opt_state, loss, _ = self.train_step(
+                # Track compute efficiency
+                self.compute_tracker.start_batch()
+                
+                self.params, self.opt_state, loss, model_output = self.train_step(
                     self.params, self.opt_state, batch, train_rng
                 )
+                
+                # Track compute efficiency
+                num_tokens = int(jnp.sum(batch["targets"] != 0))
+                self.compute_tracker.end_batch(num_tokens, batch["input_ids"].shape[0])
                 
                 # Memory profiling - after full step
                 self.memory_profiler.snapshot(self.step_count, phase="optimizer")
@@ -1332,15 +1427,37 @@ class AGITrainer:
                     logger.warning(f"NaN/Inf loss detected at batch {batch_idx}, skipping...")
                     continue
                 
+                # Track perplexity
+                self.perplexity_tracker.update(float(loss), num_tokens)
+                
+                # Track calibration if logits available
+                if model_output is not None and "logits" in model_output:
+                    self.calibration_tracker.update(
+                        model_output["logits"], batch["targets"]
+                    )
+                
                 epoch_losses.append(float(loss))
                 self.training_losses.append(float(loss))
                 self.step_count += 1
                 
+                # Log with perplexity
                 if batch_idx % 50 == 0:
-                    logger.info(f"  Batch {batch_idx + 1}/{num_batches_estimate}, Loss: {loss:.4f}")
+                    ppl = self.perplexity_tracker.get_perplexity()
+                    logger.info(
+                        f"  Batch {batch_idx + 1}/{num_batches_estimate}, "
+                        f"Loss: {loss:.4f}, PPL: {ppl:.2f}"
+                    )
         
         if retrieval_augmented_count > 0:
             logger.info(f"  Retrieval augmented batches: {retrieval_augmented_count}/{len(epoch_losses)}")
+        
+        # Log production metrics summary
+        ppl = self.perplexity_tracker.get_perplexity()
+        compute_metrics = self.compute_tracker.compute()
+        logger.info(
+            f"  Epoch metrics: PPL={ppl:.2f}, "
+            f"Throughput={compute_metrics.tokens_per_second:.0f} tok/s"
+        )
         
         # Log memory summary at end of epoch
         if self.memory_profiler.enabled:

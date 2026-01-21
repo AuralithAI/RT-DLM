@@ -45,13 +45,12 @@ class BatchGradientAccumulator:
     4. Applying the optimizer update once
     
     Example:
-        accumulator = GradientAccumulator(
+        accumulator = BatchGradientAccumulator(
             accumulation_steps=4,
             loss_fn=loss_fn,
             model_apply_fn=model.apply,
         )
         
-        # Effective batch = micro_batch_size * accumulation_steps
         for micro_batch in micro_batches:
             done = accumulator.accumulate(params, micro_batch, rng)
             if done:
@@ -66,6 +65,14 @@ class BatchGradientAccumulator:
         loss_fn: Callable,
         model_apply_fn: Callable,
     ):
+        """
+        Initialize gradient accumulator.
+        
+        Args:
+            accumulation_steps: Number of micro-batches to accumulate (must be >= 1)
+            loss_fn: Loss function with signature (outputs, batch) -> scalar
+            model_apply_fn: Model forward function with signature (params, rng, **batch) -> outputs
+        """
         if accumulation_steps < 1:
             raise ValueError("accumulation_steps must be >= 1")
         
@@ -118,6 +125,19 @@ class BatchGradientAccumulator:
         
         return self._current_step >= self.accumulation_steps
     
+    def _apply_model(self, params: Dict, rng: jnp.ndarray, batch: Dict) -> Any:
+        """Call model_apply_fn with appropriately structured inputs."""
+        if isinstance(batch, dict) and ("inputs" in batch or "multimodal_inputs" in batch):
+            inputs = batch.get("inputs")
+            multimodal_inputs = batch.get("multimodal_inputs")
+            return self.model_apply_fn(
+                params, rng, 
+                inputs=inputs, 
+                multimodal_inputs=multimodal_inputs,
+                return_reasoning=True
+            )
+        return self.model_apply_fn(params, rng, **batch)
+    
     def _compute_grads(
         self,
         params: Dict,
@@ -126,7 +146,7 @@ class BatchGradientAccumulator:
     ) -> Tuple[float, Dict]:
         """Compute loss and gradients for a single micro-batch."""
         def loss_wrapper(params):
-            outputs = self.model_apply_fn(params, rng, **batch)
+            outputs = self._apply_model(params, rng, batch)
             return self.loss_fn(outputs, batch)
         
         loss, grads = jax.value_and_grad(loss_wrapper)(params)
@@ -175,7 +195,7 @@ def create_accumulating_train_step(
     Create a training step function with gradient accumulation.
     
     Args:
-        model_apply_fn: Model forward function
+        model_apply_fn: Model forward function with signature (params, rng, **batch) -> outputs
         loss_fn: Loss function (outputs, batch) -> scalar
         optimizer: Optax optimizer
         accumulation_steps: Number of micro-batches to accumulate
@@ -184,11 +204,24 @@ def create_accumulating_train_step(
         Training step function
     """
     
+    def _apply_model(params, rng, batch):
+        """Call model_apply_fn with appropriately structured inputs."""
+        if isinstance(batch, dict) and ("inputs" in batch or "multimodal_inputs" in batch):
+            inputs = batch.get("inputs")
+            multimodal_inputs = batch.get("multimodal_inputs")
+            return model_apply_fn(
+                params, rng, 
+                inputs=inputs, 
+                multimodal_inputs=multimodal_inputs,
+                return_reasoning=True
+            )
+        return model_apply_fn(params, rng, **batch)
+    
     @jax.jit
     def compute_grads(params, batch, rng):
         """Compute loss and gradients for a micro-batch."""
         def loss_wrapper(params):
-            outputs = model_apply_fn(params, rng, **batch)
+            outputs = _apply_model(params, rng, batch)
             return loss_fn(outputs, batch)
         
         loss, grads = jax.value_and_grad(loss_wrapper)(params)
