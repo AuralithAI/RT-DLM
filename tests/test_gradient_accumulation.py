@@ -401,8 +401,18 @@ class TestNaNGradientHandling:
         batch1 = {"input": jnp.ones((3, 4)) * -1, "labels": jnp.zeros((3, 2))}
         accumulator.accumulate(params, batch1, rng)
         
-        # Second batch produces valid gradients
+        # Second batch produces valid gradients - compute reference gradients
         batch2 = {"input": jnp.ones((3, 4)), "labels": jnp.zeros((3, 2))}
+        
+        # Compute expected gradients from the valid batch only (for comparison)
+        reference_accumulator = BatchGradientAccumulator(
+            accumulation_steps=1,
+            loss_fn=mock_loss_fn,
+            model_apply_fn=mock_model_apply_fn,
+        )
+        reference_accumulator.accumulate(params, batch2, rng)
+        reference_grads = reference_accumulator.get_accumulated_grads()
+        
         done = accumulator.accumulate(params, batch2, rng)
         
         assert done
@@ -413,6 +423,16 @@ class TestNaNGradientHandling:
         # Verify no NaN values in gradients
         for key in grads:
             assert not jnp.any(jnp.isnan(grads[key])), f"Gradient '{key}' contains NaN values"
+        
+        # Verify valid gradients are preserved (not all zeros)
+        # The accumulated grads should be half of reference grads (averaged over 2 steps)
+        for key in grads:
+            assert not jnp.allclose(grads[key], 0.0), f"Gradient '{key}' was incorrectly zeroed out"
+            # Check that the valid gradients contributed to the accumulation
+            # Since batch1 produces NaN (becomes 0) and batch2 is valid, accumulated should be reference/2
+            expected = reference_grads[key] / 2.0
+            assert jnp.allclose(grads[key], expected, atol=1e-5), \
+                f"Gradient '{key}' doesn't match expected value from valid batch"
     
     def test_all_nan_gradients_result_in_zero_grads(self):
         """Test that when all micro-batches produce NaN, result is zero gradients."""
