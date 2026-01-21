@@ -800,6 +800,25 @@ trainer = AGITrainer(config)
 
 ### Quantum Simulation Scalability
 
+> **⚠️ IMPORTANT: Classical Simulation Only**
+>
+> The quantum modules in RT-DLM are **classical simulations** of quantum algorithms, NOT actual 
+> quantum hardware execution. These modules use NumPy/JAX to mathematically simulate quantum 
+> gates (CNOT, Hadamard, Phase, rotation gates) on classical CPUs/GPUs.
+>
+> **Current Status:**
+> - Research exploration of quantum-inspired attention and optimization
+> - Classical approximation of quantum concepts (superposition, entanglement)
+> - No quantum hardware integration
+>
+> **Future Quantum Hardware Integration:**
+> - IBM Qiskit, AWS Braket, or Google Cirq for real quantum processors
+> - Timeline: Real quantum utility for AI is likely 5-10+ years away
+> - Architecture designed to swap simulation for hardware when available
+>
+> **Disabling Quantum Simulation:**
+> Set `quantum_layers=0` in AGIConfig for faster training without quantum overhead.
+
 For quantum simulation, tensor networks enable 100+ qubit simulation:
 
 ```
@@ -821,6 +840,28 @@ For quantum simulation, tensor networks enable 100+ qubit simulation:
 │                                        - TreeTensorNetwork      │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+#### Quantum Simulation Cost Analysis
+
+| Qubits | Mode | Memory | Parameters | Recommendation |
+|--------|------|--------|------------|----------------|
+| ≤16 | Full State | 1 MB | ~200 | Development/testing |
+| 17-24 | Full State | 256 MB - 16 GB | ~300 | Research experiments |
+| 25-30 | Full State + Sparse | 16 GB+ | ~400 | Requires high-memory GPU |
+| 30+ | Tensor Network | O(n×χ²) ≈ 6.4 MB | ~500 | Required for 30+ qubits |
+
+**To estimate overhead programmatically:**
+```python
+from core.quantum import estimate_quantum_overhead
+
+# Get memory/compute estimates
+estimate = estimate_quantum_overhead(num_qubits=16, num_layers=4, d_model=384)
+print(f"Memory: {estimate['state_memory_mb']:.2f} MB")
+print(f"Parameters: {estimate['total_trainable_params']}")
+```
+
+**Benchmarking recommendation:** Compare training with `quantum_layers=0` vs `quantum_layers=4` 
+to measure actual impact on model quality vs computational cost for your specific use case.
 
 ### Configuration Summary
 

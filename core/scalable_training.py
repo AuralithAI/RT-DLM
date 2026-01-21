@@ -50,10 +50,8 @@ class ScalableMesh:
         self.devices = jax.devices()
         self.num_devices = len(self.devices)
         
-        # Auto-configure if not explicitly set
         self._auto_configure()
         
-        # Create mesh
         self.mesh = self._create_mesh()
         
         logger.info("ScalableMesh initialized:")
@@ -64,7 +62,6 @@ class ScalableMesh:
         
     def _auto_configure(self):
         """Auto-configure parallelism based on device count"""
-        # Data parallel size (how many model replicas)
         if self.config.tensor_parallel:
             self.tensor_parallel_size = min(
                 self.config.tensor_parallel_size, 
@@ -81,7 +78,6 @@ class ScalableMesh:
         else:
             self.pipeline_parallel_size = 1
             
-        # Remaining devices for data parallelism
         self.data_parallel_size = max(
             1,
             self.num_devices // (self.tensor_parallel_size * self.pipeline_parallel_size)
@@ -103,7 +99,6 @@ class ScalableMesh:
             mesh_shape = (self.num_devices,)
             axis_names = ("data",)
         elif self.tensor_parallel_size > 1 and self.pipeline_parallel_size > 1:
-            # 3D mesh
             mesh_shape = (
                 self.data_parallel_size,
                 self.tensor_parallel_size,
@@ -111,15 +106,12 @@ class ScalableMesh:
             )
             axis_names = ("data", "tensor", "pipeline")
         elif self.tensor_parallel_size > 1:
-            # 2D mesh: data + tensor
             mesh_shape = (self.data_parallel_size, self.tensor_parallel_size)
             axis_names = ("data", "tensor")
         elif self.pipeline_parallel_size > 1:
-            # 2D mesh: data + pipeline
             mesh_shape = (self.data_parallel_size, self.pipeline_parallel_size)
             axis_names = ("data", "pipeline")
         else:
-            # 1D mesh: data only
             mesh_shape = (self.data_parallel_size,)
             axis_names = ("data",)
             
@@ -163,36 +155,29 @@ def get_param_sharding_spec(
     - Biases: Replicate (no sharding)
     """
     if not mesh.has_tensor_parallel:
-        return P()  # Replicate everything
+        return P()
     
-    # Identify parameter type from name
     name_lower = param_name.lower()
     
-    # Embedding layers - shard vocab dimension
     if "embed" in name_lower and len(param_shape) == 2:
-        return P(None, "tensor")  # [vocab, hidden] -> shard hidden
+        return P(None, "tensor")
     
-    # Attention projections - shard output/heads
     if any(x in name_lower for x in ["query", "key", "value", "q_proj", "k_proj", "v_proj"]):
         if len(param_shape) == 2:
-            return P(None, "tensor")  # [in, out] -> shard out
+            return P(None, "tensor") 
     
-    # Attention output projection - shard input
     if "output" in name_lower or "o_proj" in name_lower:
         if len(param_shape) == 2:
-            return P("tensor", None)  # [in, out] -> shard in
+            return P("tensor", None)
     
-    # MLP first layer (expand) - shard output
     if any(x in name_lower for x in ["fc1", "up_proj", "gate_proj", "w1", "w3"]):
         if len(param_shape) == 2:
             return P(None, "tensor")
     
-    # MLP second layer (contract) - shard input
     if any(x in name_lower for x in ["fc2", "down_proj", "w2"]):
         if len(param_shape) == 2:
             return P("tensor", None)
     
-    # Default: replicate
     return P()
 
 
@@ -210,13 +195,11 @@ def create_sharded_params(
         param_name = "/".join(str(p) for p in path)
         return get_param_sharding_spec(param_name, param.shape, mesh)
     
-    # Create sharding specs
     param_specs = jax.tree_util.tree_map_with_path(
         get_spec_for_path,
         params
     )
     
-    # Convert specs to shardings
     param_shardings = jax.tree_util.tree_map(
         lambda spec: mesh.get_sharding(spec),
         param_specs
@@ -272,7 +255,6 @@ def create_scalable_train_step(
     
     # Wrap with pmap for data parallelism
     if mesh.is_distributed and not mesh.has_tensor_parallel:
-        # Pure data parallelism - use pmap
         train_step = jax.pmap(
             train_step,
             axis_name="data",
@@ -324,23 +306,18 @@ def setup_scalable_training(
     Returns:
         Tuple of (mesh, initial_params, train_step_fn)
     """
-    # Create mesh
     mesh = create_scalable_mesh(config)
     
-    # Initialize model
     rng = jax.random.PRNGKey(42)
     params = model_fn.init(rng, **sample_batch)
     
-    # Create param shardings if using tensor parallelism
     if mesh.has_tensor_parallel:
         params, param_shardings = create_sharded_params(params, mesh)
-        # Apply shardings
         params = jax.tree_util.tree_map(
             lambda p, s: jax.device_put(p, s),
             params, param_shardings
         )
     elif mesh.is_distributed:
-        # Replicate params across devices for data parallelism
         params = jax.device_put_replicated(params, jax.devices()[:mesh.data_parallel_size])
     
     logger.info(f"Model initialized with {sum(p.size for p in jax.tree_util.tree_leaves(params)):,} parameters")
@@ -410,7 +387,7 @@ def recommend_parallelism(
         num_devices = jax.device_count()
     
     # Can model fit on single device?
-    single_device_fit = model_memory_gb < device_memory_gb * 0.8  # 80% threshold
+    single_device_fit = model_memory_gb < device_memory_gb * 0.8
     
     if single_device_fit:
         if num_devices == 1:

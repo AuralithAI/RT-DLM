@@ -1,12 +1,15 @@
 """
-Tensor Network Approximations for Quantum Simulation
+Tensor Network Approximations for Quantum Simulation.
 
-Implements tensor network methods for efficient quantum state representation:
+IMPORTANT: CLASSICAL SIMULATION ONLY - Not actual quantum hardware.
+Uses tensor network decompositions for efficient simulation of 100+ qubits.
+
+Implements:
 - Matrix Product States (MPS) for 1D systems
 - Tree Tensor Networks (TTN) for hierarchical systems
 - MERA for scale-invariant systems
 
-Used by QuantumAGICore for 100+ qubit simulation.
+To disable: Set config.quantum_layers=0 in AGIConfig.
 """
 
 import jax
@@ -15,7 +18,6 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
 import logging
 
-# Import config from config folder
 from config.tensor_network_config import TensorNetworkConfig
 
 logger = logging.getLogger(__name__)

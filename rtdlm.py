@@ -944,8 +944,22 @@ class RTDLMAGISystem(hk.Module):
         self.reasoning_engine = ReasoningEngine(config)
         
         # Quantum-enhanced processing
-        if config.quantum_layers > 0:
+        self.use_quantum = config.quantum_layers > 0
+        if self.use_quantum:
             self.quantum_core = QuantumAGICore(config)
+            self.quantum_optimization = QubitAssistedOptimization(config.d_model)
+            self.vqc = VariationalQuantumCircuit(
+                num_qubits=min(6, config.quantum_layers + 4), 
+                num_layers=config.quantum_layers
+            )
+            self.vqc_input_projection = hk.Linear(
+                2 ** min(6, config.quantum_layers + 4), 
+                name="vqc_input_projection"
+            )
+            self.vqc_output_projection = hk.Linear(
+                config.d_model, 
+                name="vqc_output_projection"
+            )
         
         # Consciousness simulation
         if config.consciousness_simulation:
@@ -953,26 +967,6 @@ class RTDLMAGISystem(hk.Module):
         
         # Scientific discovery engine
         self.scientific_discovery = ScientificDiscoveryEngine(config.d_model)
-        
-        # Quantum optimization capabilities
-        self.quantum_optimization = QubitAssistedOptimization(config.d_model)
-        
-        # Variational Quantum Circuit for feature optimization
-        # Use 6 qubits and 3 layers for balanced expressibility and efficiency
-        self.vqc = VariationalQuantumCircuit(
-            num_qubits=min(6, config.quantum_layers + 4), 
-            num_layers=config.quantum_layers
-        )
-        
-        # VQC projection layers
-        self.vqc_input_projection = hk.Linear(
-            2 ** min(6, config.quantum_layers + 4), 
-            name="vqc_input_projection"
-        )
-        self.vqc_output_projection = hk.Linear(
-            config.d_model, 
-            name="vqc_output_projection"
-        )
         
         # Self-evolving architecture
         self.self_evolution = SelfEvolvingArchitecture(config.d_model)
@@ -1111,26 +1105,25 @@ class RTDLMAGISystem(hk.Module):
         # Final AGI integration
         integrated_features = self.agi_integrator(all_features)
         
-        # Quantum optimization processing with Variational Quantum Circuit
+        # Quantum optimization processing
         quantum_results = None
-        try:
-            # Standard quantum-assisted optimization
-            quantum_optimal_decision, quantum_search_probs = self.quantum_optimization(
-                hybrid_features, reasoning_result
-            )
-            
-            # Enhanced VQC-based optimization for feature refinement
-            vqc_enhanced_features = self._apply_vqc_optimization(
-                integrated_features, quantum_search_probs
-            )
-            
-            quantum_results = {
-                "optimal_decision": quantum_optimal_decision,
-                "search_probabilities": quantum_search_probs,
-                "vqc_enhanced_features": vqc_enhanced_features
-            }
-        except Exception as e:
-            logger.warning(f"Quantum processing failed: {e}")
+        if self.use_quantum:
+            try:
+                quantum_optimal_decision, quantum_search_probs = self.quantum_optimization(
+                    hybrid_features, reasoning_result
+                )
+                
+                vqc_enhanced_features = self._apply_vqc_optimization(
+                    integrated_features, quantum_search_probs
+                )
+                
+                quantum_results = {
+                    "optimal_decision": quantum_optimal_decision,
+                    "search_probabilities": quantum_search_probs,
+                    "vqc_enhanced_features": vqc_enhanced_features
+                }
+            except Exception as e:
+                logger.warning(f"Quantum processing failed: {e}")
         
         # Self-evolving architecture processing
         architecture_results = None

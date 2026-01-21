@@ -1,10 +1,15 @@
 """
-Extended Quantum Simulation for RT-DLM
+Extended Quantum Simulation for RT-DLM.
+
+IMPORTANT: CLASSICAL SIMULATION ONLY - Not actual quantum hardware.
+Uses JAX/NumPy to mathematically simulate quantum states and gates.
 
 Extends quantum simulation beyond 32 qubits using:
 - Chunked/partitioned simulation
 - Sparse state vector representation
 - Tensor network approximations
+
+To disable: Set config.quantum_layers=0 in AGIConfig.
 """
 
 import jax

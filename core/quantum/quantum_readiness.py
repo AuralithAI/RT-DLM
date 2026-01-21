@@ -1,6 +1,11 @@
 """
-Quantum Readiness Components for RT-DLM AGI
-Quantum-enhanced neural networks and hybrid classical-quantum computation.
+Quantum Readiness Components for RT-DLM AGI.
+
+IMPORTANT: CLASSICAL SIMULATION ONLY - Not actual quantum hardware.
+Provides quantum-inspired optimization and variational circuits using
+JAX/NumPy mathematical simulation of quantum gates.
+
+To disable: Set config.quantum_layers=0 in AGIConfig.
 """
 
 import haiku as hk
