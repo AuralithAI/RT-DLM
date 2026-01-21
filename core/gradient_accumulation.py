@@ -13,6 +13,26 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _zero_nan_grads(grads: Dict) -> Dict:
+    """
+    Replace NaN values in gradients with zeros.
+    
+    Prevents NaN gradients from contaminating training updates by replacing
+    any NaN values with zeros. This is essential for gradient accumulation
+    to prevent NaN from one micro-batch affecting valid gradients from others.
+    
+    Args:
+        grads: Gradient PyTree that may contain NaN values
+        
+    Returns:
+        Gradient PyTree with NaN values replaced by zeros
+    """
+    return jax.tree_util.tree_map(
+        lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x),
+        grads
+    )
+
+
 class BatchGradientAccumulator:
     """
     Gradient accumulator for large effective batch sizes.
@@ -110,6 +130,13 @@ class BatchGradientAccumulator:
             return self.loss_fn(outputs, batch)
         
         loss, grads = jax.value_and_grad(loss_wrapper)(params)
+        
+        # NaN check for gradients - zero out NaN gradients to prevent contamination
+        grads = _zero_nan_grads(grads)
+        
+        # NaN check for loss - replace NaN loss with 0.0 to avoid contaminating averages
+        loss = jnp.where(jnp.isnan(loss), jnp.zeros_like(loss), loss)
+        
         return loss, grads
     
     def get_accumulated_grads(self) -> Dict:
@@ -165,6 +192,13 @@ def create_accumulating_train_step(
             return loss_fn(outputs, batch)
         
         loss, grads = jax.value_and_grad(loss_wrapper)(params)
+        
+        # NaN check for gradients - zero out NaN gradients to prevent contamination
+        grads = _zero_nan_grads(grads)
+        
+        # NaN check for loss - replace NaN loss with 0.0 to avoid contaminating averages
+        loss = jnp.where(jnp.isnan(loss), jnp.zeros_like(loss), loss)
+        
         return loss, grads
     
     @jax.jit
