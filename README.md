@@ -1,4 +1,4 @@
-# RT-DLM: Real-Time Deep Learning Model
+# RT-DLM: Real-Time Deep Learning Architecture and Training System
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![JAX](https://img.shields.io/badge/JAX-0.4.35+-orange.svg)](https://github.com/google/jax)
