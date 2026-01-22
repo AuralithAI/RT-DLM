@@ -233,6 +233,11 @@ class AGIConfig:
         self.gradient_accumulation_steps = kwargs.get("gradient_accumulation_steps", 1)  # Gradient accumulation
         self.enable_memory_profiling = kwargs.get("enable_memory_profiling", False)  # Enable memory profiling
         
+        # Production Evaluation Metrics
+        self.enable_fairness_tracking = kwargs.get("enable_fairness_tracking", False)  # Track fairness metrics
+        self.calibration_bins = kwargs.get("calibration_bins", 10)  # Bins for calibration tracking
+        self.perplexity_window = kwargs.get("perplexity_window", 100)  # Window for running perplexity
+        
         # Extended Quantum Simulation
         self.quantum_max_qubits = kwargs.get("quantum_max_qubits", 64)  # Extended qubit simulation limit
         self.quantum_chunked_simulation = kwargs.get("quantum_chunked_simulation", True)  # Enable chunked simulation

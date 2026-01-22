@@ -368,6 +368,9 @@ train.py
 ├── core/model_parallel.py               # Tensor/pipeline parallelism
 ├── core/training_utils.py               # Mixed precision, checkpointing
 ├── core/evaluation.py                   # Perplexity, gradient monitoring
+├── core/benchmark_evaluation.py         # Production metrics (ECE, FLOPs, benchmarks)
+├── core/gradient_accumulation.py        # Gradient accumulation for large batches
+├── core/memory_profiler.py              # GPU memory profiling & optimization
 └── core/checkpoint_manager.py
 
 modules/capabilities/integrated_agi_system.py
@@ -421,6 +424,64 @@ RT-DLM provides a comprehensive evaluation system for training completeness.
 ### Usage
 
 See `core/evaluation.py` for the `TrainingEvaluator` API. Metrics tracked include perplexity, token accuracy, gradient norms, and throughput.
+
+### Production Metrics (core/benchmark_evaluation.py)
+
+Advanced metrics for production model evaluation:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   BENCHMARK EVALUATION                          │
+│                (core/benchmark_evaluation.py)                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────────────┐  ┌─────────────────────────────────┐  │
+│  │  PerplexityTracker   │  │     CalibrationTracker          │  │
+│  │                      │  │                                 │  │
+│  │  • Window-based PPL  │  │  • ECE (Expected Calibration)   │  │
+│  │  • Rolling averages  │  │  • MCE (Maximum Calibration)    │  │
+│  │  • Step tracking     │  │  • Bin-wise analysis            │  │
+│  │  • Best PPL memory   │  │  • Reliability diagrams         │  │
+│  └──────────────────────┘  └─────────────────────────────────┘  │
+│                                                                 │
+│  ┌──────────────────────┐  ┌─────────────────────────────────┐  │
+│  │ ComputeEfficiency    │  │     BenchmarkEvaluator          │  │
+│  │     Tracker          │  │                                 │  │
+│  │                      │  │  • MMLU-style evaluation        │  │
+│  │  • Tokens/second     │  │  • Multiple choice scoring      │  │
+│  │  • FLOPs estimation  │  │  • Per-category breakdown       │  │
+│  │  • Throughput stats  │  │  • Zero-shot/few-shot modes     │  │
+│  │  • GPU utilization   │  │  • Chain-of-thought support     │  │
+│  └──────────────────────┘  └─────────────────────────────────┘  │
+│                                                                 │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │              ProductionMetrics (Dataclass)               │   │
+│  │                                                          │   │
+│  │  Aggregates all metrics into a single container:         │   │
+│  │  • perplexity, tokens_per_second, estimated_flops        │   │
+│  │  • ece, mce, benchmark_accuracy, fairness_score          │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Features:**
+
+| Tracker | Metric | Purpose |
+|---------|--------|---------|
+| `PerplexityTracker` | Perplexity | Measure model uncertainty |
+| `CalibrationTracker` | ECE, MCE | Confidence reliability |
+| `ComputeEfficiencyTracker` | Tokens/sec, FLOPs | Performance monitoring |
+| `BenchmarkEvaluator` | Accuracy | Standard benchmark evaluation |
+
+**Integration with AGITrainer:**
+
+```python
+# Access production metrics during training
+metrics = trainer.get_production_metrics()
+print(f"Perplexity: {metrics['perplexity']:.2f}")
+print(f"Tokens/sec: {metrics['compute']['tokens_per_second']:.1f}")
+print(f"ECE: {metrics['calibration']['ece']:.4f}")
+```
 
 ## Advanced Attention System
 
