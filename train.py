@@ -55,11 +55,7 @@ from core.gradient_accumulation import (
 )
 
 # Evaluation metrics and tracking
-from core.training.evaluation import (
-    EvaluationMetrics,
-    TrainingEvaluator,
-    GradientMonitor,
-)
+from core.training.evaluation import GradientMonitor
 from core.benchmark_evaluation import (
     PerplexityTracker,
     CalibrationTracker,
