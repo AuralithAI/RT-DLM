@@ -478,9 +478,9 @@ Advanced metrics for production model evaluation:
 ```python
 # Access production metrics during training
 metrics = trainer.get_production_metrics()
-print(f"Perplexity: {metrics.perplexity:.2f}")
-print(f"Tokens/sec: {metrics.tokens_per_second:.1f}")
-print(f"ECE: {metrics.ece:.4f}")
+print(f"Perplexity: {metrics['perplexity']:.2f}")
+print(f"Tokens/sec: {metrics['compute']['tokens_per_second']:.1f}")
+print(f"ECE: {metrics['calibration']['ece']:.4f}")
 ```
 
 ## Advanced Attention System
