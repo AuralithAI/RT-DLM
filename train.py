@@ -139,6 +139,8 @@ class AGITrainer:
         # Gradient accumulation settings
         self.gradient_accumulation_steps = getattr(config, 'gradient_accumulation_steps', 1)
         self.gradient_accumulator = None
+        self._accumulated_tokens = 0
+        self._accumulated_samples = 0
         if self.gradient_accumulation_steps > 1:
             logger.info(f"Gradient accumulation enabled: {self.gradient_accumulation_steps} steps")
             effective_batch = calculate_effective_batch_size(
@@ -1342,7 +1344,12 @@ class AGITrainer:
             
             if accum_steps > 1 and self.gradient_accumulator is not None:
                 # Gradient accumulation mode using BatchGradientAccumulator
-                self.compute_tracker.start_batch()
+                
+                # Start timing at beginning of accumulation cycle
+                if self.gradient_accumulator.current_step == 0:
+                    self.compute_tracker.start_batch()
+                    self._accumulated_tokens = 0
+                    self._accumulated_samples = 0
                 
                 structured_batch = {
                     "inputs": {"text": batch["input_ids"]},
@@ -1354,15 +1361,18 @@ class AGITrainer:
                     self.params, structured_batch, train_rng
                 )
                 
-                # Track tokens processed
+                # Track tokens from this batch
                 num_tokens = int(jnp.sum(batch["targets"] != 0))
-                self.compute_tracker.end_batch(num_tokens, batch["input_ids"].shape[0])
+                self._accumulated_tokens += num_tokens
+                self._accumulated_samples += batch["input_ids"].shape[0]
                 
                 # Memory profiling - after backward pass
                 self.memory_profiler.snapshot(self.step_count, phase="backward")
                 
                 # Apply updates when accumulation is complete
                 if is_complete:
+                    self.compute_tracker.end_batch(self._accumulated_tokens, self._accumulated_samples)
+                    
                     avg_grads = self.gradient_accumulator.get_accumulated_grads()
                     avg_loss = self.gradient_accumulator.get_accumulated_loss()
                     
@@ -1389,7 +1399,7 @@ class AGITrainer:
                     self.memory_profiler.snapshot(self.step_count, phase="optimizer")
                     
                     # Track perplexity
-                    self.perplexity_tracker.update(float(avg_loss), num_tokens * accum_steps)
+                    self.perplexity_tracker.update(float(avg_loss), self._accumulated_tokens)
                     
                     epoch_losses.append(float(avg_loss))
                     self.training_losses.append(float(avg_loss))
