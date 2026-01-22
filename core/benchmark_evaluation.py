@@ -822,7 +822,10 @@ class PerplexityTracker:
         total_loss = sum(l * t for l, t in zip(self.losses, self.token_counts))
         total_tokens = sum(self.token_counts)
         
-        avg_loss = total_loss / (total_tokens + 1e-8)
+        if total_tokens == 0:
+            return float('inf')
+        
+        avg_loss = total_loss / total_tokens
         perplexity = float(np.exp(avg_loss))
         
         # Clip to reasonable range
@@ -836,7 +839,10 @@ class PerplexityTracker:
         total_loss = sum(l * t for l, t in zip(self.losses, self.token_counts))
         total_tokens = sum(self.token_counts)
         
-        return total_loss / (total_tokens + 1e-8)
+        if total_tokens == 0:
+            return float('inf')
+        
+        return total_loss / total_tokens
 
 
 # =============================================================================
