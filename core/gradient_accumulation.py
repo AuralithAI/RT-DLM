@@ -64,6 +64,7 @@ class BatchGradientAccumulator:
         accumulation_steps: int,
         loss_fn: Callable,
         model_apply_fn: Callable,
+        return_reasoning: bool = True,
     ):
         """
         Initialize gradient accumulator.
@@ -72,6 +73,7 @@ class BatchGradientAccumulator:
             accumulation_steps: Number of micro-batches to accumulate (must be >= 1)
             loss_fn: Loss function with signature (outputs, batch) -> scalar
             model_apply_fn: Model forward function with signature (params, rng, **batch) -> outputs
+            return_reasoning: Whether to pass return_reasoning=True to the model.
         """
         if accumulation_steps < 1:
             raise ValueError("accumulation_steps must be >= 1")
@@ -79,6 +81,7 @@ class BatchGradientAccumulator:
         self.accumulation_steps = accumulation_steps
         self.loss_fn = loss_fn
         self.model_apply_fn = model_apply_fn
+        self.return_reasoning = return_reasoning
         
         self._accumulated_grads = None
         self._accumulated_loss = 0.0
@@ -128,14 +131,15 @@ class BatchGradientAccumulator:
     def _apply_model(self, params: Dict, rng: jnp.ndarray, batch: Dict) -> Any:
         """Call model_apply_fn with appropriately structured inputs."""
         if isinstance(batch, dict) and ("inputs" in batch or "multimodal_inputs" in batch):
-            inputs = batch.get("inputs")
-            multimodal_inputs = batch.get("multimodal_inputs")
-            return self.model_apply_fn(
-                params, rng, 
-                inputs=inputs, 
-                multimodal_inputs=multimodal_inputs,
-                return_reasoning=True
-            )
+            # Build kwargs dynamically to avoid passing unexpected parameters
+            kwargs: Dict[str, Any] = {}
+            if "inputs" in batch:
+                kwargs["inputs"] = batch["inputs"]
+            if "multimodal_inputs" in batch:
+                kwargs["multimodal_inputs"] = batch["multimodal_inputs"]
+            if self.return_reasoning:
+                kwargs["return_reasoning"] = True
+            return self.model_apply_fn(params, rng, **kwargs)
         return self.model_apply_fn(params, rng, **batch)
     
     def _compute_grads(
@@ -190,6 +194,7 @@ def create_accumulating_train_step(
     loss_fn: Callable,
     optimizer,
     accumulation_steps: int = 1,
+    return_reasoning: bool = True,
 ) -> Callable:
     """
     Create a training step function with gradient accumulation.
@@ -199,6 +204,7 @@ def create_accumulating_train_step(
         loss_fn: Loss function (outputs, batch) -> scalar
         optimizer: Optax optimizer
         accumulation_steps: Number of micro-batches to accumulate
+        return_reasoning: Whether to pass return_reasoning=True to the model.
         
     Returns:
         Training step function
@@ -207,14 +213,15 @@ def create_accumulating_train_step(
     def _apply_model(params, rng, batch):
         """Call model_apply_fn with appropriately structured inputs."""
         if isinstance(batch, dict) and ("inputs" in batch or "multimodal_inputs" in batch):
-            inputs = batch.get("inputs")
-            multimodal_inputs = batch.get("multimodal_inputs")
-            return model_apply_fn(
-                params, rng, 
-                inputs=inputs, 
-                multimodal_inputs=multimodal_inputs,
-                return_reasoning=True
-            )
+            # Build kwargs dynamically to avoid passing unexpected parameters
+            kwargs: Dict[str, Any] = {}
+            if "inputs" in batch:
+                kwargs["inputs"] = batch["inputs"]
+            if "multimodal_inputs" in batch:
+                kwargs["multimodal_inputs"] = batch["multimodal_inputs"]
+            if return_reasoning:
+                kwargs["return_reasoning"] = True
+            return model_apply_fn(params, rng, **kwargs)
         return model_apply_fn(params, rng, **batch)
     
     @jax.jit
