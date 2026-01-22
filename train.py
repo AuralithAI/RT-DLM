@@ -160,8 +160,10 @@ class AGITrainer:
         self._embedding_fn: Optional[Callable[[List[str]], np.ndarray]] = None
         
         # Production evaluation metrics
-        self.perplexity_tracker = PerplexityTracker(window_size=100)
-        self.calibration_tracker = CalibrationTracker(num_bins=10)
+        perplexity_window = getattr(config, 'perplexity_window', 100)
+        calibration_bins = getattr(config, 'calibration_bins', 10)
+        self.perplexity_tracker = PerplexityTracker(window_size=perplexity_window)
+        self.calibration_tracker = CalibrationTracker(num_bins=calibration_bins)
         self.compute_tracker = ComputeEfficiencyTracker(
             model_config={'d_model': config.d_model, 'num_layers': config.num_layers}
         )
