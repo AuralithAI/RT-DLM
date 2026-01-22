@@ -396,7 +396,8 @@ class ComputeEfficiencyTracker:
                     peak_gb = stats['peak_bytes_in_use'] / (1024**3)
                     self.peak_memory = max(self.peak_memory, peak_gb)
         except Exception:
-            pass
+            # Memory stats collection is best-effort; log and continue without failing the benchmark.
+            logger.debug("Failed to collect JAX memory stats during benchmark.", exc_info=True)
     
     def compute(self) -> ComputeMetrics:
         """
