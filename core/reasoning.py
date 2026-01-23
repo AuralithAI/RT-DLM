@@ -461,7 +461,20 @@ class ReasoningEngine(hk.Module):
             hk.Linear(config.d_model),
             hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
         ], name="reasoning_integrator")
-        
+
+        self._rlm_enabled = getattr(config, 'rlm_enabled', False)
+        if self._rlm_enabled:
+            from core.rlm import RecursiveLanguageModel
+            from config.rlm_config import RLMConfig
+            rlm_config = RLMConfig(
+                max_recursion_depth=getattr(config, 'rlm_max_recursion_depth', 5),
+                context_peek_size=getattr(config, 'rlm_context_peek_size', 2000),
+                tool_budget=getattr(config, 'rlm_tool_budget', 20),
+                auto_partition_threshold=getattr(config, 'rlm_auto_partition_threshold', 8000),
+                direct_context_threshold=getattr(config, 'rlm_direct_context_threshold', 2000),
+            )
+            self.rlm = RecursiveLanguageModel(config.d_model, rlm_config)
+
     def __call__(self, query, context, support_examples=None, performance_feedback=None):
         """
         Complete reasoning pipeline
@@ -504,3 +517,28 @@ class ReasoningEngine(hk.Module):
             "confidence_scores": reasoning_result["confidences"]
         }
 
+    def recursive_context_reasoning(
+        self,
+        query: jnp.ndarray,
+        context: jnp.ndarray,
+        context_length: int,
+    ) -> Dict[str, Any]:
+        if not self._rlm_enabled:
+            return self(query, context)
+
+        tool_probs, term_prob, parameters, encoded_query = self.rlm(
+            query, context_length, recursion_depth=0, tool_calls_used=0
+        )
+
+        cot_result = self.chain_of_thought(query, context)
+
+        return {
+            "reasoning_output": cot_result["final_answer"],
+            "chain_of_thought": cot_result,
+            "rlm_tool_probs": tool_probs,
+            "rlm_termination_prob": term_prob,
+            "rlm_parameters": parameters,
+            "rlm_encoded_query": encoded_query,
+            "reasoning_chain": cot_result["reasoning_chain"],
+            "confidence_scores": cot_result["confidences"],
+        }
