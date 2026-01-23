@@ -9,7 +9,7 @@ from config.rlm_config import RLMConfig, ToolType, PartitionStrategy
 from core.rlm.context_store import ContextStore, ContextVariable
 from core.rlm.context_tools import ContextTools, ToolResult
 from core.rlm.tool_selector import ToolSelector, ToolSelection
-from core.rlm.recursive_manager import RecursiveCallManager, RecursionContext, SubCallResult
+from core.rlm.recursive_manager import RecursiveCallManager, RecursionContext
 
 Params = Mapping[str, Any]
 
