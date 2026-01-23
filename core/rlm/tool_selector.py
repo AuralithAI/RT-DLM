@@ -142,9 +142,10 @@ class ToolSelector(hk.Module):
         if deterministic:
             tool_idx = int(jnp.argmax(masked_probs, axis=-1).squeeze())
         else:
-            tool_idx = int(jax.random.categorical(
-                hk.next_rng_key(), jnp.log(masked_probs + 1e-8)
-            ).squeeze())
+            raise RuntimeError(
+                "Non-deterministic tool selection requires Haiku RNG context. "
+                "Use deterministic=True or call within a Haiku-transformed function."
+            )
 
         selected_tool = tool_list[tool_idx]
         confidence = float(masked_probs.squeeze()[tool_idx])

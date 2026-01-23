@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional, Callable
 import time
+import threading
 import jax.numpy as jnp
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -19,6 +20,7 @@ class RecursionContext:
     trace: List[Dict[str, Any]] = field(default_factory=list)
     start_time: float = field(default_factory=time.time)
     timeout: float = 60.0
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def can_recurse(self) -> bool:
         if self.depth >= self.max_depth:
@@ -189,10 +191,11 @@ class RecursiveCallManager:
                 try:
                     result = future.result()
                     results.append(result)
-                    parent_context.tool_calls_used = max(
-                        parent_context.tool_calls_used,
-                        child_context.tool_calls_used
-                    )
+                    with parent_context._lock:
+                        parent_context.tool_calls_used = max(
+                            parent_context.tool_calls_used,
+                            child_context.tool_calls_used
+                        )
                 except Exception as e:
                     results.append(SubCallResult(
                         query=sc["query"],

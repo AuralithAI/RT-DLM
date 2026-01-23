@@ -3,7 +3,7 @@ from core.rlm.context_store import ContextStore, ContextVariable, ContextMetadat
 from core.rlm.context_tools import ContextTools, ToolResult
 from core.rlm.tool_selector import ToolSelector, ToolSelection
 from core.rlm.recursive_manager import RecursiveCallManager, RecursionContext, SubCallResult
-from core.rlm.rlm_core import RecursiveLanguageModel, RLMResult
+from core.rlm.rlm_core import RecursiveLanguageModel, RLMResult, RLMOrchestrator
 
 __all__ = [
     "RLMConfig",
@@ -21,4 +21,5 @@ __all__ = [
     "SubCallResult",
     "RecursiveLanguageModel",
     "RLMResult",
+    "RLMOrchestrator",
 ]

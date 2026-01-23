@@ -542,3 +542,20 @@ class ReasoningEngine(hk.Module):
             "reasoning_chain": cot_result["reasoning_chain"],
             "confidence_scores": cot_result["confidences"],
         }
+
+    def get_rlm_outputs(
+        self,
+        query: jnp.ndarray,
+        context_length: int,
+    ) -> Optional[Dict[str, Any]]:
+        if not self._rlm_enabled:
+            return None
+        tool_probs, term_prob, parameters, encoded_query = self.rlm(
+            query, context_length, recursion_depth=0, tool_calls_used=0
+        )
+        return {
+            "tool_probs": tool_probs,
+            "termination_prob": term_prob,
+            "parameters": parameters,
+            "encoded_query": encoded_query,
+        }

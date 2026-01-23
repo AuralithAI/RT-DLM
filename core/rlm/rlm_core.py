@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional, Callable, Mapping
+from typing import Dict, List, Any, Optional, Callable, Mapping, Tuple
 import time
 import haiku as hk
 import jax
@@ -399,8 +399,8 @@ class RLMOrchestrator:
             )
 
         elif tool == ToolType.GREP:
-            pattern = self._extract_search_pattern(query)
-            return self.tools.grep(context_var, pattern)
+            pattern, is_regex = self._extract_search_pattern(query)
+            return self.tools.grep(context_var, pattern, regex=is_regex)
 
         elif tool == ToolType.PARTITION:
             return self.tools.partition(
@@ -415,8 +415,8 @@ class RLMOrchestrator:
             )
 
         elif tool == ToolType.COUNT:
-            pattern = self._extract_search_pattern(query)
-            return self.tools.count(context_var, pattern)
+            pattern, is_regex = self._extract_search_pattern(query)
+            return self.tools.count(context_var, pattern, regex=is_regex)
 
         elif tool == ToolType.RECURSIVE_CALL:
             chunk_names = self._get_chunk_names(context_var)
@@ -433,16 +433,20 @@ class RLMOrchestrator:
 
         return ToolResult.error_result(tool, f"Unsupported tool: {tool}")
 
-    def _extract_search_pattern(self, query: str) -> str:
+    def _extract_search_pattern(self, query: str) -> Tuple[str, bool]:
         import re
         quoted = re.findall(r'"([^"]+)"', query)
         if quoted:
-            return quoted[0]
+            return (quoted[0], False)
 
         words = query.lower().split()
         stop_words = {"what", "how", "many", "is", "are", "the", "a", "an", "in", "of", "to", "for"}
         keywords = [w for w in words if w not in stop_words and len(w) > 2]
-        return "|".join(keywords[:3]) if keywords else query[:20]
+        if len(keywords) > 1:
+            return ("|".join(keywords[:3]), True)
+        elif keywords:
+            return (keywords[0], False)
+        return (query[:20], False)
 
     def _get_chunk_names(self, context_var: str) -> List[str]:
         all_vars = self.context_store.list_variables()
@@ -455,11 +459,21 @@ class RLMOrchestrator:
         params: Params,
         rng: jnp.ndarray,
     ) -> Dict[str, Any]:
+        rng_keys = jax.random.split(rng, len(subcalls) + 1)
+        subcall_rngs = {
+            (sc["query"], sc["context_var"]): rng_keys[i]
+            for i, sc in enumerate(subcalls)
+        }
+
         def solve_subcall(sub_query: str, sub_context_var: str, ctx: RecursionContext) -> Any:
+            sub_rng = subcall_rngs.get(
+                (sub_query, sub_context_var),
+                jax.random.fold_in(rng_keys[-1], hash((sub_query, sub_context_var)))
+            )
             sub_query_emb = self._prepare_query_embedding(sub_query)
             return self._solve_recursive(
                 sub_query, sub_query_emb, sub_context_var,
-                params, rng, ctx
+                params, sub_rng, ctx
             )
 
         results = self.recursive_manager.spawn_parallel_subcalls(

@@ -1,11 +1,14 @@
 import time
 import hashlib
 import re
+import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Iterator
 import numpy as np
 
 from config.rlm_config import PartitionStrategy
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,6 +62,18 @@ class ContextStore:
     def set_embedding_function(self, fn: Any) -> None:
         self._embedding_fn = fn
 
+    def _evict_expired(self) -> None:
+        if not self._enable_caching or self._cache_ttl <= 0:
+            return
+        current_time = time.time()
+        expired = [
+            name for name, var in self._variables.items()
+            if (current_time - var.metadata.last_accessed) > self._cache_ttl
+            and var.metadata.parent_var is None
+        ]
+        for name in expired:
+            self.delete(name)
+
     def store(
         self,
         name: str,
@@ -86,8 +101,8 @@ class ContextStore:
             try:
                 embedding = self._embedding_fn(content)
                 metadata.embedding_dim = embedding.shape[-1] if hasattr(embedding, 'shape') else None
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Embedding generation failed for variable '{name}': {e}")
 
         var = ContextVariable(
             name=name,
@@ -106,6 +121,7 @@ class ContextStore:
         return var
 
     def get(self, name: str) -> Optional[ContextVariable]:
+        self._evict_expired()
         var = self._variables.get(name)
         if var is not None:
             var.metadata.last_accessed = time.time()
@@ -136,16 +152,31 @@ class ContextStore:
         var = self._variables.get(name)
         return var.metadata if var else None
 
+    def _get_existing_chunk_names(self, parent_name: str) -> List[str]:
+        return [
+            name for name in self._variables.keys()
+            if self._variables[name].metadata.parent_var == parent_name
+        ]
+
     def partition(
         self,
         name: str,
         strategy: PartitionStrategy = PartitionStrategy.FIXED_SIZE,
         chunk_size: int = 2000,
         overlap: int = 200,
+        force: bool = False,
     ) -> List[str]:
         var = self.get(name)
         if var is None:
             return []
+
+        existing_chunks = self._get_existing_chunk_names(name)
+        if existing_chunks and not force:
+            return existing_chunks
+
+        if existing_chunks:
+            for chunk_name in existing_chunks:
+                self.delete(chunk_name)
 
         content = var.content
 
@@ -160,14 +191,15 @@ class ContextStore:
         else:
             chunks = self._partition_fixed_size(content, chunk_size, overlap)
 
+        partition_id = int(time.time() * 1000) % 100000
         chunk_names = []
         for i, chunk in enumerate(chunks):
-            chunk_name = f"{name}_chunk_{i}"
+            chunk_name = f"{name}_chunk_{partition_id}_{i}"
             self.store(
                 name=chunk_name,
                 content=chunk,
                 source=var.metadata.source,
-                tags=var.metadata.tags + [f"chunk_{i}"],
+                tags=var.metadata.tags + [f"chunk_{i}", f"partition_{partition_id}"],
                 parent_var=name,
                 chunk_index=i,
             )
