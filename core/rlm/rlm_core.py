@@ -5,7 +5,7 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 
-from config.rlm_config import RLMConfig, ToolType, PartitionStrategy
+from config.rlm_config import RLMConfig, ToolType
 from core.rlm.context_store import ContextStore, ContextVariable
 from core.rlm.context_tools import ContextTools, ToolResult
 from core.rlm.tool_selector import ToolSelector, ToolSelection
