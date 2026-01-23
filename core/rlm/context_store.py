@@ -3,7 +3,6 @@ import hashlib
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Iterator
-from enum import Enum
 import numpy as np
 
 from config.rlm_config import PartitionStrategy
