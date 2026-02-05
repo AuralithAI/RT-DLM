@@ -275,7 +275,7 @@ def create_scalable_train_step(
     if mesh.has_tensor_parallel and param_shardings is not None:
         in_shardings = (
             param_shardings,
-            jax.tree_util.tree_map(lambda _: mesh.get_sharding(P()), opt_state) if opt_state else None,
+            param_shardings,
             mesh.get_sharding(P("data")),
             mesh.get_sharding(P())
         )

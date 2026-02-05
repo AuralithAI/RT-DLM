@@ -49,7 +49,8 @@ class DocumentChunk:
     def __post_init__(self):
         """Generate chunk_id if not provided."""
         if not self.chunk_id:
-            content_hash = hashlib.md5(self.text.encode()).hexdigest()[:8]
+            # MD5 used only for content-based ID generation, not security
+            content_hash = hashlib.md5(self.text.encode(), usedforsecurity=False).hexdigest()[:8]
             self.chunk_id = f"{self.doc_id}_{self.chunk_index}_{content_hash}"
     
     def to_dict(self) -> Dict[str, Any]:
@@ -468,8 +469,8 @@ class DocumentIngester:
         if not text:
             raise ValueError("Document must have 'text' field")
             
-        # Generate doc_id
-        doc_id = doc.get("doc_id", hashlib.md5(text.encode()).hexdigest()[:16])
+        # Generate doc_id (MD5 used only for content-based ID generation, not security)
+        doc_id = doc.get("doc_id", hashlib.md5(text.encode(), usedforsecurity=False).hexdigest()[:16])
         
         # Extract metadata
         metadata = {k: v for k, v in doc.items() if k not in ("text", "doc_id")}
