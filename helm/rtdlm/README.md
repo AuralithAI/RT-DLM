@@ -14,35 +14,19 @@ A Helm chart for deploying RT-DLM (Real-Time Deep Learning Model) training infra
 
 ### Add the Helm repository
 
-```bash
-helm repo add rtdlm https://auralithai.github.io/rt-dlm-charts
-helm repo update
-```
+Add with `helm repo add rtdlm https://auralithai.github.io/rt-dlm-charts` and `helm repo update`.
 
 ### Install the chart
 
-```bash
-# Install with default values
-helm install rtdlm rtdlm/rtdlm -n rtdlm --create-namespace
-
-# Install with custom values
-helm install rtdlm rtdlm/rtdlm -n rtdlm --create-namespace -f my-values.yaml
-
-# Install from local chart
-helm install rtdlm ./helm/rtdlm -n rtdlm --create-namespace
-```
+Install with `helm install rtdlm rtdlm/rtdlm -n rtdlm --create-namespace`. Use `-f my-values.yaml` for custom values or install from local with `helm install rtdlm ./helm/rtdlm -n rtdlm --create-namespace`.
 
 ### Upgrade
 
-```bash
-helm upgrade rtdlm rtdlm/rtdlm -n rtdlm -f my-values.yaml
-```
+Use `helm upgrade rtdlm rtdlm/rtdlm -n rtdlm -f my-values.yaml`.
 
 ### Uninstall
 
-```bash
-helm uninstall rtdlm -n rtdlm
-```
+Use `helm uninstall rtdlm -n rtdlm`.
 
 ## Configuration
 
@@ -64,48 +48,7 @@ helm uninstall rtdlm -n rtdlm
 
 ### Example Values
 
-```yaml
-# Custom training configuration
-training:
-  enabled: true
-  replicaCount: 1
-  
-  gpu:
-    enabled: true
-    count: 8
-    type: nvidia-a100
-  
-  model:
-    preset: large
-    batch_size: 64
-    epochs: 200
-    learning_rate: "5e-5"
-  
-  resources:
-    requests:
-      memory: "64Gi"
-      cpu: "16"
-      nvidia.com/gpu: 8
-    limits:
-      memory: "128Gi"
-      cpu: "32"
-      nvidia.com/gpu: 8
-
-# Enable distributed training
-distributed_training:
-  enabled: true
-  workers: 4
-
-# Enable WandB logging
-training:
-  wandb:
-    enabled: true
-    project: my-project
-    mode: online
-
-secrets:
-  wandb_api_key: "your-api-key"
-```
+Customize training configuration via values file with options for GPU settings (`training.gpu.count`, `training.gpu.type`), model settings (`training.model.preset`, `training.model.batch_size`), resource limits, distributed training, and WandB integration.
 
 ## Architecture
 
@@ -139,21 +82,7 @@ secrets:
 
 ## Monitoring
 
-The chart exposes Prometheus metrics on port 8000. Configure your Prometheus instance to scrape:
-
-```yaml
-scrape_configs:
-  - job_name: 'rtdlm-training'
-    kubernetes_sd_configs:
-      - role: pod
-        namespaces:
-          names:
-            - rtdlm
-    relabel_configs:
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
-        action: keep
-        regex: true
-```
+The chart exposes Prometheus metrics on port 8000. Configure your Prometheus instance with kubernetes_sd_configs to scrape pods in the rtdlm namespace with the `prometheus.io/scrape: true` annotation.
 
 ## License
 

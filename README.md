@@ -12,24 +12,6 @@ A JAX/Haiku-based neural architecture for training, combining transformer models
 
 > **Note**: This repository focuses on **model architecture and training**. Data collection, tokenization, and processing are handled by the standalone [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline) repository.
 
-## Project Structure
-
-```
-RT-DLM/
-├── src/                 # Core model package
-│   ├── rtdlm.py         # Model definitions
-│   ├── train.py         # Training script
-│   ├── core/            # Core components
-│   ├── config/          # Configuration
-│   ├── modules/         # Feature modules
-│   └── tests/           # Test suite
-├── helm/                # Kubernetes Helm chart
-├── monitoring/          # Prometheus/Grafana
-├── scripts/             # CLI utilities
-├── docs/                # Documentation
-└── .github/workflows/   # CI/CD pipelines
-```
-
 ## Overview
 
 RT-DLM provides a unified architecture for building and training advanced AI models. The system combines classical deep learning with symbolic reasoning, probabilistic inference, and quantum-ready modules.
@@ -146,29 +128,14 @@ Pre-configured model sizes via `AGIConfig.from_preset()`:
 ## Quick Start
 
 ### Installation
-```bash
-git clone https://github.com/AuralithAI/RT-DLM.git
-cd RT-DLM
-pip install -r requirements.txt
-```
+
+Clone the repository and install with `pip install -r requirements.txt`.
 
 ### Training
 
 The model accepts pre-tokenized tensors (from [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline)).
 
-```bash
-# Train model
-python src/train.py --data-dir /path/to/tokenized/shards
-
-# Train with custom settings
-python src/train.py --epochs 50 --batch-size 32 --lr 1e-4
-
-# Resume training from a checkpoint
-python src/train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors
-
-# Resume with extended epochs
-python src/train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors --epochs 100
-```
+Run `python src/train.py --data-dir /path/to/tokenized/shards` to train. Use `--epochs`, `--batch-size`, `--lr` for hyperparameters and `--resume` to continue from a checkpoint.
 
 ### Training Modes
 
@@ -233,127 +200,27 @@ Set `quantum_layers=0` to disable quantum simulation for faster training.
 
 ### CI/CD Pipeline
 
-Automated testing and deployment via GitHub Actions:
-
-```bash
-# Workflow triggers:
-.github/workflows/test.yml     # Runs on any branch (pytest with coverage)
-.github/workflows/lint.yml     # Runs on any branch (code quality checks)
-.github/workflows/docker-build.yml  # Runs on main only (production builds)
-```
+Automated testing and deployment via GitHub Actions with workflows for testing (any branch), linting (any branch), and Docker builds (main only).
 
 ### Docker
 
-Build and run training environments:
-
-```bash
-# Build training image (GPU)
-docker build -t rtdlm:train -f Dockerfile.train .
-
-# Build CPU-only image
-docker build -t rtdlm:train-cpu -f Dockerfile.train --target cpu .
-
-# Run with Docker Compose
-docker-compose up training
-
-# Run with monitoring stack (Prometheus + Grafana)
-docker-compose --profile monitoring up
-```
+Build training images with `docker build -f Dockerfile.train`. Supports GPU and CPU-only targets. Use `docker-compose` for local development with optional monitoring stack (Prometheus + Grafana).
 
 ### Kubernetes (Helm)
 
-Deploy training jobs to Kubernetes using Helm:
-
-```bash
-# Install the Helm chart
-helm install rtdlm ./helm/rtdlm -n rtdlm --create-namespace
-
-# Install with custom values
-helm install rtdlm ./helm/rtdlm -n rtdlm \
-  --set training.config.preset=large \
-  --set training.resources.limits."nvidia\.com/gpu"=4 \
-  --set storage.checkpoints.size=100Gi
-
-# Enable distributed training
-helm install rtdlm ./helm/rtdlm -n rtdlm \
-  --set distributed_training.enabled=true \
-  --set distributed_training.num_nodes=4
-
-# Upgrade existing deployment
-helm upgrade rtdlm ./helm/rtdlm -n rtdlm --reuse-values
-
-# Check status
-kubectl get pods -n rtdlm
-kubectl logs -f -l app.kubernetes.io/name=rtdlm -n rtdlm
-
-# Uninstall
-helm uninstall rtdlm -n rtdlm
-```
-
-Helm chart structure:
-```
-helm/rtdlm/
-├── Chart.yaml          # Chart metadata
-├── values.yaml         # Default configuration
-└── templates/
-    ├── _helpers.tpl    # Template helpers
-    ├── configmap.yaml  # Training configuration
-    ├── secrets.yaml    # Credentials (WandB, AWS, HF)
-    ├── storage.yaml    # PVCs for checkpoints/logs
-    ├── training_deployment.yaml  # Main training
-    ├── training_service.yaml     # Metrics service
-    ├── training_ingress.yaml     # Optional ingress
-    ├── distributed_training.yaml # Multi-node jobs
-    └── networkpolicy.yaml        # Network policies
-```
+Deploy training jobs to Kubernetes using the Helm chart in `helm/rtdlm/`. Install with `helm install rtdlm ./helm/rtdlm -n rtdlm --create-namespace` and customize with `--set` flags for model preset, GPU count, storage, and distributed training options.
 
 ### Monitoring
 
-Prometheus metrics exposed on port 8000:
-
-```python
-from monitoring.prometheus_exporter import PrometheusTrainingCallback
-
-# Add to training loop
-callback = PrometheusTrainingCallback(port=8000)
-callback.on_batch_end(loss=loss, batch_time=0.5)
-```
-
-Access metrics at `http://localhost:8000/metrics`
+Prometheus metrics exposed on port 8000 via `PrometheusTrainingCallback`. Access at `http://localhost:8000/metrics`.
 
 ### Model Export
 
-Export trained models for deployment:
-
-```bash
-# Quantize to INT8
-python scripts/quantize_model.py \
-    --checkpoint checkpoints/model.safetensors \
-    --output checkpoints/model_int8.safetensors \
-    --precision int8
-
-# Export to ONNX
-python scripts/export_to_onnx.py \
-    --checkpoint checkpoints/model.safetensors \
-    --output models/model.onnx \
-    --opset 15
-```
+Export trained models using `scripts/quantize_model.py` for INT8 quantization and `scripts/export_to_onnx.py` for ONNX export.
 
 ### Make Commands
 
-Common tasks via Makefile:
-
-```bash
-make help           # Show all commands
-make install-dev    # Install dev dependencies
-make test           # Run tests
-make test-cov       # Run tests with coverage
-make lint           # Check code quality
-make format         # Auto-format code
-make docker-build   # Build Docker image
-make train-tiny     # Run tiny model training
-make validate-model # Validate model init
-```
+Common tasks via Makefile: `make install-dev`, `make test`, `make test-cov`, `make lint`, `make format`, `make docker-build`, `make train-tiny`, `make validate-model`.
 
 ## License
 

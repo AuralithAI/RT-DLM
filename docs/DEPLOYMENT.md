@@ -2,45 +2,6 @@
 
 This document describes the deployment architecture and infrastructure for RT-DLM (Real-Time Deep Learning Model).
 
-## Project Structure
-
-```
-RT-DLM/
-├── src/                     # Core model package
-│   ├── __init__.py          # Package exports
-│   ├── rtdlm.py             # Main model definitions
-│   ├── train.py             # Training script
-│   ├── core/                # Core components
-│   │   ├── model/           # Model architecture
-│   │   ├── training/        # Training utilities
-│   │   ├── quantum/         # Quantum modules
-│   │   ├── agi/             # AGI system
-│   │   ├── ethics/          # Ethics & fairness
-│   │   ├── rlm/             # Recursive language model
-│   │   ├── export/          # ONNX export
-│   │   └── quantization/    # Model quantization
-│   ├── config/              # Configuration classes
-│   ├── modules/             # Feature modules
-│   │   ├── multimodal/      # Multi-modal processing
-│   │   ├── retrieval/       # RAG integration
-│   │   ├── hybrid_architecture/
-│   │   └── capabilities/    # Advanced algorithms
-│   └── tests/               # Test suite
-├── helm/                    # Kubernetes Helm chart
-│   └── rtdlm/
-│       ├── Chart.yaml
-│       ├── values.yaml
-│       └── templates/
-├── monitoring/              # Prometheus/Grafana
-├── scripts/                 # CLI utilities
-├── docs/                    # Documentation
-├── .github/workflows/       # CI/CD pipelines
-├── Dockerfile.train         # Training container
-├── docker-compose.yml       # Local development
-├── Makefile                 # Development tasks
-└── pyproject.toml           # Package configuration
-```
-
 ## Architecture Overview
 
 ```
@@ -133,113 +94,33 @@ RT-DLM/
 | `lint.yml` | Any branch push/PR | Code quality checks |
 | `docker-build.yml` | Main branch only | Build & push production images |
 
-### Test Workflow (`test.yml`)
+### Test Workflow
 
-```yaml
-# Runs on any branch
-on:
-  push:
-    branches: ['**']
-  pull_request:
-    branches: ['**']
+Runs on any branch push/PR with matrix testing across Python 3.10, 3.11, and 3.12. Includes pytest with coverage and smoke test for model initialization.
 
-# Matrix testing
-strategy:
-  matrix:
-    python-version: ["3.10", "3.11", "3.12"]
+### Docker Build Workflow
 
-# Jobs:
-# 1. test - Run pytest with coverage
-# 2. smoke-test - Verify model initialization
-```
-
-### Docker Build Workflow (`docker-build.yml`)
-
-```yaml
-# Runs only on main branch
-on:
-  push:
-    branches: [main]
-    tags: ['v*']
-
-# Builds:
-# 1. GPU image (default)
-# 2. CPU image (for testing)
-# 3. Pushes to ghcr.io
-```
+Runs on main branch and version tags. Builds GPU and CPU images and pushes to ghcr.io.
 
 ## Docker Architecture
 
 ### Multi-Stage Build
 
-```dockerfile
-# Stage 1: Base - System dependencies
-FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04 AS base
-
-# Stage 2: GPU Dependencies
-FROM base AS gpu-deps
-# JAX with CUDA 12
-
-# Stage 3: CPU Build
-FROM base AS cpu
-# JAX CPU only
-
-# Stage 4: GPU Build (Default)
-FROM gpu-deps AS gpu
-# Final training image
-```
+Uses NVIDIA CUDA 12.1 base image with four stages: Base (system dependencies), GPU Dependencies (JAX with CUDA), CPU Build (JAX CPU-only), and GPU Build (final training image).
 
 ### Running Locally
 
-```bash
-# GPU training
-docker-compose up training
-
-# CPU training (for testing)
-docker-compose up training-cpu
-
-# With monitoring stack
-docker-compose --profile monitoring up
-```
+Use `docker-compose` with `training` service for GPU, `training-cpu` for CPU testing, and `--profile monitoring` for the full monitoring stack.
 
 ## Kubernetes Deployment
 
-### Helm Chart Structure
+### Helm Chart
 
-```
-helm/rtdlm/
-├── Chart.yaml              # Chart metadata
-├── values.yaml             # Configuration
-└── templates/
-    ├── _helpers.tpl        # Template helpers
-    ├── configmap.yaml      # Training config
-    ├── secrets.yaml        # Credentials
-    ├── serviceaccount.yaml # RBAC
-    ├── storage.yaml        # PVCs
-    ├── training_deployment.yaml    # Single-node training
-    ├── training_service.yaml       # Metrics service
-    ├── training_ingress.yaml       # Optional ingress
-    ├── distributed_training.yaml   # Multi-node training
-    ├── metrics_deployment.yaml     # Prometheus exporter
-    └── networkpolicy.yaml          # Network security
-```
+Located in `helm/rtdlm/` with templates for ConfigMap, Secrets, ServiceAccount, PVCs, Training Deployment, Distributed Training, Service, Ingress, Metrics, and NetworkPolicy.
 
 ### Installation
 
-```bash
-# Basic installation
-helm install rtdlm ./helm/rtdlm -n rtdlm --create-namespace
-
-# With custom values
-helm install rtdlm ./helm/rtdlm -n rtdlm \
-  --set training.model.preset=large \
-  --set training.resources.limits."nvidia\.com/gpu"=4
-
-# Enable distributed training
-helm install rtdlm ./helm/rtdlm -n rtdlm \
-  --set distributed_training.enabled=true \
-  --set distributed_training.num_nodes=4
-```
+Install with `helm install rtdlm ./helm/rtdlm -n rtdlm --create-namespace`. Customize with `--set` flags for model preset, GPU count, and distributed training options.
 
 ### Key Configuration
 
@@ -256,14 +137,7 @@ helm install rtdlm ./helm/rtdlm -n rtdlm \
 
 ### Prometheus Metrics
 
-The training process exposes metrics on port 8000:
-
-```python
-from monitoring.prometheus_exporter import PrometheusTrainingCallback
-
-callback = PrometheusTrainingCallback(port=8000)
-callback.on_batch_end(loss=loss, batch_time=elapsed)
-```
+The training process exposes metrics on port 8000 via `PrometheusTrainingCallback`.
 
 Available metrics:
 - `rtdlm_training_loss` - Current training loss
@@ -287,68 +161,21 @@ Pre-configured alerts:
 
 ### Quantization
 
-```bash
-# INT8 quantization
-python scripts/quantize_model.py \
-  --checkpoint checkpoints/model.safetensors \
-  --output checkpoints/model_int8.safetensors \
-  --precision int8
-```
+Use `scripts/quantize_model.py` for INT8 quantization of trained checkpoints.
 
 ### ONNX Export
 
-```bash
-# Export to ONNX
-python scripts/export_to_onnx.py \
-  --checkpoint checkpoints/model.safetensors \
-  --output models/model.onnx \
-  --opset 15
-```
+Use `scripts/export_to_onnx.py` to export models to ONNX format.
 
 ## Development Workflow
 
 ### Quick Commands
 
-```bash
-# Install dependencies
-make install-dev
-
-# Run tests
-make test
-
-# Run tests with coverage
-make test-cov
-
-# Format code
-make format
-
-# Lint code
-make lint
-
-# Build Docker image
-make docker-build
-
-# Deploy to Kubernetes
-make helm-install
-
-# Run tiny model training
-make train-tiny
-```
+Common Makefile targets: `make install-dev`, `make test`, `make test-cov`, `make format`, `make lint`, `make docker-build`, `make helm-install`, `make train-tiny`.
 
 ### Local Development
 
-```bash
-# 1. Set up environment
-python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-pip install -e ".[dev]"
-
-# 2. Run tests
-pytest src/tests/ -v
-
-# 3. Start training locally
-python src/train.py --preset tiny --epochs 10
-```
+Set up a Python virtual environment, install with `pip install -e ".[dev]"`, run tests with pytest, and start training with the desired preset.
 
 ## Separation of Concerns
 
@@ -389,26 +216,13 @@ Data processing is handled separately:
 
 ### Common Issues
 
-1. **GPU not detected**
-   ```bash
-   kubectl logs -l app=rtdlm-training -n rtdlm
-   # Check nvidia-smi in init container
-   ```
+1. **GPU not detected**: Check pod logs and nvidia-smi in init container
 
-2. **OOM errors**
-   - Reduce batch size in values.yaml
-   - Enable gradient checkpointing
-   - Use smaller model preset
+2. **OOM errors**: Reduce batch size, enable gradient checkpointing, or use smaller model preset
 
-3. **Slow training**
-   - Check GPU utilization: `nvidia-smi dmon`
-   - Enable XLA compilation caching
-   - Check data loading bottlenecks
+3. **Slow training**: Check GPU utilization, enable XLA compilation caching, check data loading bottlenecks
 
-4. **Checkpoint issues**
-   - Verify PVC is mounted correctly
-   - Check storage class supports ReadWriteOnce
-   - Ensure sufficient storage space
+4. **Checkpoint issues**: Verify PVC mount, check storage class supports ReadWriteOnce, ensure sufficient space
 
 ## References
 

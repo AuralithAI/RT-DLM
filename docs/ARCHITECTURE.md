@@ -483,16 +483,6 @@ Advanced metrics for production model evaluation:
 | `ComputeEfficiencyTracker` | Tokens/sec, FLOPs | Performance monitoring |
 | `BenchmarkEvaluator` | Accuracy | Standard benchmark evaluation |
 
-**Integration with AGITrainer:**
-
-```python
-# Access production metrics during training
-metrics = trainer.get_production_metrics()
-print(f"Perplexity: {metrics['perplexity']:.2f}")
-print(f"Tokens/sec: {metrics['compute']['tokens_per_second']:.1f}")
-print(f"ECE: {metrics['calibration']['ece']:.4f}")
-```
-
 ## Advanced Attention System
 
 RT-DLM uses a unified attention system that supports multiple state-of-the-art attention mechanisms.
@@ -1158,30 +1148,4 @@ The RLM module (`core/rlm/`) implements the Recursive Language Model architectur
 | Parallel Subcalls | Process multiple chunks concurrently |
 | Direct Pass Fallback | Skip RLM for short contexts |
 
-### Configuration
-
-```python
-from config.rlm_config import RLMConfig
-
-config = RLMConfig(
-    enabled=True,
-    max_recursion_depth=5,
-    context_peek_size=2000,
-    tool_budget=20,
-    auto_partition_threshold=8000,
-    direct_context_threshold=2000,
-    parallel_subcalls=True,
-)
-```
-
-### Integration with ReasoningEngine
-
-RLM is integrated into `ReasoningEngine` and can be enabled via `AGIConfig`:
-
-```python
-config = AGIConfig(
-    rlm_enabled=True,
-    rlm_max_recursion_depth=5,
-    rlm_tool_budget=20,
-)
-```
+RLM is configurable via `RLMConfig` and integrates with `ReasoningEngine` through `AGIConfig`.
