@@ -1,0 +1,44 @@
+# Patterns to ignore when building Helm packages
+.git
+.gitignore
+.gitlab-ci.yml
+.helmignore
+.DS_Store
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Test files
+tests/
+*_test.go
+
+# Documentation
+*.md
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
