@@ -1,0 +1,111 @@
+# RT-DLM Testing Workflow
+# Runs pytest on push/PR to any branch
+
+name: Tests
+
+on:
+  push:
+    branches: ['**']  # Run on any branch
+  pull_request:
+    branches: ['**']  # Run on PR to any branch
+
+env:
+  PYTHONUNBUFFERED: "1"
+  JAX_PLATFORM_NAME: cpu  # Use CPU for CI testing
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} Tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsndfile1 ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Install JAX CPU version for CI (no GPU)
+          pip install "jax[cpu]>=0.4.35"
+          # Install remaining requirements (skip jax/jaxlib as already installed)
+          pip install -r requirements.txt --ignore-installed jax jaxlib
+          pip install pytest-cov pytest-xdist pytest-timeout
+
+      - name: Run tests with coverage
+        run: |
+          pytest src/tests/ -v \
+            --cov=src \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            -x \
+            --timeout=300 \
+            -n auto
+        env:
+          JAX_PLATFORM_NAME: cpu
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.12'
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-rt-dlm
+          fail_ci_if_error: false
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        if: matrix.python-version == '3.12'
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+  # Quick smoke test for model initialization
+  smoke-test:
+    name: Model Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "jax[cpu]>=0.4.35"
+          pip install -r requirements.txt --ignore-installed jax jaxlib
+
+      - name: Run model smoke test
+        run: |
+          python -c "
+          import jax
+          from src.rtdlm import create_rtdlm_agi
+          from src.config.agi_config import AGIConfig
+          
+          config = AGIConfig.from_preset('tiny')
+          print(f'Model config: {config}')
+          print(f'JAX devices: {jax.devices()}')
+          print(' Model initialization smoke test passed!')
+          "
+        env:
+          JAX_PLATFORM_NAME: cpu

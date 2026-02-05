@@ -1,0 +1,180 @@
+{{- if .Values.training.enabled }}
+{{- if not .Values.default.disable_all_deployments }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rtdlm.fullname" . }}-training
+  namespace: {{ .Values.Namespace }}
+  labels:
+    {{- include "rtdlm.training.labels" . | nindent 4 }}
+    app: {{ .Values.Name }}-training
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.Namespace }}
+spec:
+  replicas: {{ .Values.training.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "rtdlm.training.selectorLabels" . | nindent 6 }}
+      app: {{ .Values.Name }}-training
+  strategy:
+    type: Recreate  # GPU workloads should use Recreate
+  template:
+    metadata:
+      annotations:
+        {{- include "rtdlm.prometheusAnnotations" . | nindent 8 }}
+        {{- if .Values.observability_tags }}
+        ad.datadoghq.com/tags: '{"customer":"{{ .Values.observability_tags.customer }}", "env_name":"{{ .Values.observability_tags.env_name }}"}'
+        {{- end }}
+      labels:
+        {{- include "rtdlm.training.selectorLabels" . | nindent 8 }}
+        app: {{ .Values.Name }}-training
+        {{- include "rtdlm.observabilityLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "rtdlm.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      
+      {{- if .Values.training.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.training.nodeSelector | nindent 8 }}
+      {{- end }}
+      
+      {{- if .Values.training.tolerations }}
+      tolerations:
+        {{- toYaml .Values.training.tolerations | nindent 8 }}
+      {{- end }}
+      
+      {{- if .Values.training.affinity }}
+      affinity:
+        {{- toYaml .Values.training.affinity | nindent 8 }}
+      {{- end }}
+      
+      {{- if .Values.priorityClass.enabled }}
+      priorityClassName: {{ .Values.priorityClass.name }}
+      {{- end }}
+      
+      # Init container to verify GPU availability
+      initContainers:
+        {{- if .Values.training.gpu.enabled }}
+        - name: check-gpu
+          image: nvidia/cuda:12.1.0-base-ubuntu22.04
+          command: ["nvidia-smi"]
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+        {{- end }}
+      
+      containers:
+        - name: trainer
+          image: {{ include "rtdlm.training.image" . }}
+          imagePullPolicy: {{ .Values.training.image.pullPolicy }}
+          
+          command:
+            - python
+            - src/train.py
+          args:
+            - "--preset"
+            - "$(MODEL_PRESET)"
+            - "--batch_size"
+            - "$(BATCH_SIZE)"
+            - "--epochs"
+            - "$(EPOCHS)"
+            - "--learning_rate"
+            - "$(LEARNING_RATE)"
+            - "--checkpoint_dir"
+            - "$(CHECKPOINT_DIR)"
+            - "--log_dir"
+            - "$(LOG_DIR)"
+            {{- if .Values.training.metrics.enabled }}
+            - "--enable_prometheus"
+            - "--prometheus_port"
+            - "{{ .Values.training.metrics.port }}"
+            {{- end }}
+            {{- if .Values.training.wandb.enabled }}
+            - "--enable_wandb"
+            {{- end }}
+          
+          # Environment from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: {{ include "rtdlm.fullname" . }}-config
+            - secretRef:
+                name: {{ include "rtdlm.fullname" . }}-secrets
+          
+          # Additional environment variables
+          env:
+            {{- include "rtdlm.commonEnv" . | nindent 12 }}
+            {{- include "rtdlm.modelEnv" . | nindent 12 }}
+            {{- if .Values.training.gpu.enabled }}
+            - name: CUDA_VISIBLE_DEVICES
+              value: {{ range $i, $e := until (int .Values.training.gpu.count) }}{{ if $i }},{{ end }}{{ $i }}{{ end }}
+            {{- end }}
+          
+          # Resource limits
+          resources:
+            requests:
+              memory: {{ .Values.training.resources.requests.memory | quote }}
+              cpu: {{ .Values.training.resources.requests.cpu | quote }}
+              {{- if .Values.training.gpu.enabled }}
+              nvidia.com/gpu: {{ .Values.training.resources.requests."nvidia.com/gpu" }}
+              {{- end }}
+              ephemeral-storage: {{ .Values.training.resources.requests."ephemeral-storage" | quote }}
+            limits:
+              memory: {{ .Values.training.resources.limits.memory | quote }}
+              cpu: {{ .Values.training.resources.limits.cpu | quote }}
+              {{- if .Values.training.gpu.enabled }}
+              nvidia.com/gpu: {{ .Values.training.resources.limits."nvidia.com/gpu" }}
+              {{- end }}
+              ephemeral-storage: {{ .Values.training.resources.limits."ephemeral-storage" | quote }}
+          
+          # Volume mounts
+          volumeMounts:
+            - name: checkpoints
+              mountPath: /checkpoints
+            - name: logs
+              mountPath: /logs
+            - name: data
+              mountPath: {{ .Values.training.data.path }}
+              readOnly: true
+            - name: shm
+              mountPath: /dev/shm
+          
+          # Ports
+          ports:
+            {{- if .Values.training.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.training.metrics.port }}
+              protocol: TCP
+            {{- end }}
+          
+          # Probes
+          {{- if .Values.training.probes.liveness.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - "train.py"
+            initialDelaySeconds: {{ .Values.training.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.training.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.training.probes.liveness.failureThreshold }}
+          {{- end }}
+      
+      # Volumes
+      volumes:
+        - name: checkpoints
+          persistentVolumeClaim:
+            claimName: {{ include "rtdlm.fullname" . }}-checkpoints
+        - name: logs
+          persistentVolumeClaim:
+            claimName: {{ include "rtdlm.fullname" . }}-logs
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "rtdlm.fullname" . }}-data
+        # Shared memory for multi-processing (PyTorch/JAX)
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Gi
+{{- end }}
+{{- end }}

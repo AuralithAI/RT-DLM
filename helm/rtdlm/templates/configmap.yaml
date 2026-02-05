@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rtdlm.fullname" . }}-config
+  namespace: {{ .Values.Namespace }}
+  labels:
+    {{- include "rtdlm.labels" . | nindent 4 }}
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.Namespace }}
+data:
+  # Model Configuration
+  MODEL_PRESET: {{ .Values.training.model.preset | quote }}
+  HIDDEN_DIM: {{ .Values.training.model.hidden_dim | quote }}
+  NUM_LAYERS: {{ .Values.training.model.num_layers | quote }}
+  NUM_HEADS: {{ .Values.training.model.num_heads | quote }}
+  
+  # Training Configuration
+  BATCH_SIZE: {{ .Values.training.model.batch_size | quote }}
+  LEARNING_RATE: {{ .Values.training.model.learning_rate | quote }}
+  EPOCHS: {{ .Values.training.model.epochs | quote }}
+  WARMUP_STEPS: {{ .Values.training.model.warmup_steps | quote }}
+  WEIGHT_DECAY: {{ .Values.training.model.weight_decay | quote }}
+  GRADIENT_CLIP: {{ .Values.training.model.gradient_clip | quote }}
+  
+  # Checkpoint Configuration
+  CHECKPOINT_DIR: "/checkpoints"
+  CHECKPOINT_INTERVAL: {{ .Values.training.checkpoint.interval | quote }}
+  KEEP_CHECKPOINTS: {{ .Values.training.checkpoint.keep_count | quote }}
+  
+  # Logging Configuration
+  LOG_DIR: "/logs"
+  LOG_LEVEL: {{ .Values.training.logging.level | quote }}
+  
+  # JAX Configuration
+  XLA_PYTHON_CLIENT_PREALLOCATE: {{ .Values.training.jax.preallocate | quote }}
+  XLA_PYTHON_CLIENT_MEM_FRACTION: {{ .Values.training.jax.mem_fraction | quote }}
+  
+  # WandB Configuration
+  WANDB_MODE: {{ .Values.training.wandb.mode | quote }}
+  WANDB_PROJECT: {{ .Values.training.wandb.project | quote }}
+  
+  # Observability Info
+  observability_tags.info: |
+    {{- .Values.observability_tags | toJson | nindent 4 }}
+  
+  # Training environment script
+  training.env: |
+    export MODEL_PRESET={{ .Values.training.model.preset | quote }}
+    export BATCH_SIZE={{ .Values.training.model.batch_size | quote }}
+    export LEARNING_RATE={{ .Values.training.model.learning_rate | quote }}
+    export EPOCHS={{ .Values.training.model.epochs | quote }}
+    export CHECKPOINT_DIR="/checkpoints"
+    export LOG_DIR="/logs"
+    export DATA_DIR={{ .Values.training.data.path | quote }}
+    export PYTHONUNBUFFERED=1
+    export XLA_PYTHON_CLIENT_PREALLOCATE={{ .Values.training.jax.preallocate | quote }}
+    export XLA_PYTHON_CLIENT_MEM_FRACTION={{ .Values.training.jax.mem_fraction | quote }}
+    {{- if .Values.training.gpu.enabled }}
+    export CUDA_VISIBLE_DEVICES={{ range $i, $e := until (int .Values.training.gpu.count) }}{{ if $i }},{{ end }}{{ $i }}{{ end }}
+    {{- end }}

@@ -1,0 +1,90 @@
+{{- if .Values.metrics_server.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rtdlm.fullname" . }}-metrics
+  namespace: {{ .Values.Namespace }}
+  labels:
+    {{- include "rtdlm.metrics.labels" . | nindent 4 }}
+    app: {{ .Values.Name }}-metrics
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.Namespace }}
+spec:
+  replicas: {{ .Values.metrics_server.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "rtdlm.selectorLabels" . | nindent 6 }}
+      app: {{ .Values.Name }}-metrics
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.metrics_server.service.port }}"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "rtdlm.selectorLabels" . | nindent 8 }}
+        app: {{ .Values.Name }}-metrics
+    spec:
+      containers:
+        - name: metrics
+          image: {{ .Values.metrics_server.image.repository }}:{{ .Values.metrics_server.image.tag }}
+          imagePullPolicy: Always
+          
+          command:
+            - python
+            - -m
+            - monitoring.prometheus_exporter
+            - "--port"
+            - "{{ .Values.metrics_server.service.port }}"
+          
+          resources:
+            requests:
+              memory: {{ .Values.metrics_server.resources.requests.memory | quote }}
+              cpu: {{ .Values.metrics_server.resources.requests.cpu | quote }}
+            limits:
+              memory: {{ .Values.metrics_server.resources.limits.memory | quote }}
+              cpu: {{ .Values.metrics_server.resources.limits.cpu | quote }}
+          
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics_server.service.port }}
+              protocol: TCP
+          
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.metrics_server.service.name }}
+  namespace: {{ .Values.Namespace }}
+  labels:
+    {{- include "rtdlm.metrics.labels" . | nindent 4 }}
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.Namespace }}
+spec:
+  type: {{ .Values.metrics_server.service.type }}
+  selector:
+    {{- include "rtdlm.selectorLabels" . | nindent 4 }}
+    app: {{ .Values.Name }}-metrics
+  ports:
+    - name: metrics
+      protocol: TCP
+      port: {{ .Values.metrics_server.service.port }}
+      targetPort: {{ .Values.metrics_server.service.port }}
+{{- end }}

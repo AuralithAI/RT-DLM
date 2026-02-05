@@ -1,0 +1,25 @@
+{{- if .Values.training.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.training.service.name }}
+  namespace: {{ .Values.Namespace }}
+  labels:
+    {{- include "rtdlm.training.labels" . | nindent 4 }}
+    app: {{ .Values.Name }}-training
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.Namespace }}
+spec:
+  type: {{ .Values.training.service.type }}
+  selector:
+    {{- include "rtdlm.training.selectorLabels" . | nindent 4 }}
+    app: {{ .Values.Name }}-training
+  ports:
+    {{- if .Values.training.metrics.enabled }}
+    - name: metrics
+      protocol: TCP
+      port: {{ .Values.training.service.port }}
+      targetPort: {{ .Values.training.metrics.port }}
+    {{- end }}
+{{- end }}

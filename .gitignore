@@ -153,18 +153,24 @@ tramp
 *.odp
 *.rtf
 
-# Text and markup files (large datasets)
-*.txt
-*.rst
-*.tex
-*.html
-*.htm
-*.xml
-*.json
-*.yaml
-*.yml
-*.csv
-*.tsv
+# Text and markup files (large datasets in data directories only)
+# Note: We allow .yml, .yaml, .json at root level for configs
+data/**/*.txt
+data/**/*.rst
+data/**/*.tex
+data/**/*.html
+data/**/*.htm
+data/**/*.xml
+data/**/*.json
+data/**/*.yaml
+data/**/*.yml
+data/**/*.csv
+data/**/*.tsv
+
+# But ignore large data files anywhere by size pattern
+*.large.json
+*.large.yaml
+*.large.csv
 
 # ==============================================================================
 # Archive Files

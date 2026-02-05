@@ -1,0 +1,166 @@
+# RT-DLM Alert Rules for Prometheus
+
+groups:
+  # ===========================================================================
+  # Training Health Alerts
+  # ===========================================================================
+  - name: training_health
+    interval: 30s
+    rules:
+      # Alert when loss is too high
+      - alert: HighTrainingLoss
+        expr: rtdlm_training_loss > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High training loss detected"
+          description: "Training loss is {{ $value }} which is above threshold of 10"
+
+      # Alert when loss explodes (NaN or Inf likely)
+      - alert: LossExplosion
+        expr: rtdlm_training_loss > 100 or rtdlm_training_loss != rtdlm_training_loss
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Training loss explosion detected"
+          description: "Training loss has exploded to {{ $value }}. Check for NaN gradients."
+
+      # Alert on NaN gradients
+      - alert: NaNGradients
+        expr: increase(rtdlm_nan_gradients_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "NaN gradients detected"
+          description: "{{ $value }} NaN gradients detected in last 5 minutes"
+
+      # Alert when gradient norm is too high (exploding gradients)
+      - alert: ExplodingGradients
+        expr: rtdlm_gradient_norm > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Exploding gradients detected"
+          description: "Gradient norm is {{ $value }} which indicates exploding gradients"
+
+      # Alert when gradient norm is too low (vanishing gradients)
+      - alert: VanishingGradients
+        expr: rtdlm_gradient_norm < 1e-7 and rtdlm_gradient_norm > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Vanishing gradients detected"
+          description: "Gradient norm is {{ $value }} which indicates vanishing gradients"
+
+      # Alert when no training progress
+      - alert: TrainingStalled
+        expr: increase(rtdlm_training_steps_total[10m]) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Training appears stalled"
+          description: "No training steps completed in last 10 minutes"
+
+  # ===========================================================================
+  # Resource Utilization Alerts
+  # ===========================================================================
+  - name: resource_utilization
+    interval: 30s
+    rules:
+      # Alert on high GPU memory usage (OOM risk)
+      - alert: HighGPUMemoryUsage
+        expr: rtdlm_gpu_memory_utilization > 0.95
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High GPU memory usage"
+          description: "GPU {{ $labels.device_id }} memory utilization is {{ $value | humanizePercentage }}"
+
+      # Alert on critical GPU memory usage
+      - alert: CriticalGPUMemoryUsage
+        expr: rtdlm_gpu_memory_utilization > 0.98
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical GPU memory usage - OOM imminent"
+          description: "GPU {{ $labels.device_id }} memory utilization is {{ $value | humanizePercentage }}. OOM likely."
+
+      # Alert on high CPU usage
+      - alert: HighCPUUsage
+        expr: rtdlm_cpu_utilization > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU utilization"
+          description: "CPU utilization is {{ $value }}%"
+
+      # Alert on high RAM usage
+      - alert: HighRAMUsage
+        expr: rtdlm_ram_used_bytes / (1024*1024*1024*64) > 0.9  # Assuming 64GB RAM
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High RAM usage"
+          description: "RAM usage is high: {{ $value | humanize }}B"
+
+  # ===========================================================================
+  # Performance Alerts
+  # ===========================================================================
+  - name: performance
+    interval: 60s
+    rules:
+      # Alert on low throughput
+      - alert: LowThroughput
+        expr: rtdlm_tokens_per_second < 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low training throughput"
+          description: "Training throughput is {{ $value }} tokens/sec which is below expected"
+
+      # Alert on slow batch processing
+      - alert: SlowBatchProcessing
+        expr: histogram_quantile(0.95, rate(rtdlm_batch_processing_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow batch processing"
+          description: "95th percentile batch processing time is {{ $value }}s"
+
+      # Alert when learning rate is zero (training won't learn)
+      - alert: ZeroLearningRate
+        expr: rtdlm_learning_rate == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Learning rate is zero"
+          description: "Learning rate has dropped to zero, training will not make progress"
+
+  # ===========================================================================
+  # Checkpoint Alerts
+  # ===========================================================================
+  - name: checkpoints
+    interval: 60s
+    rules:
+      # Alert when no checkpoints saved for too long
+      - alert: NoRecentCheckpoint
+        expr: time() - rtdlm_checkpoints_saved_total > 3600
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No checkpoint saved recently"
+          description: "No checkpoint has been saved in the last hour"

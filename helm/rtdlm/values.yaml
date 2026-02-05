@@ -1,0 +1,271 @@
+# RT-DLM Helm Chart Values
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# =============================================================================
+# Global Configuration
+# =============================================================================
+Name: rtdlm
+Namespace: rtdlm
+
+# Cluster type: aws, gcp, azure, local
+clusterType: aws
+
+# =============================================================================
+# Default Settings
+# =============================================================================
+default:
+  registry: ghcr.io
+  project: auralithai
+  pullPolicy: Always
+  
+  # Storage class for PVCs
+  storageClass: gp3
+  
+  # Ingress settings
+  ingressClassName: nginx
+  
+  # Feature flags
+  disable_all_deployments: false
+  priority_classes_enabled: false
+  
+  # Resource gateway
+  resource_gateway:
+    enabled: false
+
+# =============================================================================
+# Observability Tags (for Datadog/Prometheus)
+# =============================================================================
+observability_tags:
+  env: production
+  env_name: rtdlm-prod
+  customer: auralithai
+  product:
+    name: rt-dlm
+    version: "0.1.0"
+  
+  training:
+    servicename: "rtdlm-training"
+    applicationName: rtdlm-trainer
+
+# =============================================================================
+# Certificate Manager
+# =============================================================================
+cert_manager:
+  cluster_issuer: letsencrypt-prod
+
+# =============================================================================
+# DNS Configuration
+# =============================================================================
+dns:
+  basedomain: auralithai.com
+  subdomain: ml
+
+# =============================================================================
+# Training Configuration
+# =============================================================================
+training:
+  enabled: true
+  
+  # Image settings
+  image:
+    repository: ghcr.io/auralithai/rt-dlm
+    tag: train-latest
+    pullPolicy: Always
+  
+  # Service account
+  serviceaccount: rtdlm-training-sa
+  
+  # Resource configuration
+  replicaCount: 1
+  
+  resources:
+    requests:
+      memory: "32Gi"
+      cpu: "8"
+      nvidia.com/gpu: 4
+      ephemeral-storage: "50Gi"
+    limits:
+      memory: "64Gi"
+      cpu: "16"
+      nvidia.com/gpu: 4
+      ephemeral-storage: "100Gi"
+  
+  # GPU configuration
+  gpu:
+    enabled: true
+    count: 4
+    type: nvidia-a100  # nvidia-a100, nvidia-v100, nvidia-t4
+  
+  # Model configuration
+  model:
+    preset: medium
+    hidden_dim: 1024
+    num_layers: 12
+    num_heads: 16
+    batch_size: 32
+    learning_rate: "1e-4"
+    epochs: 100
+    warmup_steps: 1000
+    weight_decay: "0.01"
+    gradient_clip: "1.0"
+  
+  # Checkpoint configuration
+  checkpoint:
+    enabled: true
+    interval: 1000
+    keep_count: 5
+    storage_size: "100Gi"
+  
+  # Logging configuration
+  logging:
+    level: INFO
+    storage_size: "50Gi"
+  
+  # Data configuration
+  data:
+    storage_size: "500Gi"
+    path: /data
+  
+  # JAX/XLA configuration
+  jax:
+    preallocate: "false"
+    mem_fraction: "0.90"
+  
+  # WandB configuration
+  wandb:
+    enabled: false
+    project: rt-dlm
+    mode: disabled  # online, offline, disabled
+  
+  # Prometheus metrics
+  metrics:
+    enabled: true
+    port: 8000
+    path: /metrics
+  
+  # Service configuration
+  service:
+    name: rtdlm-training
+    port: 8000
+    type: ClusterIP
+  
+  # Ingress configuration
+  ingress:
+    enabled: false
+    subdomain: training
+    annotations: {}
+  
+  # Node selection
+  nodeSelector:
+    accelerator: nvidia-gpu
+  
+  # Tolerations for GPU nodes
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+  
+  # Affinity rules
+  affinity: {}
+  
+  # Health probes
+  probes:
+    liveness:
+      enabled: true
+      initialDelaySeconds: 60
+      periodSeconds: 30
+      failureThreshold: 3
+    readiness:
+      enabled: false
+
+# =============================================================================
+# Distributed Training Configuration
+# =============================================================================
+distributed_training:
+  enabled: false
+  
+  # Number of worker nodes
+  workers: 4
+  
+  # NCCL configuration
+  nccl:
+    debug: INFO
+    ib_disable: "0"
+  
+  # Master configuration
+  master:
+    port: 29500
+
+# =============================================================================
+# Metrics Server (Prometheus Exporter)
+# =============================================================================
+metrics_server:
+  enabled: true
+  
+  image:
+    repository: ghcr.io/auralithai/rt-dlm
+    tag: metrics-latest
+  
+  replicaCount: 1
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  
+  service:
+    name: rtdlm-metrics
+    port: 8000
+    type: ClusterIP
+
+# =============================================================================
+# Secrets Configuration
+# =============================================================================
+secrets:
+  # Create secrets from external sources
+  external:
+    enabled: false
+    # AWS Secrets Manager, Vault, etc.
+  
+  # WandB API key
+  wandb_api_key: ""
+  
+  # AWS credentials (for S3 data loading)
+  aws:
+    access_key_id: ""
+    secret_access_key: ""
+    region: us-east-1
+  
+  # HuggingFace token
+  hf_token: ""
+
+# =============================================================================
+# Network Policies
+# =============================================================================
+networkPolicy:
+  enabled: true
+  
+  # Allow DNS egress
+  allowDNS: true
+  
+  # Allow egress to specific CIDRs
+  egressCIDRs: []
+
+# =============================================================================
+# Pod Disruption Budget
+# =============================================================================
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# =============================================================================
+# Priority Classes
+# =============================================================================
+priorityClass:
+  enabled: false
+  name: rtdlm-high-priority
+  value: 1000000
