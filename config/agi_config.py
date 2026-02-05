@@ -100,7 +100,15 @@ class AGIConfig:
         self.quantum_layers = kwargs.get("quantum_layers", 4)  # Number of quantum-inspired layers
         self.meta_learning_enabled = kwargs.get("meta_learning_enabled", True)  # Enable meta-learning
         self.self_improvement_enabled = kwargs.get("self_improvement_enabled", True)  # Enable self-improvement
-        
+
+        # --- Recursive Language Model (RLM) Parameters ---
+        self.rlm_enabled = kwargs.get("rlm_enabled", True)  # Enable RLM for long context
+        self.rlm_max_recursion_depth = kwargs.get("rlm_max_recursion_depth", 5)  # Max recursion depth
+        self.rlm_context_peek_size = kwargs.get("rlm_context_peek_size", 2000)  # Chars per peek
+        self.rlm_tool_budget = kwargs.get("rlm_tool_budget", 20)  # Max tool calls per query
+        self.rlm_auto_partition_threshold = kwargs.get("rlm_auto_partition_threshold", 8000)  # Auto-partition above this
+        self.rlm_direct_context_threshold = kwargs.get("rlm_direct_context_threshold", 2000)  # Use direct pass below this
+
         # --- Multi-Modal Parameters ---
         self.multimodal_enabled = kwargs.get("multimodal_enabled", True)  # Enable multi-modal processing
         self.vision_patch_size = kwargs.get("vision_patch_size", 16)  # ViT patch size

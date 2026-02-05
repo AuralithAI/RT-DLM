@@ -137,6 +137,16 @@ This document describes the model architecture for training.
 │  │  │ - Task encoding                                     │      │  │   - Analogy reasoning       │ │
 │  │  │ - Few-shot adaptation                               │      │  │                             │ │
 │  │  └─────────────────────────────────────────────────────┘      │  └─────────────────────────────┘ │
+│  │                                                               │                                  │
+│  │  ┌─────────────────────────────────────────────────────┐      │                                  │
+│  │  │     RecursiveLanguageModel (RLM) (core/rlm/)        │      │                                  │
+│  │  │                                                     │      │                                  │
+│  │  │ - ContextStore: External context storage            │      │                                  │
+│  │  │ - ContextTools: peek, grep, partition, summarize    │      │                                  │
+│  │  │ - ToolSelector: Neural tool selection               │      │                                  │
+│  │  │ - RecursiveCallManager: Spawn/aggregate subcalls    │      │                                  │
+│  │  │ - Solves "context rot" for long documents           │      │                                  │
+│  │  └─────────────────────────────────────────────────────┘      │                                  │
 │  └───────────────────────────────────────────────────────────────┘                                  │
 └─────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
@@ -1089,8 +1099,89 @@ RT-DLM/
 | Hybrid Architecture | `hybrid_architecture/` | 1 | Complete |
 | Multimodal | `multimodal/` | 3 | Complete |
 | Reasoning | `reasoning/` | 1 | Complete |
-| Configuration | `config/` | 3 | Complete |
+| RLM | `core/rlm/` | 5 | Complete |
+| Configuration | `config/` | 4 | Complete |
 | Training | `train.py` | 1 | Complete |
 | Tests | `tests/` | tests | Complete |
 
 > **Note**: Tokenization and data processing have been moved to [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline).
+
+## Recursive Language Model (RLM)
+
+The RLM module (`core/rlm/`) implements the Recursive Language Model architecture inspired by MIT research ([arXiv:2512.24601](https://arxiv.org/abs/2512.24601)). It solves the "context rot" problem where LLMs degrade when processing long documents even within context window limits.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     RecursiveLanguageModel (RLM)                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────┐    ┌──────────────────────────────────────────┐   │
+│  │   ContextStore      │    │           ContextTools                    │   │
+│  │   (External REPL)   │    │                                           │   │
+│  │                     │    │  ┌─────────┐ ┌─────────┐ ┌───────────┐   │   │
+│  │  - Variables Dict   │◄───│  │  peek() │ │  grep() │ │partition()│   │   │
+│  │  - Context Registry │    │  └─────────┘ └─────────┘ └───────────┘   │   │
+│  │  - Chunk Manager    │    │  ┌─────────┐ ┌─────────┐ ┌───────────┐   │   │
+│  └─────────────────────┘    │  │summarize│ │ count() │ │  filter() │   │   │
+│            ▲                │  └─────────┘ └─────────┘ └───────────┘   │   │
+│            │                └──────────────────────────────────────────┘   │
+│            │                                     │                         │
+│            │                                     ▼                         │
+│  ┌─────────┴─────────────────────────────────────────────────────────────┐ │
+│  │                    ToolSelector (Neural Network)                       │ │
+│  │  - Encodes query + context metadata + recursion state                  │ │
+│  │  - Outputs tool probabilities + termination probability                │ │
+│  │  - Extracts tool parameters from learned heads                         │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                      │                                      │
+│                                      ▼                                      │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                      RecursiveCallManager                               │ │
+│  │  - Tracks recursion depth and tool budget                               │ │
+│  │  - Spawns parallel subcalls for chunk processing                        │ │
+│  │  - Aggregates results (weighted mean, concat, simple)                   │ │
+│  │  - Caches results for repeated queries                                  │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| External Context | Context stored as variables, not in model input |
+| Tool-Based Exploration | peek, grep, partition, summarize, count, filter |
+| Recursive Decomposition | Spawn subcalls on partitioned chunks |
+| Neural Tool Selection | Learned policy for tool selection |
+| Parallel Subcalls | Process multiple chunks concurrently |
+| Direct Pass Fallback | Skip RLM for short contexts |
+
+### Configuration
+
+```python
+from config.rlm_config import RLMConfig
+
+config = RLMConfig(
+    enabled=True,
+    max_recursion_depth=5,
+    context_peek_size=2000,
+    tool_budget=20,
+    auto_partition_threshold=8000,
+    direct_context_threshold=2000,
+    parallel_subcalls=True,
+)
+```
+
+### Integration with ReasoningEngine
+
+RLM is integrated into `ReasoningEngine` and can be enabled via `AGIConfig`:
+
+```python
+config = AGIConfig(
+    rlm_enabled=True,
+    rlm_max_recursion_depth=5,
+    rlm_tool_budget=20,
+)
+```
