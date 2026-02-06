@@ -21,7 +21,6 @@ from src.core.model.memory_bank import MemoryBank
 from src.core.components.reusable_components import (
     SpikingMechanism,
     PruningManager,
-    apply_shared_spiking,
     AttentionConfig,
 )
 

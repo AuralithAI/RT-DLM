@@ -15,7 +15,6 @@ from src.core.components.graph_neurons import (
     GraphNeuron,
     GraphAttentionUnit,
     DynamicGraphBuilder,
-    RelationalRouter,
     MultiHopGraphReasoner,
     GraphMoE,
     GraphIntegratedTransformerBlock,

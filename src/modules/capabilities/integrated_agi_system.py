@@ -18,7 +18,7 @@ from pathlib import Path
 try:
     from .real_time_learning import RealTimeLearningSystem, FeedbackSample
     from .zero_shot_reasoning import ZeroShotConceptualSystem, ReasoningChain
-    from ..quantum.quantum_readiness import QuantumEnhancedTMS, create_quantum_ready_system
+    from ..quantum.quantum_readiness import create_quantum_ready_system
 except ImportError:
     # Fallback for module imports
     import sys
@@ -27,7 +27,7 @@ except ImportError:
     from real_time_learning import RealTimeLearningSystem, FeedbackSample
     from zero_shot_reasoning import ZeroShotConceptualSystem, ReasoningChain
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-    from src.core.quantum.quantum_readiness import QuantumEnhancedTMS, create_quantum_ready_system
+    from src.core.quantum.quantum_readiness import create_quantum_ready_system
 
 logger = logging.getLogger(__name__)
 

@@ -36,13 +36,10 @@ from src.modules.capabilities.advanced_algorithms import (
 )
 # Scalable training (unified approach for all parallelism modes)
 from src.core.scalable_training import (
-    ScalableMesh,
     create_scalable_mesh,
-    setup_scalable_training,
     replicate_for_data_parallel,
     unreplicate_params,
     estimate_model_memory,
-    recommend_parallelism,
 )
 
 # Memory profiling and gradient accumulation

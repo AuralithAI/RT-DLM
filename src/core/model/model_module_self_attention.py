@@ -37,8 +37,6 @@ from src.core.model.advanced_attention import (
     GroupedQueryAttention,
     SlidingWindowAttention,
     LinearAttention,
-    precompute_rope_frequencies,
-    apply_rope,
 )
 
 

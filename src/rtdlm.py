@@ -26,17 +26,14 @@ from src.core.quantum.quantum_readiness import (
     AutonomousScientificDiscovery, 
     AutonomousMultiAgentSystem,
     VariationalQuantumCircuit,
-    QuantumSimulator
 )
 from src.config.agi_config import AGIConfig
 from src.modules.hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
 from src.modules.capabilities.advanced_algorithms import ContinualLearner
-from src.core.agi.agi_system import AGISystemAbstraction, AGIStage, StageThresholds
+from src.core.agi.agi_system import AGISystemAbstraction, StageThresholds
 from src.core.ethics.ethical_adaptation import (
     FairnessAnalyzer, 
     FairnessConfig, 
-    FairnessResult,
-    SensitiveAttribute
 )
 
 class ConsciousnessSimulator(hk.Module):
