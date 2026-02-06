@@ -4,6 +4,136 @@ This document describes the model architecture for training.
 
 > **Note**: Data collection, tokenization, and processing are handled by [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline).
 
+## Compute Controller
+
+RT-DLM features a **learned Compute Controller** that dynamically allocates compute across modules under a budget constraint. Instead of running all modules on every input, the Controller decides which modules to invoke, how much budget to allocate, and when to halt—enabling adaptive, efficient inference.
+
+### Controller Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    COMPUTE CONTROLLER                                               │
+│                                  (core/agi/compute_controller.py)                                   │
+│                                                                                                     │
+│  ┌───────────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │                                     ComputePlan                                               │  │
+│  │                                   (K-Step Execution Loop)                                     │  │
+│  │                                                                                               │  │
+│  │   Input ──► ComputeState ──► Controller ──► ComputeAction ──► Module ──► Update State ──►... │  │
+│  │             (hidden_state,    (learned      (module_probs,   (selected   (delta, confidence,  │  │
+│  │              uncertainty,      policy)       budget_alloc,    module)     should_halt)        │  │
+│  │              confidence,                     halt_prob)                                       │  │
+│  │              budget_remaining)                                                                │  │
+│  │                                                                                               │  │
+│  │   Halting Conditions:                                                                         │  │
+│  │   • halt_prob > halt_threshold (learned)                                                      │  │
+│  │   • confidence > confidence_threshold (task complete)                                         │  │
+│  │   • budget_remaining ≤ 0 (resource exhausted)                                                 │  │
+│  │   • max_steps reached (safety limit)                                                          │  │
+│  └───────────────────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                                     │
+│  ┌─────────────────────────────────┐  ┌─────────────────────────────────────────────────────────┐   │
+│  │       ComputeController         │  │                  ModuleRegistry                        │   │
+│  │       (Learned Policy)          │  │             (Available Modules)                        │   │
+│  │                                 │  │                                                        │   │
+│  │ Inputs:                         │  │  ┌──────────────────┐  ┌──────────────────┐            │   │
+│  │ • Hidden state (from modules)   │  │  │ MEMORY_RETRIEVAL │  │ GRAPH_REASONING  │            │   │
+│  │ • Uncertainty estimate          │  │  │ cost: 0.05-0.20  │  │ cost: 0.10-0.40  │            │   │
+│  │ • Current confidence            │  │  └──────────────────┘  └──────────────────┘            │   │
+│  │ • Budget remaining              │  │  ┌──────────────────┐  ┌──────────────────┐            │   │
+│  │ • Memory summary                │  │  │ SYMBOLIC_REASON  │  │ PROBABILISTIC    │            │   │
+│  │                                 │  │  │ cost: 0.05-0.25  │  │ cost: 0.08-0.30  │            │   │
+│  │ Outputs:                        │  │  └──────────────────┘  └──────────────────┘            │   │
+│  │ • module_probs (which to run)   │  │  ┌──────────────────┐  ┌──────────────────┐            │   │
+│  │ • budget_allocation (per mod)   │  │  │ MOE_ROUTING      │  │ CONSCIOUSNESS    │            │   │
+│  │ • halt_prob (when to stop)      │  │  │ cost: 0.15-0.50  │  │ cost: 0.20-0.60  │            │   │
+│  │                                 │  │  └──────────────────┘  └──────────────────┘            │   │
+│  │ Network:                        │  │  ┌──────────────────┐                                  │   │
+│  │ • 2-layer MLP encoder           │  │  │ OUTPUT_GEN       │                                  │   │
+│  │ • GRU state update              │  │  │ cost: 0.10-0.35  │                                  │   │
+│  │ • Linear heads for outputs      │  │  └──────────────────┘                                  │   │
+│  └─────────────────────────────────┘  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Module Contracts
+
+Each module registered with the Controller implements a **ModuleContract** that specifies:
+
+| Contract Field | Description |
+|----------------|-------------|
+| `base_cost` | Minimum compute cost (0.0-1.0) |
+| `max_cost` | Maximum compute cost (0.0-1.0) |
+| `capabilities` | What the module provides (e.g., "memory_retrieval", "logical_inference") |
+| `dependencies` | Other modules that must run first |
+
+### Module Output
+
+When invoked, each module returns a **ModuleOutput**:
+
+| Output Field | Description |
+|--------------|-------------|
+| `delta` | Update to hidden state |
+| `confidence` | How confident the module is in its output |
+| `actual_cost` | Compute actually consumed |
+| `evidence` | Supporting information for the update |
+| `should_halt` | Module's recommendation to stop |
+
+### Configuration Presets
+
+| Preset | Budget | Max Steps | Halt Threshold | Use Case |
+|--------|--------|-----------|----------------|----------|
+| `FAST_CONFIG` | 0.5 | 5 | 0.3 | Low-latency, simple queries |
+| `BALANCED_CONFIG` | 1.0 | 10 | 0.5 | Default, general purpose |
+| `THOROUGH_CONFIG` | 2.0 | 20 | 0.7 | Complex reasoning, quality-critical |
+
+### Data Flow with Controller
+
+```
+                                           INPUT
+                                             │
+                                             ▼
+                              ┌───────────────────────┐
+                              │   ComputeController   │
+                              │   (Learned Policy)    │
+                              └───────────┬───────────┘
+                                          │
+               ┌──────────────────────────┼──────────────────────────┐
+               │                          │                          │
+               ▼                          ▼                          ▼
+     ┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
+     │ Step 1: Memory   │      │ Step 2: Graph    │      │ Step 3: MoE      │
+     │ (if selected)    │      │ (if selected)    │      │ (if selected)    │
+     │ budget: 0.15     │      │ budget: 0.25     │      │ budget: 0.30     │
+     └────────┬─────────┘      └────────┬─────────┘      └────────┬─────────┘
+              │                         │                         │
+              └─────────────────────────┼─────────────────────────┘
+                                        │
+                              ┌─────────▼─────────┐
+                              │  Controller       │
+                              │  Halt Decision    │
+                              │  (confidence=0.92)│
+                              └─────────┬─────────┘
+                                        │
+                                        ▼
+                                     OUTPUT
+                        (after 3 steps, budget used: 0.70)
+```
+
+### Module Adapters
+
+The `core/agi/module_adapters.py` provides adapters that wrap existing RT-DLM modules to comply with the `ModuleContract` interface:
+
+| Adapter | Wraps | Capabilities |
+|---------|-------|--------------|
+| `MemoryRetrievalAdapter` | MemoryBank | memory_retrieval, context_augmentation |
+| `GraphReasoningAdapter` | MultiHopGraphReasoner | relational_reasoning, graph_inference |
+| `SymbolicReasoningAdapter` | SymbolicReasoning | logical_inference, rule_application |
+| `ProbabilisticInferenceAdapter` | Probabilistic | uncertainty_estimation, bayesian_inference |
+| `MoERoutingAdapter` | SparseMoE | expert_routing, specialized_processing |
+| `ConsciousnessModuleAdapter` | ConsciousnessSimulator | metacognition, self_awareness |
+| `OutputGenerationAdapter` | TransformerModel | text_generation, sequence_modeling |
+
 ## System Overview
 
 ```
