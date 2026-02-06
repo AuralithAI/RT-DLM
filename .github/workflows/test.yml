@@ -63,19 +63,21 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
-        if: matrix.python-version == '3.12'
+        if: matrix.python-version == '3.12' && success()
         with:
           files: ./coverage.xml
           flags: unittests
           name: codecov-rt-dlm
           fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
-        if: matrix.python-version == '3.12'
+        if: matrix.python-version == '3.12' && success()
         with:
           name: coverage-report
           path: htmlcov/
+          retention-days: 7
 
   # Quick smoke test for model initialization
   smoke-test:
