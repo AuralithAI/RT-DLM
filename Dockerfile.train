@@ -53,10 +53,15 @@ RUN pip install --no-cache-dir \
     "jax[cuda12_pip]==0.4.35" \
     -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
-# Copy and install requirements
+# Install PyTorch CPU-only first to avoid duplicate CUDA libraries
+RUN pip install --no-cache-dir \
+    torch==2.5.1+cpu \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# Copy and install remaining requirements
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt \
-    --ignore-installed jax jaxlib
+    --ignore-installed jax jaxlib torch
 
 # ==============================================================================
 # Stage 3: CPU-only build target
