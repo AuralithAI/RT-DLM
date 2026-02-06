@@ -234,16 +234,72 @@ jobs:
             const keepTags = ['latest', 'latest-cpu', 'main', 'main-cpu'];
             const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
             
+            // Detect if owner is an org or user
+            let isOrg = false;
             try {
-              // Get all versions of the package
-              const versions = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+              await github.rest.orgs.get({ org: owner });
+              isOrg = true;
+              console.log(`Owner "${owner}" is an organization`);
+            } catch {
+              console.log(`Owner "${owner}" is a user`);
+            }
+            
+            // Helper to get all versions with pagination
+            async function getAllVersions() {
+              const allVersions = [];
+              let page = 1;
+              
+              while (true) {
+                let response;
+                const params = {
+                  package_type: 'container',
+                  package_name: package_name,
+                  per_page: 100,
+                  page: page
+                };
+                
+                if (isOrg) {
+                  response = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+                    ...params,
+                    org: owner
+                  });
+                } else {
+                  response = await github.rest.packages.getAllPackageVersionsForPackageOwnedByUser({
+                    ...params,
+                    username: owner
+                  });
+                }
+                
+                allVersions.push(...response.data);
+                
+                if (response.data.length < 100) break;
+                page++;
+              }
+              
+              console.log(`Found ${allVersions.length} total package versions`);
+              return allVersions;
+            }
+            
+            // Helper to delete a version
+            async function deleteVersion(versionId) {
+              const params = {
                 package_type: 'container',
                 package_name: package_name,
-                org: owner,
-                per_page: 100
-              });
+                package_version_id: versionId
+              };
               
-              for (const version of versions.data) {
+              if (isOrg) {
+                await github.rest.packages.deletePackageVersionForOrg({ ...params, org: owner });
+              } else {
+                await github.rest.packages.deletePackageVersionForUser({ ...params, username: owner });
+              }
+            }
+            
+            try {
+              const versions = await getAllVersions();
+              let deletedCount = 0;
+              
+              for (const version of versions) {
                 const tags = version.metadata?.container?.tags || [];
                 const createdAt = new Date(version.created_at);
                 
@@ -253,20 +309,18 @@ jobs:
                 );
                 
                 // Delete SHA-tagged images older than 7 days
-                const isShaTag = tags.some(tag => tag.startsWith('sha-'));
+                const isShaTag = tags.length === 0 || tags.some(tag => tag.startsWith('sha-'));
                 const isOld = createdAt < cutoffDate;
                 
                 if (!hasProtectedTag && isShaTag && isOld) {
-                  console.log(`Deleting version ${version.id} with tags: ${tags.join(', ')}`);
-                  await github.rest.packages.deletePackageVersionForOrg({
-                    package_type: 'container',
-                    package_name: package_name,
-                    org: owner,
-                    package_version_id: version.id
-                  });
+                  console.log(`Deleting version ${version.id} (created: ${createdAt.toISOString()}) with tags: ${tags.join(', ') || 'untagged'}`);
+                  await deleteVersion(version.id);
+                  deletedCount++;
                 }
               }
+              
+              console.log(`Cleanup complete: deleted ${deletedCount} old versions`);
             } catch (error) {
-              console.log(`Cleanup skipped: ${error.message}`);
+              console.log(`Cleanup failed: ${error.message}`);
             }
         continue-on-error: true
