@@ -1,0 +1,147 @@
+{{- if .Values.distributed_training.enabled }}
+{{- if not .Values.default.disable_all_deployments }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "rtdlm.fullname" . }}-distributed
+  namespace: {{ .Values.Namespace }}
+  labels:
+    {{- include "rtdlm.training.labels" . | nindent 4 }}
+    app: {{ .Values.Name }}-distributed
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.Namespace }}
+spec:
+  parallelism: {{ .Values.distributed_training.workers }}
+  completions: {{ .Values.distributed_training.workers }}
+  completionMode: Indexed
+  backoffLimit: 2
+  
+  template:
+    metadata:
+      annotations:
+        {{- include "rtdlm.prometheusAnnotations" . | nindent 8 }}
+      labels:
+        {{- include "rtdlm.training.selectorLabels" . | nindent 8 }}
+        app: {{ .Values.Name }}-distributed
+        {{- include "rtdlm.observabilityLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      subdomain: {{ include "rtdlm.fullname" . }}-workers
+      
+      serviceAccountName: {{ include "rtdlm.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      
+      {{- if .Values.training.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.training.nodeSelector | nindent 8 }}
+      {{- end }}
+      
+      {{- if .Values.training.tolerations }}
+      tolerations:
+        {{- toYaml .Values.training.tolerations | nindent 8 }}
+      {{- end }}
+      
+      containers:
+        - name: trainer
+          image: {{ include "rtdlm.training.image" . }}
+          imagePullPolicy: {{ .Values.training.image.pullPolicy }}
+          
+          command:
+            - python
+            - src/train.py
+          args:
+            - "--preset"
+            - "$(MODEL_PRESET)"
+            - "--distributed"
+            - "--world_size"
+            - "{{ .Values.distributed_training.workers }}"
+            - "--node_rank"
+            - "$(JOB_COMPLETION_INDEX)"
+            - "--master_addr"
+            - "{{ include "rtdlm.fullname" . }}-distributed-0.{{ include "rtdlm.fullname" . }}-workers.{{ .Values.Namespace }}.svc.cluster.local"
+            - "--master_port"
+            - "{{ .Values.distributed_training.master.port }}"
+            - "--checkpoint_dir"
+            - "/checkpoints"
+          
+          envFrom:
+            - configMapRef:
+                name: {{ include "rtdlm.fullname" . }}-config
+            - secretRef:
+                name: {{ include "rtdlm.fullname" . }}-secrets
+          
+          env:
+            {{- include "rtdlm.commonEnv" . | nindent 12 }}
+            - name: NCCL_DEBUG
+              value: {{ .Values.distributed_training.nccl.debug | quote }}
+            - name: NCCL_IB_DISABLE
+              value: {{ .Values.distributed_training.nccl.ib_disable | quote }}
+          
+          resources:
+            requests:
+              memory: {{ .Values.training.resources.requests.memory | quote }}
+              cpu: {{ .Values.training.resources.requests.cpu | quote }}
+              {{- if .Values.training.gpu.enabled }}
+              nvidia.com/gpu: {{ .Values.training.resources.requests."nvidia.com/gpu" }}
+              {{- end }}
+            limits:
+              memory: {{ .Values.training.resources.limits.memory | quote }}
+              cpu: {{ .Values.training.resources.limits.cpu | quote }}
+              {{- if .Values.training.gpu.enabled }}
+              nvidia.com/gpu: {{ .Values.training.resources.limits."nvidia.com/gpu" }}
+              {{- end }}
+          
+          volumeMounts:
+            - name: checkpoints
+              mountPath: /checkpoints
+            - name: logs
+              mountPath: /logs
+            - name: data
+              mountPath: {{ .Values.training.data.path }}
+              readOnly: true
+            - name: shm
+              mountPath: /dev/shm
+          
+          ports:
+            - name: nccl
+              containerPort: {{ .Values.distributed_training.master.port }}
+            {{- if .Values.training.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.training.metrics.port }}
+            {{- end }}
+      
+      volumes:
+        - name: checkpoints
+          persistentVolumeClaim:
+            claimName: {{ include "rtdlm.fullname" . }}-checkpoints
+        - name: logs
+          persistentVolumeClaim:
+            claimName: {{ include "rtdlm.fullname" . }}-logs
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "rtdlm.fullname" . }}-data
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 32Gi
+
+---
+# Headless service for pod discovery in distributed training
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rtdlm.fullname" . }}-workers
+  namespace: {{ .Values.Namespace }}
+  labels:
+    {{- include "rtdlm.training.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "rtdlm.training.selectorLabels" . | nindent 4 }}
+    app: {{ .Values.Name }}-distributed
+  ports:
+    - name: nccl
+      port: {{ .Values.distributed_training.master.port }}
+{{- end }}
+{{- end }}

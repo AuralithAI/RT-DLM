@@ -1,0 +1,191 @@
+# RT-DLM Docker Compose Configuration
+# Orchestrates training environment with optional services
+
+services:
+  # ==========================================================================
+  # Training Service (GPU)
+  # ==========================================================================
+  training:
+    build:
+      context: .
+      dockerfile: Dockerfile.train
+      target: gpu
+    image: rtdlm:train-latest
+    container_name: rtdlm-training
+    
+    # GPU configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    # Volume mounts
+    volumes:
+      - ./data:/data:ro
+      - ./checkpoints:/checkpoints:rw
+      - ./logs:/logs:rw
+      - ./config:/app/config:ro
+    
+    # Environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+      - XLA_PYTHON_CLIENT_PREALLOCATE=false
+      - XLA_PYTHON_CLIENT_MEM_FRACTION=0.90
+      - CUDA_VISIBLE_DEVICES=0,1,2,3
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - WANDB_PROJECT=rt-dlm
+      - WANDB_RUN_NAME=${WANDB_RUN_NAME:-training-run}
+    
+    # Shared memory for multi-processing
+    shm_size: '16gb'
+    
+    # Ulimits for large models
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      stack:
+        soft: 67108864
+        hard: 67108864
+    
+    # Network configuration
+    networks:
+      - rtdlm-network
+    
+    # Default training command
+    command: >
+      --preset medium
+      --batch_size 32
+      --epochs 100
+      --learning_rate 1e-4
+      --checkpoint_dir /checkpoints
+      --log_dir /logs
+      --enable_wandb
+    
+    # Restart policy
+    restart: "no"
+
+  # ==========================================================================
+  # Training Service (CPU - for testing)
+  # ==========================================================================
+  training-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.train
+      target: cpu
+    image: rtdlm:train-cpu
+    container_name: rtdlm-training-cpu
+    
+    volumes:
+      - ./data:/data:ro
+      - ./checkpoints:/checkpoints:rw
+      - ./logs:/logs:rw
+    
+    environment:
+      - PYTHONUNBUFFERED=1
+      - JAX_PLATFORM_NAME=cpu
+    
+    networks:
+      - rtdlm-network
+    
+    command: >
+      --preset tiny
+      --batch_size 4
+      --epochs 2
+      --checkpoint_dir /checkpoints
+    
+    profiles:
+      - cpu-only
+
+  # ==========================================================================
+  # TensorBoard for visualization
+  # ==========================================================================
+  tensorboard:
+    image: tensorflow/tensorflow:2.15.0
+    container_name: rtdlm-tensorboard
+    
+    volumes:
+      - ./logs:/logs:ro
+    
+    ports:
+      - "6006:6006"
+    
+    command: tensorboard --logdir=/logs --host=0.0.0.0 --port=6006
+    
+    networks:
+      - rtdlm-network
+    
+    profiles:
+      - monitoring
+
+  # ==========================================================================
+  # Prometheus metrics collector (optional)
+  # ==========================================================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: rtdlm-prometheus
+    
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    
+    ports:
+      - "9090:9090"
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    
+    networks:
+      - rtdlm-network
+    
+    profiles:
+      - monitoring
+
+  # ==========================================================================
+  # Grafana dashboards (optional)
+  # ==========================================================================
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: rtdlm-grafana
+    
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    
+    ports:
+      - "3000:3000"
+    
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    
+    networks:
+      - rtdlm-network
+    
+    depends_on:
+      - prometheus
+    
+    profiles:
+      - monitoring
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  rtdlm-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  prometheus-data:
+  grafana-data:

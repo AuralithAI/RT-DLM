@@ -1,0 +1,126 @@
+# RT-DLM Training Docker Image
+# Multi-stage build for GPU and CPU variants
+
+# ==============================================================================
+# Stage 1: Base image with system dependencies
+# ==============================================================================
+FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04 AS base
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 \
+    python3.12-dev \
+    python3.12-venv \
+    python3-pip \
+    git \
+    curl \
+    wget \
+    libsndfile1 \
+    ffmpeg \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1
+
+# Create non-root user for security
+RUN useradd -m -s /bin/bash rtdlm && \
+    mkdir -p /app /data /checkpoints /logs && \
+    chown -R rtdlm:rtdlm /app /data /checkpoints /logs
+
+WORKDIR /app
+
+# ==============================================================================
+# Stage 2: Python dependencies (GPU)
+# ==============================================================================
+FROM base AS gpu-deps
+
+# Upgrade pip
+RUN python -m pip install --upgrade pip setuptools wheel
+
+# Install JAX with CUDA support
+RUN pip install --no-cache-dir \
+    "jax[cuda12_pip]==0.4.35" \
+    -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+# Copy and install requirements
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+    --ignore-installed jax jaxlib
+
+# ==============================================================================
+# Stage 3: CPU-only build target
+# ==============================================================================
+FROM base AS cpu
+
+# Upgrade pip
+RUN python -m pip install --upgrade pip setuptools wheel
+
+# Install JAX CPU version
+RUN pip install --no-cache-dir "jax[cpu]==0.4.35"
+
+# Copy and install requirements (skip jax)
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+    --ignore-installed jax jaxlib
+
+# Copy source code
+COPY --chown=rtdlm:rtdlm . /app/
+
+# Switch to non-root user
+USER rtdlm
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV JAX_PLATFORM_NAME=cpu
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import jax; print(jax.devices())" || exit 1
+
+# Default command
+ENTRYPOINT ["python", "src/train.py"]
+CMD ["--help"]
+
+# ==============================================================================
+# Stage 4: Final GPU training image
+# ==============================================================================
+FROM gpu-deps AS gpu
+
+# Copy source code
+COPY --chown=rtdlm:rtdlm . /app/
+
+# Switch to non-root user
+USER rtdlm
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV XLA_PYTHON_CLIENT_PREALLOCATE=false
+ENV XLA_PYTHON_CLIENT_MEM_FRACTION=0.90
+
+# Labels
+ARG BUILD_DATE
+ARG VCS_REF
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.title="RT-DLM Training" \
+      org.opencontainers.image.description="Real-Time Deep Learning Model - Training Environment" \
+      org.opencontainers.image.vendor="AuralithAI" \
+      org.opencontainers.image.source="https://github.com/AuralithAI/RT-DLM"
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import jax; print(jax.devices())" || exit 1
+
+# Default command
+ENTRYPOINT ["python", "src/train.py"]
+CMD ["--help"]
+
+# Default target is GPU
+FROM gpu AS default

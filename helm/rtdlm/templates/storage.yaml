@@ -1,0 +1,61 @@
+{{- if .Values.training.enabled }}
+---
+# Checkpoint storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "rtdlm.fullname" . }}-checkpoints
+  namespace: {{ .Values.Namespace }}
+  labels:
+    {{- include "rtdlm.training.labels" . | nindent 4 }}
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.Namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: {{ .Values.default.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.training.checkpoint.storage_size }}
+
+---
+# Log storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "rtdlm.fullname" . }}-logs
+  namespace: {{ .Values.Namespace }}
+  labels:
+    {{- include "rtdlm.training.labels" . | nindent 4 }}
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.Namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: {{ .Values.default.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.training.logging.storage_size }}
+
+---
+# Training data storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "rtdlm.fullname" . }}-data
+  namespace: {{ .Values.Namespace }}
+  labels:
+    {{- include "rtdlm.training.labels" . | nindent 4 }}
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.Namespace }}
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: {{ .Values.default.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.training.data.storage_size }}
+{{- end }}

@@ -1,0 +1,40 @@
+{{- if and .Values.training.enabled .Values.training.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "rtdlm.fullname" . }}-training
+  namespace: {{ .Values.Namespace }}
+  labels:
+    {{- include "rtdlm.training.labels" . | nindent 4 }}
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Values.Namespace }}
+    kubernetes.io/ingress.allow-http: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1024m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    {{- if .Values.cert_manager }}
+    cert-manager.io/cluster-issuer: {{ .Values.cert_manager.cluster_issuer | default "letsencrypt-staging" }}
+    {{- end }}
+    {{- with .Values.training.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.default.ingressClassName }}
+  tls:
+    - hosts:
+        - {{ include "rtdlm.ingressHost" . }}
+      secretName: {{ include "rtdlm.fullname" . }}-tls
+  rules:
+    - host: {{ include "rtdlm.ingressHost" . }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.training.service.name }}
+                port:
+                  number: {{ .Values.training.service.port }}
+{{- end }}

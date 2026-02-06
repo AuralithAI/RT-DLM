@@ -58,7 +58,7 @@ opencv-python==4.10.0.84
 # Audio processing
 librosa==0.10.2
 soundfile==0.12.1
-scipy==1.14.1
+scipy>=1.11.0,<1.15.0
 
 # Video processing
 moviepy==2.1.1

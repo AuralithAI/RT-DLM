@@ -14,51 +14,23 @@ Get started with RT-DLM model training and inference.
 
 ### Install Dependencies
 
-```bash
-git clone https://github.com/AuralithAI/RT-DLM.git
-cd RT-DLM
-pip install -r requirements.txt
-```
-
-Or use the installer script:
-
-```bash
-python install_dependencies.py
-```
+Clone the repository and install with `pip install -r requirements.txt` or use `python install_dependencies.py`.
 
 ## Training
 
 ### Prepare Training Data
 
-Training data (pre-tokenized SafeTensor shards) should be prepared using [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline):
-
-```bash
-# Using Auralith-Data-Pipeline
-auralith-pipeline process --input ./raw_data --output ./shards
-```
-
-The shards directory should contain `.safetensors` files with `input_ids` tensors.
+Training data (pre-tokenized SafeTensor shards) should be prepared using [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline). The shards directory should contain `.safetensors` files with `input_ids` tensors.
 
 ### Train the Model
 
-Train the model with pre-tokenized data:
-
-```bash
-python train.py --data-dir /path/to/shards
-```
+Run `python train.py --data-dir /path/to/shards` to train the model.
 
 #### Training Options
 
-```bash
-# Train with custom hyperparameters
-python train.py --data-dir ./shards --epochs 50 --batch-size 32 --lr 1e-4
-
-# Specify model architecture
-python train.py --data-dir ./shards --d-model 768 --num-layers 24 --num-heads 12
-
-# Resume from a checkpoint
-python train.py --data-dir ./shards --resume checkpoints/rtdlm_epoch_10.safetensors
-```
+- `--epochs`, `--batch-size`, `--lr` for hyperparameters
+- `--d-model`, `--num-layers`, `--num-heads` for model architecture
+- `--resume` to continue from a checkpoint
 
 Training configuration is in `config/agi_config.py`.
 
@@ -76,29 +48,11 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed distributed training documen
 
 ### Full Test Suite
 
-```bash
-# Using pytest
-pytest tests/
-
-# Using test runner
-python tests/test_runner.py
-```
+Use `pytest tests/` or `python tests/test_runner.py` to run all tests.
 
 ### Specific Tests
 
-```bash
-# Run specific test file
-pytest tests/test_framework.py
-
-# Run specific test
-pytest tests/test_framework.py::test_function_name
-
-# Run with verbose output
-pytest tests/ -v
-
-# Run distributed training tests
-pytest tests/distributed/ -v
-```
+Run specific files with `pytest tests/test_framework.py`, specific tests with `pytest tests/test_framework.py::test_function_name`, or verbose output with `pytest tests/ -v`. Distributed tests are in `tests/distributed/`.
 
 ## Configuration
 

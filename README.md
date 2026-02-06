@@ -3,8 +3,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![JAX](https://img.shields.io/badge/JAX-0.4.35+-orange.svg)](https://github.com/google/jax)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-600%2B%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-740%2B%20passing-brightgreen.svg)](src/tests/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![CI](https://github.com/AuralithAI/RT-DLM/actions/workflows/test.yml/badge.svg)](https://github.com/AuralithAI/RT-DLM/actions/workflows/test.yml)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](Dockerfile.train)
 
 A JAX/Haiku-based neural architecture for training, combining transformer models, mixture of experts, quantum-inspired computing, and multi-paradigm hybrid learning.
 
@@ -126,29 +128,14 @@ Pre-configured model sizes via `AGIConfig.from_preset()`:
 ## Quick Start
 
 ### Installation
-```bash
-git clone https://github.com/AuralithAI/RT-DLM.git
-cd RT-DLM
-pip install -r requirements.txt
-```
+
+Clone the repository and install with `pip install -r requirements.txt`.
 
 ### Training
 
 The model accepts pre-tokenized tensors (from [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline)).
 
-```bash
-# Train model
-python train.py --data-dir /path/to/tokenized/shards
-
-# Train with custom settings
-python train.py --epochs 50 --batch-size 32 --lr 1e-4
-
-# Resume training from a checkpoint
-python train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors
-
-# Resume with extended epochs
-python train.py --resume checkpoints/rtdlm_agi_epoch_10.safetensors --epochs 100
-```
+Run `python src/train.py --data-dir /path/to/tokenized/shards` to train. Use `--epochs`, `--batch-size`, `--lr` for hyperparameters and `--resume` to continue from a checkpoint.
 
 ### Training Modes
 
@@ -204,8 +191,36 @@ Set `quantum_layers=0` to disable quantum simulation for faster training.
 ## Documentation
 
 - [Architecture Overview](docs/ARCHITECTURE.md) - System design and data flow
+- [Deployment Guide](docs/DEPLOYMENT.md) - Deployment architecture and how-to
 - [Sampling Strategies](docs/SAMPLING.md) - Token generation configuration
 - [Quick Start Guide](docs/QUICKSTART.md) - Getting started
+- [Changelog](CHANGELOG.md) - Version history and changes
+
+## Deployment & Infrastructure
+
+### CI/CD Pipeline
+
+Automated testing and deployment via GitHub Actions with workflows for testing (any branch), linting (any branch), and Docker builds (main only).
+
+### Docker
+
+Build training images with `docker build -f Dockerfile.train`. Supports GPU and CPU-only targets. Use `docker-compose` for local development with optional monitoring stack (Prometheus + Grafana).
+
+### Kubernetes (Helm)
+
+Deploy training jobs to Kubernetes using the Helm chart in `helm/rtdlm/`. Install with `helm install rtdlm ./helm/rtdlm -n rtdlm --create-namespace` and customize with `--set` flags for model preset, GPU count, storage, and distributed training options.
+
+### Monitoring
+
+Prometheus metrics exposed on port 8000 via `PrometheusTrainingCallback`. Access at `http://localhost:8000/metrics`.
+
+### Model Export
+
+Export trained models using `scripts/quantize_model.py` for INT8 quantization and `scripts/export_to_onnx.py` for ONNX export.
+
+### Make Commands
+
+Common tasks via Makefile: `make install-dev`, `make test`, `make test-cov`, `make lint`, `make format`, `make docker-build`, `make train-tiny`, `make validate-model`.
 
 ## License
 

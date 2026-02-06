@@ -1,0 +1,32 @@
+apiVersion: v2
+name: rtdlm
+description: A Helm chart for RT-DLM (Real-Time Deep Learning Model) training infrastructure
+
+# Application chart
+type: application
+
+# Chart version - increment on chart changes
+version: 1.0.0
+
+# Application version
+appVersion: "0.1.0"
+
+keywords:
+  - deep-learning
+  - machine-learning
+  - jax
+  - training
+  - gpu
+  - kubernetes
+
+home: https://github.com/AuralithAI/RT-DLM
+
+sources:
+  - https://github.com/AuralithAI/RT-DLM
+
+maintainers:
+  - name: AuralithAI
+    email: contact@auralithai.com
+
+annotations:
+  category: AI/ML
