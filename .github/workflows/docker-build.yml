@@ -1,19 +1,25 @@
 # RT-DLM Docker Build Workflow
 # Builds and pushes Docker images for training
-# Only runs on main branch (production builds)
+# Supports semantic versioning: tag with v0.0.0 format to create versioned releases
 
 name: Docker Build
 
 on:
   push:
-    branches: [main]  # Only build on main
+    branches: [main]  # Build latest on main
     tags:
-      - 'v*'
+      - 'v*.*.*'  # Semantic version tags (v0.0.0, v1.2.3, etc.)
   workflow_dispatch:  # Allow manual trigger
+    inputs:
+      version:
+        description: 'Version tag (e.g., 0.1.0) - leave empty for dev build'
+        required: false
+        type: string
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # Must be lowercase for Docker - github.repository may contain uppercase
+  IMAGE_NAME: ${{ github.repository_owner }}/${{ github.event.repository.name }}
 
 jobs:
   build-training:
@@ -38,6 +44,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set image name lowercase
+        id: image-name
+        run: echo "name=${IMAGE_NAME,,}" >> $GITHUB_OUTPUT
+        env:
+          IMAGE_NAME: ${{ github.repository }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -53,13 +65,20 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ steps.image-name.outputs.name }}
           tags: |
+            # Branch builds get branch name tag
             type=ref,event=branch
+            # PR builds (if enabled)
             type=ref,event=pr
+            # Version tags: v1.2.3 -> 1.2.3, 1.2, 1, latest
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=train-
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            # Latest tag only for version releases
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            # SHA for traceability
+            type=sha,prefix=sha-
 
       - name: Build and push training image
         uses: docker/build-push-action@v5
@@ -98,6 +117,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set image name lowercase
+        id: image-name
+        run: echo "name=${IMAGE_NAME,,}" >> $GITHUB_OUTPUT
+        env:
+          IMAGE_NAME: ${{ github.repository }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -113,12 +138,20 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ steps.image-name.outputs.name }}
           flavor: |
             suffix=-cpu
           tags: |
+            # Branch builds get branch name tag
             type=ref,event=branch
-            type=sha,prefix=train-cpu-
+            # Version tags: v1.2.3 -> 1.2.3-cpu, 1.2-cpu, 1-cpu
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            # Latest-cpu tag only for version releases
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            # SHA for traceability
+            type=sha,prefix=sha-
 
       - name: Build and push CPU training image
         uses: docker/build-push-action@v5
@@ -145,6 +178,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set image name lowercase
+        id: image-name
+        run: echo "name=${IMAGE_NAME,,}" >> $GITHUB_OUTPUT
+        env:
+          IMAGE_NAME: ${{ github.repository }}
+
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
@@ -154,8 +193,19 @@ jobs:
 
       - name: Pull and test image
         run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-cpu"
-          docker pull $IMAGE || docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:train-cpu-$(echo ${{ github.sha }} | cut -c1-7)
+          # Determine the correct image tag to pull
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # For version tags, use the version number with -cpu suffix
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#v}"  # Remove 'v' prefix
+            IMAGE="${{ env.REGISTRY }}/${{ steps.image-name.outputs.name }}:${VERSION}-cpu"
+          else
+            # For branch builds, use branch name with -cpu suffix
+            IMAGE="${{ env.REGISTRY }}/${{ steps.image-name.outputs.name }}:${{ github.ref_name }}-cpu"
+          fi
+          
+          echo "Pulling image: $IMAGE"
+          docker pull $IMAGE || docker pull ${{ env.REGISTRY }}/${{ steps.image-name.outputs.name }}:sha-$(echo ${{ github.sha }} | cut -c1-7)-cpu
           docker run --rm $IMAGE python -c "
           import jax
           print(f'JAX version: {jax.__version__}')
@@ -163,3 +213,114 @@ jobs:
           from rtdlm import create_rtdlm_agi
           print(' Image validation passed!')
           " || echo "Using SHA-based tag for validation"
+
+  # Cleanup old images to save storage
+  cleanup-old-images:
+    name: Cleanup Old Images
+    runs-on: ubuntu-latest
+    needs: [build-training, build-training-cpu, validate]
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Delete old SHA-tagged images (older than 7 days)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const package_name = 'rt-dlm';
+            const owner = context.repo.owner;
+            const keepTags = ['latest', 'latest-cpu', 'main', 'main-cpu'];
+            const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            
+            // Detect if owner is an org or user
+            let isOrg = false;
+            try {
+              await github.rest.orgs.get({ org: owner });
+              isOrg = true;
+              console.log(`Owner "${owner}" is an organization`);
+            } catch {
+              console.log(`Owner "${owner}" is a user`);
+            }
+            
+            // Helper to get all versions with pagination
+            async function getAllVersions() {
+              const allVersions = [];
+              let page = 1;
+              
+              while (true) {
+                let response;
+                const params = {
+                  package_type: 'container',
+                  package_name: package_name,
+                  per_page: 100,
+                  page: page
+                };
+                
+                if (isOrg) {
+                  response = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+                    ...params,
+                    org: owner
+                  });
+                } else {
+                  response = await github.rest.packages.getAllPackageVersionsForPackageOwnedByUser({
+                    ...params,
+                    username: owner
+                  });
+                }
+                
+                allVersions.push(...response.data);
+                
+                if (response.data.length < 100) break;
+                page++;
+              }
+              
+              console.log(`Found ${allVersions.length} total package versions`);
+              return allVersions;
+            }
+            
+            // Helper to delete a version
+            async function deleteVersion(versionId) {
+              const params = {
+                package_type: 'container',
+                package_name: package_name,
+                package_version_id: versionId
+              };
+              
+              if (isOrg) {
+                await github.rest.packages.deletePackageVersionForOrg({ ...params, org: owner });
+              } else {
+                await github.rest.packages.deletePackageVersionForUser({ ...params, username: owner });
+              }
+            }
+            
+            try {
+              const versions = await getAllVersions();
+              let deletedCount = 0;
+              
+              for (const version of versions) {
+                const tags = version.metadata?.container?.tags || [];
+                const createdAt = new Date(version.created_at);
+                
+                // Skip if has a version tag (semantic version) or protected tag
+                const hasProtectedTag = tags.some(tag => 
+                  keepTags.includes(tag) || /^\d+\.\d+/.test(tag)
+                );
+                
+                // Delete SHA-tagged images older than 7 days
+                const isShaTag = tags.length === 0 || tags.some(tag => tag.startsWith('sha-'));
+                const isOld = createdAt < cutoffDate;
+                
+                if (!hasProtectedTag && isShaTag && isOld) {
+                  console.log(`Deleting version ${version.id} (created: ${createdAt.toISOString()}) with tags: ${tags.join(', ') || 'untagged'}`);
+                  await deleteVersion(version.id);
+                  deletedCount++;
+                }
+              }
+              
+              console.log(`Cleanup complete: deleted ${deletedCount} old versions`);
+            } catch (error) {
+              console.log(`Cleanup failed: ${error.message}`);
+            }
+        continue-on-error: true
