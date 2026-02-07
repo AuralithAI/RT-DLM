@@ -64,13 +64,13 @@ class ConceptualKnowledgeGraph:
             'is_a', 'part_of', 'causes', 'enables', 'similar_to',
             'opposite_of', 'before', 'after', 'contains', 'used_for'
         }
-        self.concept_embeddings = None  # Will be JAX array for similarity search
-        self.concept_ids = []  # Parallel to embeddings
+        self.concept_embeddings: Optional[jnp.ndarray] = None  # Will be JAX array for similarity search
+        self.concept_ids: List[str] = []  # Parallel to embeddings
         
         # Enterprise-scale storage and indexing
-        self.concept_cache = {}  # LRU cache for frequent lookups
-        self.relation_index = {}  # Fast relation lookup
-        self.multi_hop_cache = {}  # Cache for multi-hop reasoning
+        self.concept_cache: Dict[str, Any] = {}  # LRU cache for frequent lookups
+        self.relation_index: Dict[str, List[str]] = {}  # Fast relation lookup
+        self.multi_hop_cache: Dict[str, List[List[Tuple[str, str, str]]]] = {}  # Cache for multi-hop reasoning
         
     def add_concept(self, concept: ConceptNode):
         """Add a new concept to the knowledge graph."""
@@ -94,8 +94,8 @@ class ConceptualKnowledgeGraph:
             
         # BFS for reasoning paths
         queue = [(start_concept, [])]
-        visited = set()
-        paths = []
+        visited: Set[str] = set()
+        paths: List[List[Tuple[str, str, str]]] = []
         
         for _ in range(max_hops):
             next_queue = []

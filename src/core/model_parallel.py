@@ -60,11 +60,11 @@ class DeviceMesh:
                 self.config.tensor_parallel_size,
                 self.config.pipeline_parallel_size
             )
-            axis_names = ("data", "tensor", "pipeline")
+            axis_names: Tuple[str, ...] = ("data", "tensor", "pipeline")
         elif self.config.tensor_parallel:
             # 2D mesh: (data, tensor)
             dp_size = max(1, self.num_devices // self.config.tensor_parallel_size)
-            mesh_shape = (dp_size, self.config.tensor_parallel_size)
+            mesh_shape: Tuple[int, ...] = (dp_size, self.config.tensor_parallel_size)
             axis_names = ("data", "tensor")
         elif self.config.pipeline_parallel:
             # 2D mesh: (data, pipeline)

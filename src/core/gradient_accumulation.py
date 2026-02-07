@@ -27,10 +27,11 @@ def _zero_nan_grads(grads: Dict) -> Dict:
     Returns:
         Gradient PyTree with NaN values replaced by zeros
     """
-    return jax.tree_util.tree_map(
+    result: Dict[Any, Any] = jax.tree_util.tree_map(
         lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x),
         grads
     )
+    return result
 
 
 class BatchGradientAccumulator:

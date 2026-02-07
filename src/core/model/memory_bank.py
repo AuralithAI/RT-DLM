@@ -139,7 +139,7 @@ class AdaptiveForgettingCurve:
         
         # Combined retention probability
         retention_prob = time_decay * importance_boost * access_boost * emotional_boost
-        return min(1.0, retention_prob)
+        return float(min(1.0, retention_prob))
 
 
 class ContextualMemoryIndex:
@@ -149,7 +149,7 @@ class ContextualMemoryIndex:
         self.embedding_dim = embedding_dim
         self.num_clusters = num_clusters
         self.index = faiss.IndexFlatL2(embedding_dim)
-        self.context_clusters = {}
+        self.context_clusters: Dict[str, List[int]] = {}
         self.memory_items: List[MemoryItem] = []
         
     def add_memory(self, memory_item: MemoryItem):
@@ -770,8 +770,8 @@ class MemoryBank:
         self.embedding_dim = embedding_dim
         self.retrieval_k = retrieval_k
         self.index = faiss.IndexFlatL2(embedding_dim)
-        self.values = []
-        self.feedback_scores = []
+        self.values: List[np.ndarray] = []
+        self.feedback_scores: List[float] = []
         
         # Persistent LTM storage
         self.enable_persistent_ltm = enable_persistent_ltm
@@ -979,8 +979,8 @@ class ShortTermMemory:
         """Short-Term Memory as a per-batch buffer."""
         self.buffer_size = buffer_size  
         self.embedding_dim = embedding_dim
-        self.buffer = []
-        self.feedback_scores = []  
+        self.buffer: List[Tuple[np.ndarray, np.ndarray]] = []
+        self.feedback_scores: List[float] = []  
 
     def apply_spiking_attention_jnp(self, x, spike_threshold, epsilon):
         """
@@ -1026,8 +1026,8 @@ class MidTermMemory:
     def __init__(self, buffer_size: int, embedding_dim: int, retention_steps: int):
         self.buffer_size = buffer_size  
         self.embedding_dim = embedding_dim
-        self.buffer = []
-        self.feedback_scores = []  
+        self.buffer: List[Tuple[np.ndarray, np.ndarray]] = []
+        self.feedback_scores: List[float] = []
         self.step_count = 0
         self.retention_steps = retention_steps  
 

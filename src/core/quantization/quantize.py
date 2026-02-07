@@ -383,32 +383,30 @@ class ModelQuantizer:
         if not SAFETENSORS_AVAILABLE:
             raise ImportError("safetensors not installed")
         
-        with open(path, "rb") as f:
-            # Load with metadata
-            from safetensors import safe_open
-            with safe_open(path, framework="numpy") as f:
-                metadata = f.metadata()
+        from safetensors import safe_open
+        with safe_open(path, framework="numpy") as f:
+            metadata = f.metadata()
+            
+            params: Dict[str, Any] = {}
+            scales: Dict[str, Any] = {}
+            zero_points: Dict[str, Any] = {}
+            
+            for key in f.keys():
+                tensor = jnp.array(f.get_tensor(key))
                 
-                params = {}
-                scales = {}
-                zero_points = {}
-                
-                for key in f.keys():
-                    tensor = jnp.array(f.get_tensor(key))
-                    
-                    if key.startswith("params."):
-                        # Reconstruct nested dict
-                        parts = key[7:].split(".")
-                        current = params
-                        for part in parts[:-1]:
-                            if part not in current:
-                                current[part] = {}
-                            current = current[part]
-                        current[parts[-1]] = tensor
-                    elif key.startswith("scales."):
-                        scales[key[7:].replace(".", "/")] = tensor
-                    elif key.startswith("zero_points."):
-                        zero_points[key[12:].replace(".", "/")] = tensor
+                if key.startswith("params."):
+                    # Reconstruct nested dict
+                    parts = key[7:].split(".")
+                    current = params
+                    for part in parts[:-1]:
+                        if part not in current:
+                            current[part] = {}
+                        current = current[part]
+                    current[parts[-1]] = tensor
+                elif key.startswith("scales."):
+                    scales[key[7:].replace(".", "/")] = tensor
+                elif key.startswith("zero_points."):
+                    zero_points[key[12:].replace(".", "/")] = tensor
         
         return params, scales, zero_points, metadata
 

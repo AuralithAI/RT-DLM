@@ -91,7 +91,7 @@ class SparseStateVector:
     @property
     def sparsity(self) -> float:
         """Sparsity ratio (1.0 = completely sparse)"""
-        return 1.0 - (self.num_nonzero / self.state_dim)
+        return float(1.0 - (self.num_nonzero / self.state_dim))
     
     def normalize(self):
         """Normalize state vector"""
@@ -101,7 +101,7 @@ class SparseStateVector:
     
     def apply_single_qubit_gate(self, gate_matrix: jnp.ndarray, target_qubit: int):
         """Apply single-qubit gate to sparse state"""
-        new_amplitudes = {}
+        new_amplitudes: Dict[int, complex] = {}
         
         for basis_idx, amp in self.amplitudes.items():
             # Get qubit value at target position

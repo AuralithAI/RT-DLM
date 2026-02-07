@@ -121,11 +121,11 @@ class AGITrainer:
         self.step_count = 0
         
         # Metrics tracking
-        self.training_losses = []
-        self.validation_losses = []
-        self.reasoning_accuracies = []
-        self.consciousness_coherence = []
-        self.multimodal_alignment = []
+        self.training_losses: List[float] = []
+        self.validation_losses: List[float] = []
+        self.reasoning_accuracies: List[float] = []
+        self.consciousness_coherence: List[float] = []
+        self.multimodal_alignment: List[float] = []
         
         # Memory profiling (tracks GPU memory usage during training)
         self.memory_profiler = MemoryProfiler(
@@ -654,7 +654,7 @@ class AGITrainer:
         
         # Initialize gradient accumulator if using accumulation
         if self.gradient_accumulation_steps > 1:
-            self.gradient_accumulator = BatchGradientAccumulator(
+            self.gradient_accumulator: Optional[BatchGradientAccumulator] = BatchGradientAccumulator(
                 accumulation_steps=self.gradient_accumulation_steps,
                 loss_fn=self._make_loss_fn(),
                 model_apply_fn=self.model.apply,
@@ -1241,7 +1241,7 @@ class AGITrainer:
         Returns:
             Dictionary with all production metrics
         """
-        metrics = {}
+        metrics: Dict[str, Any] = {}
         
         # Perplexity
         metrics['perplexity'] = self.perplexity_tracker.get_perplexity()

@@ -309,7 +309,7 @@ class ModuleRegistry:
         - Modules that have exceeded max_calls
         """
         available = []
-        call_counts = {}
+        call_counts: Dict[ModuleType, int] = {}
         for m in state.modules_called:
             call_counts[m] = call_counts.get(m, 0) + 1
         
@@ -789,7 +789,7 @@ class ComputePlan(hk.Module):
         state = self.initialize_state(hidden, memory_summary)
         
         # Execution trace
-        execution_trace = {
+        execution_trace: Dict[str, Any] = {
             "steps": [],
             "total_cost": 0.0,
             "modules_executed": [],
@@ -1181,7 +1181,7 @@ class ControllerRewardShaper:
     ) -> List[float]:
         """Compute discounted returns for each step."""
         rewards = step_rewards + [final_reward]
-        returns = []
+        returns: List[float] = []
         G = 0.0
         
         for r in reversed(rewards):

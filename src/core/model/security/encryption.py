@@ -192,7 +192,7 @@ class SecureStorage:
             if self.config.log_encryption_events:
                 logger.debug("Decrypted data successfully")
             
-            return decrypted.decode()
+            return decrypted.decode()  # type: ignore[union-attr]
         except InvalidToken:
             if self.config.fail_on_decrypt_error:
                 raise
@@ -232,7 +232,8 @@ class SecureStorage:
         
         decrypted = self.decrypt(ciphertext)
         try:
-            return json.loads(decrypted)
+            result: Dict[str, Any] = json.loads(decrypted)
+            return result
         except json.JSONDecodeError:
             logger.warning("Failed to parse decrypted JSON")
             return {}

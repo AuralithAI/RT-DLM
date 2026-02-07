@@ -64,25 +64,29 @@ class MixedPrecisionPolicy:
     
     def cast_to_param(self, x: jnp.ndarray) -> jnp.ndarray:
         """Cast tensor to parameter dtype"""
-        return x.astype(self.param_dtype)
+        result: jnp.ndarray = x.astype(self.param_dtype)
+        return result
     
     def cast_to_output(self, x: jnp.ndarray) -> jnp.ndarray:
         """Cast tensor to output dtype (float32 for loss stability)"""
-        return x.astype(self.output_dtype)
+        result: jnp.ndarray = x.astype(self.output_dtype)
+        return result
     
-    def cast_params(self, params: Dict) -> Dict:
+    def cast_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Cast all parameters to param dtype"""
-        return jax.tree_util.tree_map(
+        result: Dict[str, Any] = jax.tree_util.tree_map(
             lambda x: x.astype(self.param_dtype) if hasattr(x, 'astype') else x,
             params
         )
+        return result
     
     def cast_inputs(self, inputs: Dict[str, jnp.ndarray]) -> Dict[str, jnp.ndarray]:
         """Cast input tensors to compute dtype"""
-        return jax.tree_util.tree_map(
+        result: Dict[str, jnp.ndarray] = jax.tree_util.tree_map(
             lambda x: x.astype(self.compute_dtype) if hasattr(x, 'astype') and x.dtype in [jnp.float32, jnp.float16, jnp.bfloat16] else x,
             inputs
         )
+        return result
     
     def is_mixed_precision(self) -> bool:
         """Check if using mixed precision"""
@@ -192,8 +196,10 @@ def checkpointed_transformer_block(
         Output tensor
     """
     if checkpoint_config.should_checkpoint_layer(layer_idx):
-        return jax_checkpoint(layer_fn)(x, *args, **kwargs)
-    return layer_fn(x, *args, **kwargs)
+        result: jnp.ndarray = jax_checkpoint(layer_fn)(x, *args, **kwargs)
+        return result
+    result = layer_fn(x, *args, **kwargs)
+    return result
 
 
 # =============================================================================
@@ -260,7 +266,8 @@ def shard_batch_for_devices(batch: Dict[str, jnp.ndarray],
         
         return x.reshape(num_devices, -1, *x.shape[1:])
     
-    return jax.tree_util.tree_map(shard_array, batch)
+    result: Dict[str, jnp.ndarray] = jax.tree_util.tree_map(shard_array, batch)
+    return result
 
 
 def unshard_batch(sharded_batch: Dict[str, jnp.ndarray]) -> Dict[str, jnp.ndarray]:
@@ -273,12 +280,13 @@ def unshard_batch(sharded_batch: Dict[str, jnp.ndarray]) -> Dict[str, jnp.ndarra
     Returns:
         Unsharded batch [batch_size, ...]
     """
-    def unshard_array(x):
+    def unshard_array(x: Any) -> Any:
         if x is None:
             return None
         return x.reshape(-1, *x.shape[2:])
     
-    return jax.tree_util.tree_map(unshard_array, sharded_batch)
+    result: Dict[str, jnp.ndarray] = jax.tree_util.tree_map(unshard_array, sharded_batch)
+    return result
 
 
 def create_pmap_train_step(train_step_fn: Callable,
@@ -309,14 +317,16 @@ def create_pmap_train_step(train_step_fn: Callable,
     return pmap_train_step
 
 
-def replicate_params(params: Dict, num_devices: int) -> Dict:
+def replicate_params(params: Dict[str, Any], num_devices: int) -> Dict[str, Any]:
     """Replicate parameters across devices for pmap"""
-    return jax.device_put_replicated(params, jax.devices()[:num_devices])
+    result: Dict[str, Any] = jax.device_put_replicated(params, jax.devices()[:num_devices])
+    return result
 
 
-def unreplicate_params(replicated_params: Dict) -> Dict:
+def unreplicate_params(replicated_params: Dict[str, Any]) -> Dict[str, Any]:
     """Get single copy of parameters from replicated params"""
-    return jax.tree_util.tree_map(lambda x: x[0], replicated_params)
+    result: Dict[str, Any] = jax.tree_util.tree_map(lambda x: x[0], replicated_params)
+    return result
 
 
 # =============================================================================
@@ -334,9 +344,9 @@ class GradientAccumulator:
     def __init__(self, accumulation_steps: int = 1):
         self.accumulation_steps = accumulation_steps
         self.current_step = 0
-        self.accumulated_grads = None
+        self.accumulated_grads: Optional[Dict[str, Any]] = None
         
-    def accumulate(self, grads: Dict) -> Tuple[bool, Optional[Dict]]:
+    def accumulate(self, grads: Dict[str, Any]) -> Tuple[bool, Optional[Dict[str, Any]]]:
         """
         Accumulate gradients over multiple steps.
         

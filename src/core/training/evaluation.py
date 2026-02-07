@@ -79,7 +79,7 @@ class GradientMetrics:
     is_vanishing: bool = False  # norm < threshold
     
     def to_dict(self) -> Dict[str, Any]:
-        result = {
+        result: Dict[str, Any] = {
             'global_norm': self.global_norm,
             'max_norm': self.max_norm,
             'min_norm': self.min_norm,
@@ -113,7 +113,7 @@ class TrainingStepMetrics:
     auxiliary_losses: Optional[Dict[str, float]] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        result = {
+        result: Dict[str, Any] = {
             'step': self.step,
             'timestamp': self.timestamp,
             'loss': self.batch_metrics.loss,

@@ -294,13 +294,13 @@ class ContextTools:
         if not words or not content_words:
             return 0.0
 
-        word_freq = {}
+        word_freq: Dict[str, int] = {}
         for word in content_words:
             if len(word) > 3:
                 word_freq[word] = word_freq.get(word, 0) + 1
 
         score = sum(word_freq.get(w, 0) for w in words if len(w) > 3)
-        return min(score / (len(words) + 1), 1.0)
+        return float(min(score / (len(words) + 1), 1.0))
 
     def execute(
         self,
@@ -319,7 +319,9 @@ class ContextTools:
         if tool not in tool_map:
             return ToolResult.error_result(tool, f"Tool '{tool}' not supported")
 
-        return tool_map[tool](**kwargs)
+        tool_fn = tool_map[tool]
+        result: ToolResult = tool_fn(**kwargs)
+        return result
 
     def get_tool_stats(self) -> Dict[str, Any]:
         stats = {tool.value: {"calls": 0, "successes": 0, "total_time": 0.0} for tool in ToolType}

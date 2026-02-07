@@ -274,7 +274,7 @@ class TokenSampler:
             return penalized
         
         # Apply to each batch element
-        penalized_logits = jax.vmap(apply_penalty_single)((logits, generated_tokens))
+        penalized_logits: jnp.ndarray = jax.vmap(apply_penalty_single)((logits, generated_tokens))
         
         return penalized_logits
     
@@ -321,7 +321,7 @@ class TokenSampler:
             penalty = frequency_penalty * freq + presence_penalty * presence
             return logit - penalty
         
-        penalized_logits = jax.vmap(apply_penalties_single)((logits, generated_tokens))
+        penalized_logits: jnp.ndarray = jax.vmap(apply_penalties_single)((logits, generated_tokens))
         
         return penalized_logits
     

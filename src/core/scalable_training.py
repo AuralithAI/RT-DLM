@@ -98,8 +98,8 @@ class ScalableMesh:
                 f"Requested {total_needed} devices but only {self.num_devices} available. "
                 "Falling back to data parallelism only."
             )
-            mesh_shape = (self.num_devices,)
-            axis_names = ("data",)
+            mesh_shape: Tuple[int, ...] = (self.num_devices,)
+            axis_names: Tuple[str, ...] = ("data",)
         elif self.tensor_parallel_size > 1 and self.pipeline_parallel_size > 1:
             mesh_shape = (
                 self.data_parallel_size,

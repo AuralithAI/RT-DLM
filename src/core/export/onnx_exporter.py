@@ -156,8 +156,8 @@ class ONNXExporter:
         Returns:
             Path to exported ONNX model
         """
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path_obj = Path(output_path)
+        output_path_obj.parent.mkdir(parents=True, exist_ok=True)
         
         logger.info(f"Exporting model to ONNX (opset {self.config.opset_version})...")
         
