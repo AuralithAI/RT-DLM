@@ -24,6 +24,15 @@ Compute Controller (Dynamic Orchestration):
 - ModuleRegistry: Registry of available modules
 - ModuleType: Enum of module types
 
+Training:
+- ControllerLossComputer: Multi-objective loss computation (efficiency, calibration, etc.)
+- ControllerRewardShaper: RL reward shaping for dense training signals
+
+AGI Integration:
+- ControllerIntegrationMixin: Mixin to wire controller into AGI system
+- ControlledAGIForward: Controller-driven forward pass
+- create_controlled_agi_fn: Factory for transformed controlled forward
+
 Module Adapters:
 - ModuleAdapter: Base class for adapters
 - MemoryRetrievalAdapter: Adapter for memory retrieval
@@ -37,6 +46,7 @@ Module Adapters:
 Utility Functions:
 - create_agi_system_fn: Factory for transformed AGISystemAbstraction
 - create_compute_controller_fn: Factory for transformed ComputeController
+- create_controlled_agi_fn: Factory for controller-driven AGI forward
 - create_module_executors: Creates executor functions for all module types
 """
 
@@ -75,6 +85,13 @@ from .compute_controller import (
     
     # Factory function
     create_compute_controller_fn,
+    
+    ControllerLossComputer,
+    ControllerRewardShaper,
+    
+    ControllerIntegrationMixin,
+    ControlledAGIForward,
+    create_controlled_agi_fn,
 )
 
 from .module_adapters import (
@@ -121,6 +138,13 @@ __all__ = [
     "ModuleRegistry",
     "ModuleType",
     "create_compute_controller_fn",
+    
+    "ControllerLossComputer",
+    "ControllerRewardShaper",
+
+    "ControllerIntegrationMixin",
+    "ControlledAGIForward",
+    "create_controlled_agi_fn",
     
     # Module Adapters
     "ModuleAdapter",

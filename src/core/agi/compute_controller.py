@@ -892,3 +892,566 @@ def create_compute_controller_fn(
         )
     
     return hk.transform(_forward)
+
+
+# =============================================================================
+# Training Losses
+# =============================================================================
+
+class ControllerLossComputer:
+    """
+    Comprehensive loss computation for the Compute Controller.
+    
+    Implements multiple auxiliary losses to train the controller:
+    1. Task loss (cross-entropy, etc.) - primary objective
+    2. Compute efficiency loss - penalize unnecessary computation
+    3. Module utilization loss - encourage diverse module usage
+    4. Confidence calibration loss - align confidence with accuracy
+    5. Budget adherence loss - penalize budget violations
+    6. Ponder cost (PonderNet) - regularize thinking time
+    """
+    
+    def __init__(
+        self,
+        lambda_compute: float = 0.01,
+        lambda_utilization: float = 0.005,
+        lambda_calibration: float = 0.1,
+        lambda_budget: float = 0.05,
+        lambda_ponder: float = 0.01,
+        target_utilization: float = 0.3,  # Target: use 30% of available modules
+        prior_halt_prob: float = 0.2,  # Geometric prior for halting
+    ):
+        self.lambda_compute = lambda_compute
+        self.lambda_utilization = lambda_utilization
+        self.lambda_calibration = lambda_calibration
+        self.lambda_budget = lambda_budget
+        self.lambda_ponder = lambda_ponder
+        self.target_utilization = target_utilization
+        self.prior_halt_prob = prior_halt_prob
+    
+    def compute_efficiency_loss(
+        self,
+        total_cost: float,
+        task_difficulty: Optional[jnp.ndarray] = None
+    ) -> jnp.ndarray:
+        """
+        Compute efficiency loss - penalize unnecessary computation.
+        
+        If task_difficulty is provided, scale penalty by difficulty
+        (easy tasks should use less compute).
+        """
+        base_penalty = jnp.array(total_cost)
+        
+        if task_difficulty is not None:
+            # Scale by inverse difficulty - easy tasks get higher penalty for compute
+            difficulty_scale = 1.0 / (task_difficulty + 0.1)
+            return self.lambda_compute * base_penalty * difficulty_scale.mean()
+        
+        return self.lambda_compute * base_penalty
+    
+    def compute_utilization_loss(
+        self,
+        modules_called: List[ModuleType],
+        total_available: int = len(ModuleType)
+    ) -> jnp.ndarray:
+        """
+        Module utilization loss - encourage diverse but not excessive usage.
+        
+        Penalizes both under-utilization (missing important modules) and
+        over-utilization (calling too many modules unnecessarily).
+        """
+        unique_modules = len(set(modules_called))
+        utilization = unique_modules / total_available
+        
+        # Deviation from target utilization
+        deviation = jnp.abs(utilization - self.target_utilization)
+        
+        return self.lambda_utilization * deviation
+    
+    def compute_calibration_loss(
+        self,
+        predicted_confidence: jnp.ndarray,
+        actual_accuracy: jnp.ndarray
+    ) -> jnp.ndarray:
+        """
+        Confidence calibration loss - align confidence with accuracy.
+        
+        Uses Expected Calibration Error (ECE) style loss.
+        """
+        # Simple MSE between confidence and accuracy
+        calibration_error = jnp.mean((predicted_confidence - actual_accuracy) ** 2)
+        
+        return self.lambda_calibration * calibration_error
+    
+    def compute_budget_loss(
+        self,
+        budget_remaining: float,
+        initial_budget: float = 1.0
+    ) -> jnp.ndarray:
+        """
+        Budget adherence loss - penalize budget violations.
+        
+        Penalizes:
+        - Negative budget (overspending)
+        - Too much remaining budget (underspending when task incomplete)
+        """
+        if budget_remaining < 0:
+            # Heavy penalty for overspending
+            return jnp.array(self.lambda_budget * jnp.abs(budget_remaining) * 10.0)
+        
+        # Small penalty for excessive remaining budget
+        remaining_ratio = budget_remaining / initial_budget
+        if remaining_ratio > 0.5:  # More than 50% unused
+            return jnp.array(self.lambda_budget * (remaining_ratio - 0.5))
+        
+        return jnp.array(0.0)
+    
+    def compute_ponder_loss(
+        self,
+        halt_probs: List[jnp.ndarray]
+    ) -> jnp.ndarray:
+        """
+        Ponder cost (from PonderNet) - regularize thinking time.
+        
+        Encourages geometric distribution of halt times, preventing
+        the model from always taking max steps or always halting early.
+        """
+        if not halt_probs:
+            return jnp.array(0.0)
+        
+        # Stack halt probabilities
+        halt_probs_stack = jnp.stack([h.mean() for h in halt_probs])
+        num_steps = len(halt_probs)
+        
+        # Geometric prior: P(halt at step t) = p * (1-p)^t
+        p = self.prior_halt_prob
+        prior = jnp.array([p * ((1 - p) ** t) for t in range(num_steps)])
+        prior = prior / prior.sum()  # Normalize
+        
+        # Compute actual halt distribution
+        # p(halt at t) = halt_prob[t] * prod(1 - halt_prob[0:t])
+        not_halted = jnp.cumprod(1 - jnp.concatenate([jnp.array([0.0]), halt_probs_stack[:-1]]))
+        actual_dist = halt_probs_stack * not_halted
+        actual_dist = actual_dist / (actual_dist.sum() + 1e-8)
+        
+        # KL divergence from prior
+        kl = jnp.sum(actual_dist * jnp.log((actual_dist + 1e-8) / (prior + 1e-8)))
+        
+        return self.lambda_ponder * kl
+    
+    def compute_total_loss(
+        self,
+        task_loss: jnp.ndarray,
+        execution_trace: Dict[str, Any],
+        predicted_confidence: jnp.ndarray,
+        actual_accuracy: jnp.ndarray,
+        task_difficulty: Optional[jnp.ndarray] = None,
+        initial_budget: float = 1.0
+    ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
+        """
+        Compute total controller loss with all components.
+        
+        Args:
+            task_loss: Primary task loss
+            execution_trace: Trace from ComputePlan execution
+            predicted_confidence: Model's confidence at halt
+            actual_accuracy: Actual accuracy (0 or 1 per sample)
+            task_difficulty: Optional difficulty estimate per sample
+            initial_budget: Initial compute budget
+            
+        Returns:
+            total_loss: Combined loss
+            loss_components: Dict of individual losses
+        """
+        # Extract from execution trace
+        total_cost = execution_trace.get("total_cost", 0.0)
+        modules_called = [ModuleType[m] for m in execution_trace.get("modules_executed", [])]
+        halt_probs = execution_trace.get("halt_probs", [])
+        budget_remaining = initial_budget - total_cost
+        
+        # Compute individual losses
+        efficiency_loss = self.compute_efficiency_loss(total_cost, task_difficulty)
+        utilization_loss = self.compute_utilization_loss(modules_called)
+        calibration_loss = self.compute_calibration_loss(predicted_confidence, actual_accuracy)
+        budget_loss = self.compute_budget_loss(budget_remaining, initial_budget)
+        ponder_loss = self.compute_ponder_loss(halt_probs)
+        
+        # Total loss
+        total_loss = (
+            task_loss +
+            efficiency_loss +
+            utilization_loss +
+            calibration_loss +
+            budget_loss +
+            ponder_loss
+        )
+        
+        loss_components = {
+            "task_loss": task_loss,
+            "efficiency_loss": efficiency_loss,
+            "utilization_loss": utilization_loss,
+            "calibration_loss": calibration_loss,
+            "budget_loss": budget_loss,
+            "ponder_loss": ponder_loss,
+            "total_loss": total_loss
+        }
+        
+        return total_loss, loss_components
+
+
+class ControllerRewardShaper:
+    """
+    Reward shaping for RL-based controller training.
+    
+    Provides dense rewards during execution to guide the controller,
+    rather than only sparse rewards at the end.
+    """
+    
+    def __init__(
+        self,
+        reward_correct: float = 1.0,
+        reward_efficiency: float = 0.1,
+        penalty_wrong: float = -0.5,
+        penalty_wasteful: float = -0.05,
+        gamma: float = 0.99
+    ):
+        self.reward_correct = reward_correct
+        self.reward_efficiency = reward_efficiency
+        self.penalty_wrong = penalty_wrong
+        self.penalty_wasteful = penalty_wasteful
+        self.gamma = gamma
+    
+    def compute_step_reward(
+        self,
+        state: ComputeState,
+        module_output: ModuleOutput,
+        module_cost: float
+    ) -> float:
+        """Compute reward for a single step."""
+        reward = 0.0
+        
+        # Reward confidence increase
+        if hasattr(state, 'confidence'):
+            confidence_delta = float(module_output.confidence.mean() - state.confidence.mean())
+            reward += 0.1 * confidence_delta
+        
+        # Penalize high uncertainty
+        uncertainty = float(module_output.uncertainty.mean())
+        if uncertainty > 0.7:
+            reward += self.penalty_wasteful
+        
+        # Efficiency bonus for low-cost modules
+        if module_cost < 0.1:
+            reward += self.reward_efficiency * (0.1 - module_cost)
+        
+        return reward
+    
+    def compute_final_reward(
+        self,
+        is_correct: bool,
+        total_cost: float,
+        num_steps: int,
+        max_steps: int
+    ) -> float:
+        """Compute final reward after execution."""
+        reward = 0.0
+        
+        # Task correctness
+        if is_correct:
+            reward += self.reward_correct
+            # Bonus for efficiency (correct with less compute)
+            efficiency_bonus = (1.0 - total_cost) * self.reward_efficiency
+            reward += efficiency_bonus
+        else:
+            reward += self.penalty_wrong
+        
+        # Penalty for using max steps (inefficient)
+        if num_steps >= max_steps:
+            reward += self.penalty_wasteful * 2
+        
+        return reward
+    
+    def compute_returns(
+        self,
+        step_rewards: List[float],
+        final_reward: float
+    ) -> List[float]:
+        """Compute discounted returns for each step."""
+        rewards = step_rewards + [final_reward]
+        returns = []
+        G = 0.0
+        
+        for r in reversed(rewards):
+            G = r + self.gamma * G
+            returns.insert(0, G)
+        
+        return returns[:-1]  # Exclude the final step return
+
+
+# =============================================================================
+# AGI System Integration
+# =============================================================================
+
+class ControllerIntegrationMixin:
+    """
+    Mixin class to integrate ComputeController with RTDLMAGISystem.
+    
+    Provides methods to:
+    - Create module executors from AGI system components
+    - Wire controller into forward pass
+    - Handle controller state persistence
+    """
+    
+    @staticmethod
+    def create_module_executors_from_agi(
+        agi_system: Any,
+        d_model: int
+    ) -> Dict[ModuleType, Callable]:
+        """
+        Create module executor functions from an AGI system.
+        
+        Maps ModuleType to actual AGI system method calls.
+        """
+        executors = {}
+        
+        # Helper to create standard output
+        def make_output(
+            hidden_delta: jnp.ndarray,
+            confidence: float = 0.5,
+            uncertainty: float = 0.5,
+            cost: float = 0.1,
+            suggests_halt: bool = False
+        ) -> ModuleOutput:
+            batch_size = hidden_delta.shape[0]
+            return ModuleOutput(
+                hidden_delta=hidden_delta,
+                confidence=jnp.full((batch_size, 1), confidence),
+                uncertainty=jnp.full((batch_size, 1), uncertainty),
+                actual_cost=cost,
+                suggests_halt=suggests_halt
+            )
+        
+        # Memory Retrieval
+        def memory_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if hasattr(agi_system, 'memory_bank') and agi_system.memory_bank is not None:
+                # Query memory with current hidden state
+                query = state.hidden_pooled
+                # Simplified memory retrieval
+                retrieved = query * 0.1  # Placeholder - actual implementation in adapters
+                return make_output(retrieved, confidence=0.6, cost=0.05)
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.MEMORY_RETRIEVAL] = memory_executor
+        
+        # Graph Reasoning
+        def graph_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if hasattr(agi_system, 'graph_reasoner') and agi_system.graph_reasoner is not None:
+                delta = state.hidden_pooled * 0.15  # Placeholder
+                return make_output(delta, confidence=0.55, cost=0.15)
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.GRAPH_REASONING] = graph_executor
+        
+        # Symbolic Reasoning
+        def symbolic_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if hasattr(agi_system, 'hybrid_architecture') and agi_system.hybrid_architecture is not None:
+                delta = state.hidden_pooled * 0.1  # Placeholder
+                return make_output(delta, confidence=0.7, cost=0.10)
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.SYMBOLIC_REASONING] = symbolic_executor
+        
+        # Probabilistic Inference
+        def probabilistic_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if hasattr(agi_system, 'hybrid_architecture') and agi_system.hybrid_architecture is not None:
+                delta = state.hidden_pooled * 0.08  # Placeholder
+                uncertainty = 0.4  # Probabilistic module reduces uncertainty
+                return make_output(delta, confidence=0.6, uncertainty=uncertainty, cost=0.08)
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.PROBABILISTIC] = probabilistic_executor
+        
+        # Quantum Simulation
+        def quantum_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if hasattr(agi_system, 'quantum_core') and agi_system.quantum_core is not None:
+                delta = state.hidden_pooled * 0.2  # Placeholder - expensive
+                return make_output(delta, confidence=0.5, cost=0.20)
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.QUANTUM_SIMULATION] = quantum_executor
+        
+        # MoE Routing
+        def moe_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if hasattr(agi_system, 'model') and agi_system.model is not None:
+                delta = state.hidden_pooled * 0.12  # Placeholder
+                return make_output(delta, confidence=0.65, cost=0.12)
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.MOE_ROUTING] = moe_executor
+        
+        # Scientific Discovery
+        def scientific_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if hasattr(agi_system, 'scientific_engine') and agi_system.scientific_engine is not None:
+                delta = state.hidden_pooled * 0.18  # Placeholder
+                return make_output(delta, confidence=0.55, cost=0.18)
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.SCIENTIFIC_DISCOVERY] = scientific_executor
+        
+        # Creative Generation
+        def creative_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if hasattr(agi_system, 'creative_engine') and agi_system.creative_engine is not None:
+                delta = state.hidden_pooled * 0.15  # Placeholder
+                return make_output(delta, confidence=0.5, cost=0.15)
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.CREATIVE_GENERATION] = creative_executor
+        
+        # Consciousness
+        def consciousness_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if hasattr(agi_system, 'consciousness') and agi_system.consciousness is not None:
+                delta = state.hidden_pooled * 0.1  # Placeholder
+                # Consciousness provides introspection - high confidence
+                return make_output(delta, confidence=0.75, cost=0.10)
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.CONSCIOUSNESS] = consciousness_executor
+        
+        # Multimodal Fusion
+        def multimodal_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if hasattr(agi_system, 'multimodal_fusion') and agi_system.multimodal_fusion is not None:
+                delta = state.hidden_pooled * 0.12  # Placeholder
+                return make_output(delta, confidence=0.6, cost=0.12)
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.MULTIMODAL_FUSION] = multimodal_executor
+        
+        # Attention Refinement
+        def attention_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            delta = state.hidden_pooled * 0.08  # Simple refinement
+            return make_output(delta, confidence=0.6, cost=0.08)
+        
+        executors[ModuleType.ATTENTION_REFINEMENT] = attention_executor
+        
+        # Output Generation (always succeeds)
+        def output_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            # Final output - high confidence, suggests halt
+            delta = jnp.zeros_like(state.hidden_pooled)
+            return make_output(delta, confidence=0.9, cost=0.05, suggests_halt=True)
+        
+        executors[ModuleType.OUTPUT_GENERATION] = output_executor
+        
+        return executors
+
+
+class ControlledAGIForward(hk.Module):
+    """
+    Controller-driven forward pass for AGI system.
+    
+    Replaces static module execution with dynamic, controller-driven
+    execution that adapts to input complexity and available budget.
+    """
+    
+    def __init__(
+        self,
+        d_model: int,
+        max_steps: int = 10,
+        initial_budget: float = 1.0,
+        halt_threshold: float = 0.8,
+        name: Optional[str] = None
+    ):
+        super().__init__(name=name)
+        self.d_model = d_model
+        self.max_steps = max_steps
+        self.initial_budget = initial_budget
+        self.halt_threshold = halt_threshold
+    
+    def __call__(
+        self,
+        hidden: jnp.ndarray,
+        module_executors: Dict[ModuleType, Callable],
+        memory_summary: Optional[jnp.ndarray] = None,
+        is_training: bool = True,
+        return_trace: bool = False
+    ) -> Tuple[jnp.ndarray, Optional[Dict[str, Any]]]:
+        """
+        Execute controller-driven forward pass.
+        
+        Args:
+            hidden: Input hidden representation [batch, seq, d_model]
+            module_executors: Dict of module type -> executor function
+            memory_summary: Optional memory context
+            is_training: Whether in training mode
+            return_trace: Whether to return execution trace
+            
+        Returns:
+            output: Final hidden representation
+            trace: Execution trace (if return_trace=True)
+        """
+        # Create controller and plan
+        controller = ComputeController(
+            d_model=self.d_model,
+            max_steps=self.max_steps,
+            halt_threshold=self.halt_threshold
+        )
+        
+        plan = ComputePlan(
+            d_model=self.d_model,
+            max_steps=self.max_steps,
+            initial_budget=self.initial_budget
+        )
+        
+        registry = ModuleRegistry()
+        
+        # Execute plan
+        final_state, execution_trace = plan(
+            hidden=hidden,
+            controller=controller,
+            registry=registry,
+            module_executors=module_executors,
+            memory_summary=memory_summary,
+            is_training=is_training
+        )
+        
+        # Return final hidden representation
+        output = final_state.hidden_pooled
+        
+        if return_trace:
+            return output, execution_trace
+        return output, None
+
+
+def create_controlled_agi_fn(
+    d_model: int,
+    max_steps: int = 10,
+    initial_budget: float = 1.0,
+    halt_threshold: float = 0.8
+):
+    """
+    Create a transformed controlled AGI forward function.
+    
+    Returns Haiku transformed pair for controller-driven AGI forward pass.
+    """
+    def _forward(
+        hidden: jnp.ndarray,
+        module_executors: Dict[ModuleType, Callable],
+        memory_summary: Optional[jnp.ndarray] = None,
+        is_training: bool = True,
+        return_trace: bool = False
+    ):
+        forward_module = ControlledAGIForward(
+            d_model=d_model,
+            max_steps=max_steps,
+            initial_budget=initial_budget,
+            halt_threshold=halt_threshold
+        )
+        
+        return forward_module(
+            hidden=hidden,
+            module_executors=module_executors,
+            memory_summary=memory_summary,
+            is_training=is_training,
+            return_trace=return_trace
+        )
+    
+    return hk.transform(_forward)

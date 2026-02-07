@@ -532,5 +532,524 @@ class TestIntegration:
         assert total_cost >= 0
 
 
+# =============================================================================
+# Test Training Losses
+# =============================================================================
+
+class TestControllerLossComputer:
+    """Tests for ControllerLossComputer (Phase 2)."""
+    
+    def test_loss_computer_initialization(self):
+        """Test loss computer initialization."""
+        from src.core.agi.compute_controller import ControllerLossComputer
+        
+        loss_computer = ControllerLossComputer(
+            lambda_compute=0.01,
+            lambda_utilization=0.005,
+            lambda_calibration=0.1
+        )
+        
+        assert loss_computer.lambda_compute == pytest.approx(0.01)
+        assert loss_computer.lambda_utilization == pytest.approx(0.005)
+    
+    def test_efficiency_loss(self):
+        """Test compute efficiency loss computation."""
+        from src.core.agi.compute_controller import ControllerLossComputer
+        
+        loss_computer = ControllerLossComputer(lambda_compute=0.1)
+        
+        # High cost should have higher penalty
+        high_cost_loss = loss_computer.compute_efficiency_loss(0.8)
+        low_cost_loss = loss_computer.compute_efficiency_loss(0.2)
+        
+        assert float(high_cost_loss) > float(low_cost_loss)
+    
+    def test_efficiency_loss_with_difficulty(self):
+        """Test efficiency loss scales with task difficulty."""
+        from src.core.agi.compute_controller import ControllerLossComputer
+        
+        loss_computer = ControllerLossComputer(lambda_compute=0.1)
+        
+        # Easy task should have higher penalty for same compute
+        easy_task = jnp.array([0.2])
+        hard_task = jnp.array([0.8])
+        
+        easy_loss = loss_computer.compute_efficiency_loss(0.5, easy_task)
+        hard_loss = loss_computer.compute_efficiency_loss(0.5, hard_task)
+        
+        assert float(easy_loss) > float(hard_loss)
+    
+    def test_utilization_loss(self):
+        """Test module utilization loss."""
+        from src.core.agi.compute_controller import ControllerLossComputer
+        
+        loss_computer = ControllerLossComputer(
+            lambda_utilization=0.1,
+            target_utilization=0.3
+        )
+        
+        # Using 3 of 12 modules = 25% utilization
+        modules_called = [
+            ModuleType.MEMORY_RETRIEVAL,
+            ModuleType.GRAPH_REASONING,
+            ModuleType.OUTPUT_GENERATION
+        ]
+        
+        loss = loss_computer.compute_utilization_loss(modules_called)
+        
+        # Should be small since close to target
+        assert float(loss) < 0.1
+    
+    def test_calibration_loss(self):
+        """Test confidence calibration loss."""
+        from src.core.agi.compute_controller import ControllerLossComputer
+        
+        loss_computer = ControllerLossComputer(lambda_calibration=1.0)
+        
+        # Perfect calibration: confidence matches accuracy
+        perfect_conf = jnp.array([0.8, 0.8, 0.8])
+        perfect_acc = jnp.array([0.8, 0.8, 0.8])
+        perfect_loss = loss_computer.compute_calibration_loss(perfect_conf, perfect_acc)
+        
+        # Bad calibration: overconfident
+        bad_conf = jnp.array([0.9, 0.9, 0.9])
+        bad_acc = jnp.array([0.5, 0.5, 0.5])
+        bad_loss = loss_computer.compute_calibration_loss(bad_conf, bad_acc)
+        
+        assert float(perfect_loss) < float(bad_loss)
+    
+    def test_budget_loss_overspending(self):
+        """Test budget loss for overspending."""
+        from src.core.agi.compute_controller import ControllerLossComputer
+        
+        loss_computer = ControllerLossComputer(lambda_budget=0.1)
+        
+        # Overspending should have high penalty
+        overspend_loss = loss_computer.compute_budget_loss(-0.2, initial_budget=1.0)
+        normal_loss = loss_computer.compute_budget_loss(0.3, initial_budget=1.0)
+        
+        assert float(overspend_loss) > float(normal_loss)
+    
+    def test_budget_loss_underspending(self):
+        """Test budget loss for underspending."""
+        from src.core.agi.compute_controller import ControllerLossComputer
+        
+        loss_computer = ControllerLossComputer(lambda_budget=0.1)
+        
+        # Large remaining budget gets small penalty
+        underspend_loss = loss_computer.compute_budget_loss(0.8, initial_budget=1.0)
+        efficient_loss = loss_computer.compute_budget_loss(0.3, initial_budget=1.0)
+        
+        assert float(underspend_loss) > float(efficient_loss)
+    
+    def test_ponder_loss(self):
+        """Test ponder cost computation."""
+        from src.core.agi.compute_controller import ControllerLossComputer
+        
+        loss_computer = ControllerLossComputer(lambda_ponder=0.1, prior_halt_prob=0.2)
+        
+        # Simulate halt probabilities over 5 steps
+        halt_probs = [
+            jnp.array([0.1]),
+            jnp.array([0.2]),
+            jnp.array([0.3]),
+            jnp.array([0.5]),
+            jnp.array([0.8])
+        ]
+        
+        loss = loss_computer.compute_ponder_loss(halt_probs)
+        
+        # Should be non-negative
+        assert float(loss) >= 0
+    
+    def test_total_loss_computation(self):
+        """Test total loss with all components."""
+        from src.core.agi.compute_controller import ControllerLossComputer
+        
+        loss_computer = ControllerLossComputer()
+        
+        # Mock execution trace
+        execution_trace = {
+            "total_cost": 0.4,
+            "modules_executed": ["MEMORY_RETRIEVAL", "GRAPH_REASONING", "OUTPUT_GENERATION"],
+            "halt_probs": [jnp.array([0.2]), jnp.array([0.5]), jnp.array([0.9])]
+        }
+        
+        task_loss = jnp.array(1.5)
+        predicted_confidence = jnp.array([0.7, 0.8, 0.6])
+        actual_accuracy = jnp.array([1.0, 1.0, 0.0])
+        
+        total_loss, components = loss_computer.compute_total_loss(
+            task_loss=task_loss,
+            execution_trace=execution_trace,
+            predicted_confidence=predicted_confidence,
+            actual_accuracy=actual_accuracy
+        )
+        
+        # Total should be sum of components
+        assert "task_loss" in components
+        assert "efficiency_loss" in components
+        assert "utilization_loss" in components
+        assert "calibration_loss" in components
+        assert "budget_loss" in components
+        assert "ponder_loss" in components
+        assert "total_loss" in components
+        
+        # Total should be greater than task loss alone
+        assert float(total_loss) >= float(task_loss)
+
+
+class TestControllerRewardShaper:
+    """Tests for ControllerRewardShaper (Phase 2)."""
+    
+    def test_reward_shaper_initialization(self):
+        """Test reward shaper initialization."""
+        from src.core.agi.compute_controller import ControllerRewardShaper
+        
+        shaper = ControllerRewardShaper(
+            reward_correct=1.0,
+            reward_efficiency=0.1,
+            penalty_wrong=-0.5
+        )
+        
+        assert shaper.reward_correct == pytest.approx(1.0)
+        assert shaper.gamma == pytest.approx(0.99)
+    
+    def test_step_reward_confidence_increase(self):
+        """Test step reward for confidence increase."""
+        from src.core.agi.compute_controller import ControllerRewardShaper
+        
+        shaper = ControllerRewardShaper()
+        
+        # Create mock state with confidence
+        state = ComputeState(
+            hidden=jnp.zeros((1, 64)),
+            hidden_pooled=jnp.zeros((1, 64)),
+            memory_summary=jnp.zeros((1, 64)),
+            uncertainty=jnp.array([[0.5]]),
+            confidence=jnp.array([[0.5]]),
+            budget_remaining=0.8,
+            step=1,
+            modules_called=[],
+            module_outputs=[]
+        )
+        
+        # Module increases confidence
+        module_output = ModuleOutput(
+            hidden_delta=jnp.zeros((1, 64)),
+            confidence=jnp.array([[0.7]]),
+            uncertainty=jnp.array([[0.3]]),
+            actual_cost=0.1
+        )
+        
+        reward = shaper.compute_step_reward(state, module_output, 0.1)
+        
+        # Reward should be positive for confidence increase
+        assert reward > 0
+    
+    def test_final_reward_correct(self):
+        """Test final reward for correct prediction."""
+        from src.core.agi.compute_controller import ControllerRewardShaper
+        
+        shaper = ControllerRewardShaper(reward_correct=1.0, reward_efficiency=0.1)
+        
+        reward = shaper.compute_final_reward(
+            is_correct=True,
+            total_cost=0.3,
+            num_steps=5,
+            max_steps=10
+        )
+        
+        # Should get positive reward
+        assert reward > 0
+        assert reward >= shaper.reward_correct
+    
+    def test_final_reward_wrong(self):
+        """Test final reward for incorrect prediction."""
+        from src.core.agi.compute_controller import ControllerRewardShaper
+        
+        shaper = ControllerRewardShaper(penalty_wrong=-0.5)
+        
+        reward = shaper.compute_final_reward(
+            is_correct=False,
+            total_cost=0.3,
+            num_steps=5,
+            max_steps=10
+        )
+        
+        # Should get negative reward
+        assert reward < 0
+    
+    def test_compute_returns(self):
+        """Test discounted return computation."""
+        from src.core.agi.compute_controller import ControllerRewardShaper
+        
+        shaper = ControllerRewardShaper(gamma=0.9)
+        
+        step_rewards = [0.1, 0.1, 0.1]  # Equal rewards
+        final_reward = 1.0
+        
+        returns = shaper.compute_returns(step_rewards, final_reward)
+        
+        # Returns should be list of same length as step_rewards
+        assert len(returns) == len(step_rewards)
+        
+        # With equal step rewards and gamma < 1, earlier returns should be higher
+        # because they accumulate more future rewards (including final_reward)
+        # G_t = r_t + gamma * G_{t+1}
+        # returns[2] = 0.1 + 0.9 * 1.0 = 0.1 + 0.9 = 1.0 (approx, with gamma=0.9)
+        # returns[1] = 0.1 + 0.9 * returns[2]
+        # returns[0] = 0.1 + 0.9 * returns[1]
+        
+        # All returns should be positive with these inputs
+        assert all(r > 0 for r in returns)
+
+
+# =============================================================================
+# Test AGI Integration
+# =============================================================================
+
+class TestControllerIntegrationMixin:
+    """Tests for ControllerIntegrationMixin (Phase 3)."""
+    
+    def test_create_module_executors_from_agi(self):
+        """Test creating module executors from mock AGI system."""
+        from src.core.agi.compute_controller import ControllerIntegrationMixin
+        
+        # Create mock AGI system
+        class MockAGISystem:
+            def __init__(self):
+                self.memory_bank = True
+                self.graph_reasoner = True
+                self.hybrid_architecture = True
+                self.model = True
+        
+        agi_system = MockAGISystem()
+        executors = ControllerIntegrationMixin.create_module_executors_from_agi(
+            agi_system, d_model=64
+        )
+        
+        # Should have executors for all module types
+        assert ModuleType.MEMORY_RETRIEVAL in executors
+        assert ModuleType.GRAPH_REASONING in executors
+        assert ModuleType.OUTPUT_GENERATION in executors
+    
+    def test_executor_returns_valid_output(self):
+        """Test that executors return valid ModuleOutput."""
+        from src.core.agi.compute_controller import ControllerIntegrationMixin
+        
+        class MockAGISystem:
+            def __init__(self):
+                self.memory_bank = True
+        
+        agi_system = MockAGISystem()
+        executors = ControllerIntegrationMixin.create_module_executors_from_agi(
+            agi_system, d_model=64
+        )
+        
+        # Create test state
+        state = ComputeState(
+            hidden=jnp.zeros((2, 64)),
+            hidden_pooled=jnp.zeros((2, 64)),
+            memory_summary=jnp.zeros((2, 64)),
+            uncertainty=jnp.array([[0.5], [0.5]]),
+            confidence=jnp.array([[0.5], [0.5]]),
+            budget_remaining=1.0,
+            step=0,
+            modules_called=[],
+            module_outputs=[]
+        )
+        
+        # Execute memory retrieval
+        output = executors[ModuleType.MEMORY_RETRIEVAL](state, is_training=False)
+        
+        # Validate output structure
+        assert isinstance(output, ModuleOutput)
+        assert output.hidden_delta.shape == (2, 64)
+        assert output.confidence.shape == (2, 1)
+        assert output.uncertainty.shape == (2, 1)
+
+
+class TestControlledAGIForward:
+    """Tests for ControlledAGIForward (Phase 3)."""
+    
+    def test_controlled_forward_basic(self):
+        """Test basic controlled forward pass."""
+        from src.core.agi.compute_controller import ControlledAGIForward
+        
+        d_model = 64
+        batch_size = 2
+        seq_len = 8
+        
+        def forward(hidden):
+            # Create simple executors
+            def simple_executor(state, is_training):
+                return ModuleOutput(
+                    hidden_delta=jnp.zeros_like(state.hidden_pooled),
+                    confidence=jnp.ones((state.hidden_pooled.shape[0], 1)) * 0.7,
+                    uncertainty=jnp.ones((state.hidden_pooled.shape[0], 1)) * 0.3,
+                    actual_cost=0.1
+                )
+            
+            def output_executor(state, is_training):
+                return ModuleOutput(
+                    hidden_delta=jnp.zeros_like(state.hidden_pooled),
+                    confidence=jnp.ones((state.hidden_pooled.shape[0], 1)) * 0.9,
+                    uncertainty=jnp.ones((state.hidden_pooled.shape[0], 1)) * 0.1,
+                    actual_cost=0.05,
+                    suggests_halt=True
+                )
+            
+            executors = {
+                ModuleType.MEMORY_RETRIEVAL: simple_executor,
+                ModuleType.GRAPH_REASONING: simple_executor,
+                ModuleType.OUTPUT_GENERATION: output_executor,
+            }
+            
+            controlled_forward = ControlledAGIForward(
+                d_model=d_model,
+                max_steps=5,
+                initial_budget=1.0
+            )
+            
+            output, trace = controlled_forward(
+                hidden=hidden,
+                module_executors=executors,
+                return_trace=True
+            )
+            
+            return output, trace
+        
+        fn = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        hidden = jax.random.normal(rng, (batch_size, seq_len, d_model))
+        
+        params = fn.init(rng, hidden)
+        output, trace = fn.apply(params, rng, hidden)
+        
+        assert output.shape == (batch_size, d_model)
+        assert trace is not None
+        assert "total_cost" in trace
+        assert "modules_executed" in trace
+    
+    def test_controlled_forward_respects_budget(self):
+        """Test that controlled forward respects budget constraints."""
+        from src.core.agi.compute_controller import ControlledAGIForward
+        
+        d_model = 64
+        batch_size = 2
+        
+        def forward(hidden):
+            # Expensive executors
+            def expensive_executor(state, is_training):
+                return ModuleOutput(
+                    hidden_delta=jnp.zeros_like(state.hidden_pooled),
+                    confidence=jnp.ones((state.hidden_pooled.shape[0], 1)) * 0.5,
+                    uncertainty=jnp.ones((state.hidden_pooled.shape[0], 1)) * 0.5,
+                    actual_cost=0.4  # Very expensive
+                )
+            
+            def output_executor(state, is_training):
+                return ModuleOutput(
+                    hidden_delta=jnp.zeros_like(state.hidden_pooled),
+                    confidence=jnp.ones((state.hidden_pooled.shape[0], 1)) * 0.9,
+                    uncertainty=jnp.ones((state.hidden_pooled.shape[0], 1)) * 0.1,
+                    actual_cost=0.05,
+                    suggests_halt=True
+                )
+            
+            executors = {
+                ModuleType.MEMORY_RETRIEVAL: expensive_executor,
+                ModuleType.GRAPH_REASONING: expensive_executor,
+                ModuleType.OUTPUT_GENERATION: output_executor,
+            }
+            
+            controlled_forward = ControlledAGIForward(
+                d_model=d_model,
+                max_steps=10,
+                initial_budget=0.5  # Limited budget
+            )
+            
+            output, trace = controlled_forward(
+                hidden=hidden,
+                module_executors=executors,
+                return_trace=True
+            )
+            
+            return trace["total_cost"]
+        
+        fn = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        hidden = jax.random.normal(rng, (batch_size, d_model))
+        
+        params = fn.init(rng, hidden)
+        total_cost = fn.apply(params, rng, hidden)
+        
+        # Should not exceed budget by too much
+        # (some overshoot possible due to last module)
+        assert float(total_cost) < 1.0
+
+
+class TestCreateControlledAGIFn:
+    """Tests for create_controlled_agi_fn factory."""
+    
+    def test_factory_creates_valid_transform(self):
+        """Test that factory creates valid Haiku transform."""
+        from src.core.agi.compute_controller import create_controlled_agi_fn
+        
+        fn = create_controlled_agi_fn(
+            d_model=64,
+            max_steps=5,
+            initial_budget=1.0,
+            halt_threshold=0.8
+        )
+        
+        assert hasattr(fn, 'init')
+        assert hasattr(fn, 'apply')
+    
+    def test_factory_forward_pass(self):
+        """Test forward pass through factory-created function."""
+        from src.core.agi.compute_controller import create_controlled_agi_fn
+        
+        d_model = 64
+        batch_size = 2
+        
+        # Create simple executors
+        def simple_executor(state, is_training):
+            return ModuleOutput(
+                hidden_delta=jnp.zeros_like(state.hidden_pooled),
+                confidence=jnp.ones((state.hidden_pooled.shape[0], 1)) * 0.8,
+                uncertainty=jnp.ones((state.hidden_pooled.shape[0], 1)) * 0.2,
+                actual_cost=0.1
+            )
+        
+        def output_executor(state, is_training):
+            return ModuleOutput(
+                hidden_delta=jnp.zeros_like(state.hidden_pooled),
+                confidence=jnp.ones((state.hidden_pooled.shape[0], 1)) * 0.95,
+                uncertainty=jnp.ones((state.hidden_pooled.shape[0], 1)) * 0.05,
+                actual_cost=0.05,
+                suggests_halt=True
+            )
+        
+        executors = {
+            ModuleType.MEMORY_RETRIEVAL: simple_executor,
+            ModuleType.OUTPUT_GENERATION: output_executor,
+        }
+        
+        fn = create_controlled_agi_fn(d_model=d_model, max_steps=3)
+        
+        rng = jax.random.PRNGKey(42)
+        hidden = jax.random.normal(rng, (batch_size, d_model))
+        
+        params = fn.init(rng, hidden, executors)
+        output, trace = fn.apply(params, rng, hidden, executors, return_trace=True)
+        
+        assert output.shape == (batch_size, d_model)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+

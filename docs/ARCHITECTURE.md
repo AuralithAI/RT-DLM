@@ -134,6 +134,54 @@ The `core/agi/module_adapters.py` provides adapters that wrap existing RT-DLM mo
 | `ConsciousnessModuleAdapter` | ConsciousnessSimulator | metacognition, self_awareness |
 | `OutputGenerationAdapter` | TransformerModel | text_generation, sequence_modeling |
 
+### Training Losses
+
+The `ControllerLossComputer` provides multi-objective training for the controller:
+
+| Loss Component | Description | Weight |
+|----------------|-------------|--------|
+| `efficiency_loss` | Penalizes unnecessary computation; scales with task difficulty | λ_compute |
+| `utilization_loss` | Encourages diverse module usage without overuse | λ_utilization |
+| `calibration_loss` | Aligns confidence with actual accuracy (ECE-style) | λ_calibration |
+| `budget_loss` | Penalizes overspending and excessive underspending | λ_budget |
+| `ponder_loss` | Regularizes thinking time (PonderNet-style KL from geometric prior) | λ_ponder |
+
+**Total Loss**: `task_loss + efficiency + utilization + calibration + budget + ponder`
+
+### RL Reward Shaping
+
+The `ControllerRewardShaper` provides dense training signals:
+
+- **Step Rewards**: Reward confidence increases, penalize high uncertainty
+- **Final Reward**: +1.0 for correct (with efficiency bonus), -0.5 for incorrect
+- **Discounted Returns**: γ=0.99 for proper credit assignment
+
+### AGI Integration
+
+The `ControlledAGIForward` module replaces static module execution with controller-driven execution:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  ControlledAGIForward                           │
+│                                                                 │
+│  Input ──► ControllerIntegrationMixin.create_module_executors   │
+│                        │                                        │
+│                        ▼                                        │
+│              ComputeController (learned policy)                 │
+│                        │                                        │
+│                        ▼                                        │
+│              ComputePlan (K-step loop)                          │
+│                        │                                        │
+│                        ▼                                        │
+│              Output (with execution trace)                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Classes**:
+- `ControllerIntegrationMixin`: Creates module executors from AGI system components
+- `ControlledAGIForward`: Haiku module for controller-driven forward pass
+- `create_controlled_agi_fn`: Factory for transformed forward function
+
 ## System Overview
 
 ```

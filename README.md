@@ -28,6 +28,9 @@ RT-DLM features a **learned Compute Controller** that dynamically allocates comp
 - **K-Step Execution Loop**: Iteratively refines output up to max steps
 - **Module Contracts**: Standardized interface for cost, capabilities, and dependencies
 - **Configuration Presets**: `FAST_CONFIG`, `BALANCED_CONFIG`, `THOROUGH_CONFIG` for different use cases
+- **Multi-Objective Training**: Efficiency, calibration, utilization, and ponder losses
+- **RL Reward Shaping**: Dense rewards for controller optimization
+- **AGI Integration**: `ControlledAGIForward` for controller-driven forward pass
 
 ### Model Architecture
 
