@@ -182,6 +182,22 @@ The `ControlledAGIForward` module replaces static module execution with controll
 - `ControlledAGIForward`: Haiku module for controller-driven forward pass
 - `create_controlled_agi_fn`: Factory for transformed forward function
 
+**Configuration Options**:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `use_compute_controller` | `False` | Enable/disable controller |
+| `controller_max_steps` | `10` | Maximum execution steps |
+| `controller_initial_budget` | `1.0` | Starting compute budget |
+| `controller_halt_threshold` | `0.8` | Confidence threshold for halting |
+| `controller_confidence_threshold` | `0.9` | High-confidence early exit |
+| `controller_strategy` | `"balanced"` | Preset: "fast", "balanced", "thorough" |
+| `controller_lambda_compute` | `0.01` | Efficiency loss weight |
+| `controller_lambda_utilization` | `0.005` | Utilization loss weight |
+| `controller_lambda_calibration` | `0.1` | Calibration loss weight |
+| `controller_lambda_budget` | `0.05` | Budget adherence loss weight |
+| `controller_lambda_ponder` | `0.01` | Ponder cost loss weight |
+
 ## System Overview
 
 ```

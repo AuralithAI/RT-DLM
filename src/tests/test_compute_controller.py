@@ -537,7 +537,7 @@ class TestIntegration:
 # =============================================================================
 
 class TestControllerLossComputer:
-    """Tests for ControllerLossComputer (Phase 2)."""
+    """Tests for ControllerLossComputer."""
     
     def test_loss_computer_initialization(self):
         """Test loss computer initialization."""
@@ -700,7 +700,7 @@ class TestControllerLossComputer:
 
 
 class TestControllerRewardShaper:
-    """Tests for ControllerRewardShaper (Phase 2)."""
+    """Tests for ControllerRewardShaper."""
     
     def test_reward_shaper_initialization(self):
         """Test reward shaper initialization."""
@@ -810,7 +810,7 @@ class TestControllerRewardShaper:
 # =============================================================================
 
 class TestControllerIntegrationMixin:
-    """Tests for ControllerIntegrationMixin (Phase 3)."""
+    """Tests for ControllerIntegrationMixin."""
     
     def test_create_module_executors_from_agi(self):
         """Test creating module executors from mock AGI system."""
@@ -871,7 +871,7 @@ class TestControllerIntegrationMixin:
 
 
 class TestControlledAGIForward:
-    """Tests for ControlledAGIForward (Phase 3)."""
+    """Tests for ControlledAGIForward."""
     
     def test_controlled_forward_basic(self):
         """Test basic controlled forward pass."""

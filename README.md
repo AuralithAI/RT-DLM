@@ -30,7 +30,9 @@ RT-DLM features a **learned Compute Controller** that dynamically allocates comp
 - **Configuration Presets**: `FAST_CONFIG`, `BALANCED_CONFIG`, `THOROUGH_CONFIG` for different use cases
 - **Multi-Objective Training**: Efficiency, calibration, utilization, and ponder losses
 - **RL Reward Shaping**: Dense rewards for controller optimization
-- **AGI Integration**: `ControlledAGIForward` for controller-driven forward pass
+- **Full AGI Integration**: Controller-driven forward pass with execution tracing
+
+Enable via config: `AGIConfig(use_compute_controller=True, controller_strategy="balanced")`. See [Architecture](docs/ARCHITECTURE.md#enabling-the-controller) for full options.
 
 ### Model Architecture
 

@@ -549,21 +549,24 @@ class ComputeController(hk.Module):
             selected_idx = jnp.argmax(module_probs[0])
             selected_modules = [ModuleType(int(selected_idx) + 1)]
         
-        # Check if we should halt
-        should_halt = (
-            float(halt_prob[0]) > self.halt_threshold or
-            state.step >= self.max_steps - 1 or
-            state.budget_remaining < self.min_budget
-        )
+        # Check halt conditions
+        halt_threshold_check = halt_prob[0] > self.halt_threshold
+        step_limit_check = state.step >= self.max_steps - 1
+        budget_limit_check = state.budget_remaining < self.min_budget
+        should_halt = halt_threshold_check or step_limit_check or budget_limit_check
         
         # If halting, ensure OUTPUT_GENERATION is selected
         if should_halt and ModuleType.OUTPUT_GENERATION not in selected_modules:
             selected_modules = [ModuleType.OUTPUT_GENERATION]
         
+        # Extract scalar values for action
+        halt_prob_scalar = halt_prob[0].item() if hasattr(halt_prob[0], 'item') else float(halt_prob[0])
+        budget_scalar = budget_allocation[0].item() if hasattr(budget_allocation[0], 'item') else float(budget_allocation[0])
+        
         action = ComputeAction(
             modules=selected_modules,
-            halt_probability=float(halt_prob[0]),
-            budget_allocation=float(budget_allocation[0])
+            halt_probability=halt_prob_scalar,
+            budget_allocation=budget_scalar
         )
         
         info = {
