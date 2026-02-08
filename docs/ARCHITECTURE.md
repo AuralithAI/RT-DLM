@@ -62,22 +62,19 @@ Each module registered with the Controller implements a **ModuleContract** that 
 
 | Contract Field | Description |
 |----------------|-------------|
-| `base_cost` | Minimum compute cost (0.0-1.0) |
-| `max_cost` | Maximum compute cost (0.0-1.0) |
-| `capabilities` | What the module provides (e.g., "memory_retrieval", "logical_inference") |
-| `dependencies` | Other modules that must run first |
+| `base_cost` | Minimum compute cost (0.0–1.0) that will be charged if the module is selected. |
 
 ### Module Output
 
 When invoked, each module returns a **ModuleOutput**:
 
-| Output Field | Description |
-|--------------|-------------|
-| `delta` | Update to hidden state |
-| `confidence` | How confident the module is in its output |
-| `actual_cost` | Compute actually consumed |
-| `evidence` | Supporting information for the update |
-| `should_halt` | Module's recommendation to stop |
+| Output Field   | Description |
+|----------------|-------------|
+| `hidden_delta` | Update to the controller's hidden state produced by this module. |
+| `confidence`   | How confident the module is in its output. |
+| `actual_cost`  | Compute actually consumed by this invocation (0.0–1.0). |
+| `evidence`     | Supporting information for the update (e.g., retrieved traces, intermediate steps). |
+| `suggests_halt`| Module's recommendation to stop further computation given its current result. |
 
 ### Configuration Presets
 
