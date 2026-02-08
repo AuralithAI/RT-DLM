@@ -125,7 +125,7 @@ class ModuleAdapter(hk.Module):
     def _should_suggest_halt(self, confidence: jnp.ndarray) -> bool:
         """Determine if module suggests halting."""
         # Suggest halt if very confident
-        return bool(confidence.mean() > 0.9)
+        return (confidence.mean() > 0.9).item()
     
     def wrap_output(
         self,
