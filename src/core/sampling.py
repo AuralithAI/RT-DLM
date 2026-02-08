@@ -1438,7 +1438,7 @@ class SelfSpeculativeDecoder:
     ) -> bool:
         """Check if tokens contain any stop token."""
         for stop_token in stop_tokens:
-            if jnp.any(tokens == stop_token):
+            if jnp.any(tokens == stop_token).item():
                 return True
         return False
     
