@@ -1248,7 +1248,7 @@ class SpecialistAgent(hk.Module):
             jax.nn.sigmoid
         ], name=f"agent_confidence_{specialization}")
     
-    def process(self, inputs: jnp.ndarray) -> Dict[str, jnp.ndarray]:
+    def process(self, inputs: jnp.ndarray) -> Dict[str, Any]:
         """Process input through this specialist agent.
         
         Args:

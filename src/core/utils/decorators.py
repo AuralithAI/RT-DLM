@@ -81,9 +81,10 @@ def is_dev_utility(obj) -> bool:
     return getattr(obj, '_is_dev_utility', False)
 
 
-def get_dev_utility_reason(obj) -> Optional[str]:
+def get_dev_utility_reason(obj: Any) -> Optional[str]:
     """Get the reason why something is marked as dev utility."""
-    return getattr(obj, '_dev_utility_reason', None)
+    result: Optional[str] = getattr(obj, '_dev_utility_reason', None)
+    return result
 
 
 # =============================================================================

@@ -15,7 +15,7 @@ To disable: Set config.quantum_layers=0 in AGIConfig.
 import jax
 import jax.numpy as jnp
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 from enum import Enum
 import logging
@@ -91,7 +91,7 @@ class SparseStateVector:
     @property
     def sparsity(self) -> float:
         """Sparsity ratio (1.0 = completely sparse)"""
-        return 1.0 - (self.num_nonzero / self.state_dim)
+        return float(1.0 - (self.num_nonzero / self.state_dim))
     
     def normalize(self):
         """Normalize state vector"""
@@ -101,7 +101,7 @@ class SparseStateVector:
     
     def apply_single_qubit_gate(self, gate_matrix: jnp.ndarray, target_qubit: int):
         """Apply single-qubit gate to sparse state"""
-        new_amplitudes = {}
+        new_amplitudes: Dict[int, complex] = {}
         
         for basis_idx, amp in self.amplitudes.items():
             # Get qubit value at target position
@@ -122,9 +122,9 @@ class SparseStateVector:
             
             # Accumulate amplitudes
             if abs(new_amp_0) > self.threshold:
-                new_amplitudes[idx_0] = new_amplitudes.get(idx_0, 0) + new_amp_0
+                new_amplitudes[idx_0] = complex(new_amplitudes.get(idx_0, 0) + new_amp_0)
             if abs(new_amp_1) > self.threshold:
-                new_amplitudes[idx_1] = new_amplitudes.get(idx_1, 0) + new_amp_1
+                new_amplitudes[idx_1] = complex(new_amplitudes.get(idx_1, 0) + new_amp_1)
         
         # Prune near-zero amplitudes
         self.amplitudes = {k: v for k, v in new_amplitudes.items() if abs(v) > self.threshold}
@@ -546,7 +546,7 @@ class ExtendedQuantumSimulator:
             
         return state_obj
     
-    def get_probabilities(self, state_obj: Dict) -> jnp.ndarray:
+    def get_probabilities(self, state_obj: Dict) -> Union[jnp.ndarray, List[Any]]:
         """Get measurement probabilities"""
         state_type = state_obj["type"]
         
@@ -561,7 +561,7 @@ class ExtendedQuantumSimulator:
         elif state_type == "chunked":
             # Return chunk-level probabilities (full state too large)
             chunks = state_obj["chunks"]
-            chunk_probs = [jnp.abs(c) ** 2 for c in chunks]
+            chunk_probs: List[Any] = [jnp.abs(c) ** 2 for c in chunks]
             return chunk_probs
             
         return jnp.array([])

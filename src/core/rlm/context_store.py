@@ -373,7 +373,8 @@ class ContextStore:
         if self._embedding_fn is None:
             return None
         try:
-            return self._embedding_fn(text)
+            result: Optional[np.ndarray] = self._embedding_fn(text)
+            return result
         except Exception:
             return None
 

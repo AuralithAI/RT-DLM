@@ -302,7 +302,7 @@ class RetrievalAugmentedTraining:
         Returns:
             Tuple of (loss, metrics)
         """
-        metrics = {}
+        metrics: Dict[str, Any] = {}
         loss = jnp.array(0.0)
         
         if not augmented_batch.augmentation_applied:

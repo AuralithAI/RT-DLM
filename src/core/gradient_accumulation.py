@@ -7,7 +7,7 @@ by accumulating gradients over multiple micro-batches.
 
 import jax
 import jax.numpy as jnp
-from typing import Dict, Any, Callable, Tuple
+from typing import Dict, Any, Callable, Tuple, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -27,10 +27,11 @@ def _zero_nan_grads(grads: Dict) -> Dict:
     Returns:
         Gradient PyTree with NaN values replaced by zeros
     """
-    return jax.tree_util.tree_map(
+    result: Dict[Any, Any] = jax.tree_util.tree_map(
         lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x),
         grads
     )
+    return result
 
 
 class BatchGradientAccumulator:
@@ -83,7 +84,7 @@ class BatchGradientAccumulator:
         self.model_apply_fn = model_apply_fn
         self.return_reasoning = return_reasoning
         
-        self._accumulated_grads = None
+        self._accumulated_grads: Optional[Dict[str, Any]] = None
         self._accumulated_loss = 0.0
         self._current_step = 0
         

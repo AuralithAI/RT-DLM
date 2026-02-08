@@ -147,9 +147,9 @@ class IdentifierHasher:
         else:
             # Simple salted hash
             salted = self._salt + identifier.encode()
-            hash_obj = hashlib.new(self.config.algorithm)
-            hash_obj.update(salted)
-            result = hash_obj.hexdigest()
+            simple_hash = hashlib.new(self.config.algorithm)
+            simple_hash.update(salted)
+            result = simple_hash.hexdigest()
         
         # Truncate if needed
         if self.config.output_length > 0:

@@ -36,6 +36,16 @@ from src.core.ethics.ethical_adaptation import (
     FairnessConfig, 
 )
 
+from src.core.agi.compute_controller import (
+    ComputeController,
+    ComputePlan,
+    ModuleRegistry,
+    ModuleType,
+    ModuleOutput,
+    ComputeState,
+    ControllerLossComputer,
+)
+
 class ConsciousnessSimulator(hk.Module):
     """Simulates aspects of consciousness including self-awareness and introspection"""
     
@@ -1021,6 +1031,36 @@ class RTDLMAGISystem(hk.Module):
                 max_tasks=10
             )
         
+        # Compute Controller for dynamic module orchestration
+        # When enabled, replaces static module execution with learned controller
+        self.use_compute_controller = config.use_compute_controller
+        if self.use_compute_controller:
+            self.compute_controller = ComputeController(
+                d_model=config.d_model,
+                num_modules=len(ModuleType),
+                max_steps=config.controller_max_steps,
+                min_budget=config.controller_min_budget,
+                halt_threshold=config.controller_halt_threshold,
+                temperature=config.controller_temperature,
+                name="compute_controller"
+            )
+            self.compute_plan = ComputePlan(
+                d_model=config.d_model,
+                max_steps=config.controller_max_steps,
+                initial_budget=config.controller_initial_budget,
+                name="compute_plan"
+            )
+            self.module_registry = ModuleRegistry()
+            
+            # Controller loss computer for training
+            self.controller_loss_computer = ControllerLossComputer(
+                lambda_compute=config.controller_lambda_compute,
+                lambda_utilization=config.controller_lambda_utilization,
+                lambda_calibration=config.controller_lambda_calibration,
+                lambda_budget=config.controller_lambda_budget,
+                lambda_ponder=config.controller_lambda_ponder,
+            )
+        
         # Final output projection
         self.output_head = hk.Linear(config.vocab_size, name="output_head")
         
@@ -1029,7 +1069,8 @@ class RTDLMAGISystem(hk.Module):
                  multimodal_inputs: Optional[Dict[str, jnp.ndarray]] = None,
                  conversation_history: Optional[jnp.ndarray] = None,
                  knowledge_base: Optional[jnp.ndarray] = None,
-                 return_reasoning: bool = False):
+                 return_reasoning: bool = False,
+                 is_training: bool = True):
         """
         Complete AGI forward pass with hybrid architecture
         
@@ -1039,6 +1080,7 @@ class RTDLMAGISystem(hk.Module):
             conversation_history: Optional tensor for conversation context
             knowledge_base: Optional tensor for knowledge retrieval
             return_reasoning: Whether to return reasoning traces
+            is_training: Whether in training mode (affects controller exploration)
             
         Returns:
             Dictionary containing model outputs (logits, features, etc.)
@@ -1046,7 +1088,7 @@ class RTDLMAGISystem(hk.Module):
         # Extract text inputs
         text_inputs = inputs.get("text", inputs.get("input_ids"))
         
-        # Core TMS processing
+        # Core TMS processing (always runs first)
         tms_output = self.tms_core(
             text_inputs,
             return_attention=True,
@@ -1057,14 +1099,306 @@ class RTDLMAGISystem(hk.Module):
         # Extract hidden states for feature processing
         if isinstance(tms_output, dict):
             core_features = tms_output["hidden_states"]
-            tms_logits = tms_output["logits"]
         elif isinstance(tms_output, tuple):
             core_features = tms_output[0]
-            tms_logits = None
         else:
             core_features = tms_output
-            tms_logits = None
         
+        # Use Compute Controller for dynamic module orchestration if enabled
+        if self.use_compute_controller:
+            return self._forward_with_controller(
+                core_features=core_features,
+                text_inputs=text_inputs,
+                multimodal_inputs=multimodal_inputs,
+                knowledge_base=knowledge_base,
+                return_reasoning=return_reasoning,
+                is_training=is_training,
+            )
+        
+        # Static forward pass (original behavior)
+        return self._forward_static(
+            core_features=core_features,
+            text_inputs=text_inputs,
+            multimodal_inputs=multimodal_inputs,
+            knowledge_base=knowledge_base,
+            return_reasoning=return_reasoning,
+        )
+    
+    def _forward_with_controller(
+        self,
+        core_features: jnp.ndarray,
+        text_inputs: jnp.ndarray,
+        multimodal_inputs: Optional[Dict[str, jnp.ndarray]],
+        knowledge_base: Optional[jnp.ndarray],
+        return_reasoning: bool,
+        is_training: bool,
+    ) -> Dict[str, Any]:
+        """
+        Controller-driven forward pass with dynamic module selection.
+        
+        The ComputeController decides which modules to run based on:
+        - Current hidden state and uncertainty
+        - Available compute budget
+        - Confidence level
+        """
+        module_executors = self._create_module_executors(
+            core_features=core_features,
+            multimodal_inputs=multimodal_inputs,
+            knowledge_base=knowledge_base,
+        )
+        
+        state = self.compute_plan.initialize_state(core_features)
+        
+        final_state, execution_trace = self.compute_plan(
+            hidden=core_features,
+            controller=self.compute_controller,
+            registry=self.module_registry,
+            module_executors=module_executors,
+            memory_summary=None,
+            is_training=is_training
+        )
+        
+        final_features = final_state.hidden_pooled
+        if final_features.ndim == 2:
+            final_features = jnp.broadcast_to(
+                final_features[:, None, :],
+                (final_features.shape[0], core_features.shape[1], final_features.shape[-1])
+            )
+        
+        logits = self.output_head(final_features)
+        
+        output = {
+            "logits": logits,
+            "features": final_features,
+            "controller_trace": execution_trace,
+            "confidence": final_state.confidence,
+            "uncertainty": final_state.uncertainty,
+            "modules_executed": execution_trace.get("modules_executed", []),
+            "total_compute_cost": execution_trace.get("total_cost", 0.0),
+            "steps_taken": execution_trace.get("final_step", 0),
+        }
+        
+        if return_reasoning:
+            output["reasoning_chain"] = [
+                step.get("module", "") for step in execution_trace.get("steps", [])
+            ]
+        
+        return output
+    
+    def _create_module_executors(
+        self,
+        core_features: jnp.ndarray,
+        multimodal_inputs: Optional[Dict[str, jnp.ndarray]],
+        knowledge_base: Optional[jnp.ndarray],
+    ) -> Dict[ModuleType, Any]:
+        """
+        Create module executor functions for the Compute Controller.
+        
+        Each executor wraps the actual module call and returns a ModuleOutput.
+        """
+        d_model = self.config.d_model
+        batch_size = core_features.shape[0]
+        
+        def make_output(
+            hidden_delta: jnp.ndarray,
+            confidence: float = 0.5,
+            uncertainty: float = 0.5,
+            cost: float = 0.1,
+            suggests_halt: bool = False
+        ) -> ModuleOutput:
+            return ModuleOutput(
+                hidden_delta=hidden_delta,
+                confidence=jnp.full((batch_size, 1), confidence),
+                uncertainty=jnp.full((batch_size, 1), uncertainty),
+                actual_cost=cost,
+                suggests_halt=suggests_halt
+            )
+        
+        executors = {}
+        
+        def memory_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            try:
+                query = state.hidden_pooled
+                # Use hybrid integrator for memory-like retrieval
+                result = self.hybrid_integrator(
+                    {"text": query[:, None, :] if query.ndim == 2 else query},
+                    task_type="retrieval"
+                )
+                delta = result["ensemble_output"]
+                if delta.ndim == 3:
+                    delta = delta.mean(axis=1)
+                return make_output(delta, confidence=0.6, cost=0.05)
+            except Exception:
+                return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.MEMORY_RETRIEVAL] = memory_executor
+        
+        def graph_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            try:
+                query = state.hidden_pooled
+                result = self.hybrid_integrator(
+                    {"text": query[:, None, :] if query.ndim == 2 else query},
+                    task_type="reasoning"
+                )
+                delta = result.get("symbolic_out", result["ensemble_output"])
+                if delta.ndim == 3:
+                    delta = delta.mean(axis=1)
+                return make_output(delta * 0.5, confidence=0.55, cost=0.15)
+            except Exception:
+                return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.GRAPH_REASONING] = graph_executor
+        
+        def symbolic_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            try:
+                query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
+                result = self.hybrid_integrator({"text": query}, task_type="classification")
+                delta = result.get("symbolic_out", result["ensemble_output"])
+                if delta.ndim == 3:
+                    delta = delta.mean(axis=1)
+                return make_output(delta * 0.3, confidence=0.7, cost=0.10)
+            except Exception:
+                return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.SYMBOLIC_REASONING] = symbolic_executor
+        
+        def probabilistic_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            try:
+                query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
+                result = self.hybrid_integrator({"text": query}, task_type="generation")
+                delta = result.get("probabilistic_out", result["ensemble_output"])
+                if delta.ndim == 3:
+                    delta = delta.mean(axis=1)
+                return make_output(delta * 0.3, confidence=0.6, uncertainty=0.4, cost=0.08)
+            except Exception:
+                return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.PROBABILISTIC] = probabilistic_executor
+        
+        def quantum_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if self.use_quantum:
+                try:
+                    query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
+                    result = self.reasoning_engine(query, core_features)
+                    optimal, probs = self.quantum_optimization(query, result)
+                    delta = optimal.mean(axis=1) if optimal.ndim == 3 else optimal
+                    return make_output(delta * 0.2, confidence=0.5, cost=0.20)
+                except Exception:
+                    pass
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.QUANTUM_SIMULATION] = quantum_executor
+        
+        def moe_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            try:
+                query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
+                result = self.hybrid_integrator({"text": query}, task_type="reasoning")
+                delta = result["ensemble_output"]
+                if delta.ndim == 3:
+                    delta = delta.mean(axis=1)
+                return make_output(delta * 0.4, confidence=0.65, cost=0.12)
+            except Exception:
+                return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.MOE_ROUTING] = moe_executor
+        
+        def scientific_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if self.config.scientific_reasoning and hasattr(self, 'science_engine'):
+                try:
+                    query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
+                    result = self.science_engine(query)
+                    delta = result.get("enhanced", query)
+                    if delta.ndim == 3:
+                        delta = delta.mean(axis=1)
+                    return make_output(delta * 0.3, confidence=0.55, cost=0.18)
+                except Exception:
+                    pass
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.SCIENTIFIC_DISCOVERY] = scientific_executor
+        
+        def creative_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if self.config.creative_generation and hasattr(self, 'creative_engine'):
+                try:
+                    query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
+                    result = self.creative_engine(query)
+                    delta = result.get("enhanced", query)
+                    if delta.ndim == 3:
+                        delta = delta.mean(axis=1)
+                    return make_output(delta * 0.3, confidence=0.5, cost=0.15)
+                except Exception:
+                    pass
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.CREATIVE_GENERATION] = creative_executor
+        
+        def consciousness_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if self.config.consciousness_simulation and hasattr(self, 'consciousness_sim'):
+                try:
+                    query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
+                    result = self.consciousness_sim(query, query)
+                    delta = result.get("enhanced", query)
+                    if delta.ndim == 3:
+                        delta = delta.mean(axis=1)
+                    return make_output(delta * 0.2, confidence=0.75, cost=0.10)
+                except Exception:
+                    pass
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.CONSCIOUSNESS] = consciousness_executor
+        
+        def multimodal_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            if self.config.multimodal_enabled and multimodal_inputs:
+                try:
+                    result = self._process_multimodal_inputs(multimodal_inputs, state.hidden[:, :, :d_model] if state.hidden.ndim == 3 else state.hidden_pooled[:, None, :])
+                    if result is not None:
+                        delta = result.mean(axis=1) if result.ndim == 3 else result
+                        if delta.shape[-1] != d_model:
+                            proj = hk.Linear(d_model, name="multimodal_controller_proj")
+                            delta = proj(delta)
+                        return make_output(delta * 0.3, confidence=0.6, cost=0.12)
+                except Exception:
+                    pass
+            return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.MULTIMODAL_FUSION] = multimodal_executor
+        
+        def attention_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            try:
+                query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
+                result = self.hybrid_integrator({"text": query}, task_type="reasoning")
+                delta = result["ensemble_output"]
+                if delta.ndim == 3:
+                    delta = delta.mean(axis=1)
+                return make_output(delta * 0.2, confidence=0.6, cost=0.08)
+            except Exception:
+                return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
+        
+        executors[ModuleType.ATTENTION_REFINEMENT] = attention_executor
+        
+        def output_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
+            return make_output(
+                jnp.zeros_like(state.hidden_pooled),
+                confidence=0.9,
+                cost=0.05,
+                suggests_halt=True
+            )
+        
+        executors[ModuleType.OUTPUT_GENERATION] = output_executor
+        
+        return executors
+    
+    def _forward_static(
+        self,
+        core_features: jnp.ndarray,
+        text_inputs: jnp.ndarray,
+        multimodal_inputs: Optional[Dict[str, jnp.ndarray]],
+        knowledge_base: Optional[jnp.ndarray],
+        return_reasoning: bool,
+    ) -> Dict[str, Any]:
+        """
+        Original static forward pass (all modules run).
+        """
         # Hybrid architecture integration
         hybrid_result = self.hybrid_integrator(
             {"text": core_features}, 
@@ -1164,6 +1498,11 @@ class RTDLMAGISystem(hk.Module):
         if agi_system_result is not None:
             unified_repr = agi_system_result.get("unified_representation")
             if unified_repr is not None and unified_repr.shape[-1] == final_features.shape[-1]:
+                # Handle shape mismatch: unified_repr may be (batch, d_model)
+                # while final_features is (batch, seq_len, d_model)
+                if len(unified_repr.shape) == 2 and len(final_features.shape) == 3:
+                    # Expand unified_repr to match: (batch, 1, d_model) -> broadcasts
+                    unified_repr = jnp.expand_dims(unified_repr, axis=1)
                 final_features = final_features + unified_repr * 0.1  # Residual blend
         
         # Generate output
@@ -1461,7 +1800,8 @@ def create_rtdlm_agi(config: AGIConfig):
         model = RTDLMAGISystem(config)
         return model(**kwargs)
     
-    return hk.transform(forward_fn)
+    # Always use transform_with_state since model components use hk state
+    return hk.transform_with_state(forward_fn)
 
 
 # Training utilities
@@ -1492,7 +1832,7 @@ def create_agi_optimizer(config: AGIConfig):
     return optimizer
 
 def compute_agi_loss(logits, targets, aux_outputs=None, config=None):
-    """Compute comprehensive AGI loss including all components"""
+    """Compute comprehensive AGI loss including all components and controller losses"""
     
     # Core language modeling loss
     core_loss = optax.softmax_cross_entropy_with_integer_labels(
@@ -1506,6 +1846,7 @@ def compute_agi_loss(logits, targets, aux_outputs=None, config=None):
         core_loss = smoothed_loss
     
     total_loss = core_loss
+    loss_components = {"task_loss": core_loss}
     
     # Add auxiliary losses if available
     if aux_outputs:
@@ -1514,17 +1855,20 @@ def compute_agi_loss(logits, targets, aux_outputs=None, config=None):
             reasoning_chain = aux_outputs["reasoning_chain"]
             reasoning_loss = compute_reasoning_consistency_loss(reasoning_chain)
             total_loss += 0.1 * reasoning_loss
+            loss_components["reasoning_loss"] = reasoning_loss
         
         # Consciousness coherence loss
         if "consciousness" in aux_outputs:
             consciousness = aux_outputs["consciousness"]
             consciousness_loss = compute_consciousness_loss(consciousness)
             total_loss += 0.05 * consciousness_loss
+            loss_components["consciousness_loss"] = consciousness_loss
         
         # Multi-modal alignment loss
         if "multimodal_features" in aux_outputs:
             multimodal_loss = compute_multimodal_alignment_loss(aux_outputs)
             total_loss += 0.2 * multimodal_loss
+            loss_components["multimodal_loss"] = multimodal_loss
         
         # Fairness penalty loss - adjust rewards when bias > threshold
         if "fairness_evaluation" in aux_outputs:
@@ -1535,6 +1879,53 @@ def compute_agi_loss(logits, targets, aux_outputs=None, config=None):
                     fairness_eval
                 )
                 total_loss += 0.15 * fairness_loss
+                loss_components["fairness_loss"] = fairness_loss
+        
+        # Compute Controller Losses
+        if "controller_trace" in aux_outputs and config and config.use_compute_controller:
+            controller_trace = aux_outputs["controller_trace"]
+            
+            # Get predicted confidence and actual accuracy
+            predicted_confidence = aux_outputs.get("confidence", jnp.array([[0.5]]))
+            
+            # Compute accuracy from logits and targets
+            predictions = jnp.argmax(logits, axis=-1)
+            if targets.ndim > 1 and predictions.ndim > 1:
+                # Sequence prediction - compute per-token accuracy
+                actual_accuracy = (predictions == targets).astype(jnp.float32).mean(axis=-1)
+            else:
+                actual_accuracy = (predictions.flatten() == targets.flatten()).astype(jnp.float32)
+            
+            # Create controller loss computer
+            controller_loss_computer = ControllerLossComputer(
+                lambda_compute=config.controller_lambda_compute,
+                lambda_utilization=config.controller_lambda_utilization,
+                lambda_calibration=config.controller_lambda_calibration,
+                lambda_budget=config.controller_lambda_budget,
+                lambda_ponder=config.controller_lambda_ponder,
+            )
+            
+            # Compute controller losses
+            controller_total_loss, controller_components = controller_loss_computer.compute_total_loss(
+                task_loss=core_loss,
+                execution_trace=controller_trace,
+                predicted_confidence=predicted_confidence.flatten() if predicted_confidence.ndim > 1 else predicted_confidence,
+                actual_accuracy=actual_accuracy,
+                initial_budget=config.controller_initial_budget,
+            )
+            
+            # Add controller loss components
+            for key, value in controller_components.items():
+                if key != "task_loss" and key != "total_loss":  # Avoid double-counting
+                    loss_components[f"controller_{key}"] = value
+            
+            # Use controller total loss (already includes task_loss)
+            total_loss = controller_total_loss
+            loss_components["controller_total_loss"] = controller_total_loss
+    
+    # Store all components in aux_outputs for logging
+    if aux_outputs is not None:
+        aux_outputs["loss_components"] = loss_components
     
     return total_loss
 

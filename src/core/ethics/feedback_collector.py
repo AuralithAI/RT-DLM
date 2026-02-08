@@ -1,16 +1,16 @@
 import jax
 import jax.numpy as jnp
 import logging
-from typing import List, Dict
+from typing import List, Dict, Any, Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class FeedbackCollector:
     def __init__(self):
-        self.feedback_store = []
+        self.feedback_store: List[Dict[str, Any]] = []
 
-    def collect(self, input_text: str, output_text: str, feedback_score: float, metadata: Dict = None):
+    def collect(self, input_text: str, output_text: str, feedback_score: float, metadata: Optional[Dict[str, Any]] = None):
         """Store feedback for a given input-output pair."""
         if not 0 <= feedback_score <= 1:
             raise ValueError("Feedback score must be between 0 and 1")
@@ -22,7 +22,7 @@ class FeedbackCollector:
         })
         logger.info(f"Collected feedback: score={feedback_score}, input={input_text[:50]}..., output={output_text[:50]}...")
 
-    def get_feedback_dataset(self) -> List[Dict]:
+    def get_feedback_dataset(self) -> List[Dict[str, Any]]:
         """Return collected feedback as a dataset."""
         return self.feedback_store
 

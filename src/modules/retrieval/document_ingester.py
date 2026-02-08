@@ -160,8 +160,8 @@ class TextChunker:
         # Simple sentence splitting
         sentences = re.split(r'(?<=[.!?])\s+', text)
         
-        chunks = []
-        current_chunk = []
+        chunks: List[str] = []
+        current_chunk: List[str] = []
         current_length = 0
         
         for sentence in sentences:
@@ -222,8 +222,8 @@ class TextChunker:
         else:
             splits = list(text)  # Character-level split
             
-        chunks = []
-        current_chunk = []
+        chunks: List[str] = []
+        current_chunk: List[str] = []
         current_length = 0
         
         for split in splits:
@@ -245,7 +245,7 @@ class TextChunker:
                     chunks.append(separator.join(current_chunk))
                     
                 # Handle overlap
-                overlap_chunk = []
+                overlap_chunk: List[str] = []
                 overlap_len = 0
                 for item in reversed(current_chunk):
                     item_len = self.length_function(item) + len(separator)
@@ -419,7 +419,7 @@ class DocumentIngester:
         Returns:
             Statistics about ingestion
         """
-        stats = {
+        stats: Dict[str, Any] = {
             "documents_processed": 0,
             "chunks_created": 0,
             "chunks_embedded": 0,

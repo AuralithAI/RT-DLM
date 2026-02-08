@@ -18,6 +18,22 @@ RT-DLM provides a unified architecture for building and training advanced AI mod
 
 ## Core Components
 
+### Compute Controller
+
+RT-DLM features a **learned Compute Controller** that dynamically allocates compute across modules under a budget constraint:
+
+- **Adaptive Module Selection**: Controller learns which modules to invoke based on input complexity
+- **Budget-Aware Execution**: Allocates compute budget across modules, halts when exhausted
+- **Confidence-Based Halting**: Stops early when confidence threshold is reached
+- **K-Step Execution Loop**: Iteratively refines output up to max steps
+- **Module Contracts**: Standardized interface for cost, capabilities, and dependencies
+- **Configuration Presets**: `FAST_CONFIG`, `BALANCED_CONFIG`, `THOROUGH_CONFIG` for different use cases
+- **Multi-Objective Training**: Efficiency, calibration, utilization, and ponder losses
+- **RL Reward Shaping**: Dense rewards for controller optimization
+- **Full AGI Integration**: Controller-driven forward pass with execution tracing
+
+Enable via config: `AGIConfig(use_compute_controller=True, controller_strategy="balanced")`. See [Architecture](docs/ARCHITECTURE.md#enabling-the-controller) for full options.
+
 ### Model Architecture
 
 #### Transformer-Memory-Sparse (TMS) Model
@@ -149,38 +165,6 @@ RT-DLM supports multiple training modes with automatic optimization:
 | **Combined** | Both flags | Production scale | 8+ |
 
 Set `quantum_layers=0` to disable quantum simulation for faster training.
-
-## Implementation Status
-
-### Completed
-- TMS block with three-tier memory and sparse MoE
-- **Advanced Attention System** (RoPE, GQA, MQA, Sliding Window, Linear Attention)
-- **Graph-Based Neural Components** (GraphNeuron, MultiHopGraphReasoner, GraphMoE)
-- **Model Scale Presets** (tiny to xxlarge configurations)
-- Hybrid architecture with four ML paradigms
-- Ensemble fusion with cross-paradigm interaction
-- Quantum simulator (100+ qubits with tensor network approximations)
-- Variational quantum circuit with cost estimation API
-- Multimodal fusion
-- SafeTensors checkpoint management
-- Training pipeline with epoch-based loop and checkpoint resumption
-- Ethics module with feedback collection and reward modeling
-- Mixed-precision training (bfloat16/float16)
-- Gradient checkpointing for memory efficiency
-- Gradient clipping for training stability
-- **Distributed Training** (`ScalableMesh` with data + tensor parallelism)
-- **Memory & Parallelism Estimation** (`estimate_model_memory`, `recommend_parallelism`)
-- **Communication Profiling** (`profile_collective_communication`)
-- Tensor network approximations for quantum simulation (MPS, TTN)
-- **Evaluation Metrics** (perplexity, gradient norms, structured logging)
-- **Gradient Health Monitoring** (NaN/Inf detection, exploding/vanishing detection)
-- **Validation Runner** for periodic evaluation
-- Comprehensive test suite (600+ tests)
-
-### Architecture Notes
-- **Training Focus**: This repository focuses on model architecture and training completeness
-- **Inference**: Token sampling/generation utilities are marked as `@dev_utility` for testing purposes only
-- **Production Inference**: For production deployment, use optimized serving frameworks (vLLM, TGI) that load RT-DLM checkpoints
 
 ## Related Repositories
 

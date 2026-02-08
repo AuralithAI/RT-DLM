@@ -136,7 +136,7 @@ def unflatten_params(flat_params: Dict[str, np.ndarray]) -> Dict:
     Returns:
         Nested dictionary structure matching Haiku params
     """
-    nested = {}
+    nested: Dict[str, Any] = {}
     
     for full_key, value in flat_params.items():
         keys = full_key.split(".")
@@ -356,25 +356,29 @@ class CheckpointManager:
             Dictionary with params, opt_state, metadata
         """
         # Determine checkpoint path
+        checkpoint_file: Path
         if checkpoint_path is None:
             if epoch is not None:
-                checkpoint_path = self.checkpoint_dir / f"{self.model_name}_epoch_{epoch}.safetensors"
+                checkpoint_file = self.checkpoint_dir / f"{self.model_name}_epoch_{epoch}.safetensors"
             else:
-                checkpoint_path = self._get_latest_checkpoint()
+                latest = self._get_latest_checkpoint()
+                if latest is None:
+                    raise FileNotFoundError("No checkpoint found")
+                checkpoint_file = latest
+        else:
+            checkpoint_file = Path(checkpoint_path)
         
-        checkpoint_path = Path(checkpoint_path)
+        if not checkpoint_file.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_file}")
         
-        if not checkpoint_path.exists():
-            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-        
-        logger.info(f"Loading checkpoint: {checkpoint_path}")
-        print(f"[INFO] Loading checkpoint: {checkpoint_path}")
+        logger.info(f"Loading checkpoint: {checkpoint_file}")
+        print(f"[INFO] Loading checkpoint: {checkpoint_file}")
         
         # Load tensors using SafeTensors
-        flat_tensors = load_safetensors(str(checkpoint_path))
+        flat_tensors = load_safetensors(str(checkpoint_file))
         
         # Load metadata from JSON
-        metadata_path = checkpoint_path.with_suffix(".json")
+        metadata_path = checkpoint_file.with_suffix(".json")
         metadata = None
         if metadata_path.exists():
             with open(metadata_path, 'r') as f:
@@ -464,10 +468,10 @@ class CheckpointManager:
         Returns:
             List of checkpoint info dictionaries
         """
-        checkpoints = []
+        checkpoints: List[Dict[str, Any]] = []
         
         for path in self.checkpoint_dir.glob(f"{self.model_name}_epoch_*.safetensors"):
-            info = {
+            info: Dict[str, Any] = {
                 "path": str(path),
                 "filename": path.name,
                 "size_mb": path.stat().st_size / (1024 * 1024)
@@ -482,10 +486,13 @@ class CheckpointManager:
             checkpoints.append(info)
         
         # Sort by epoch
-        checkpoints.sort(
-            key=lambda x: x.get("metadata", {}).get("epoch", 0),
-            reverse=True
-        )
+        def get_epoch(x: Dict[str, Any]) -> int:
+            metadata = x.get("metadata", {})
+            if isinstance(metadata, dict):
+                return int(metadata.get("epoch", 0))
+            return 0
+        
+        checkpoints.sort(key=get_epoch, reverse=True)
         
         return checkpoints
     
@@ -501,7 +508,7 @@ class CheckpointManager:
         """
         path = Path(checkpoint_path)
         
-        info = {
+        info: Dict[str, Any] = {
             "path": str(path),
             "exists": path.exists(),
             "size_mb": path.stat().st_size / (1024 * 1024) if path.exists() else 0
@@ -510,8 +517,9 @@ class CheckpointManager:
         if path.exists():
             # Get tensor names without loading values
             with safe_open(str(path), framework="numpy") as f:
-                info["tensor_names"] = list(f.keys())
-                info["num_tensors"] = len(info["tensor_names"])
+                tensor_names = list(f.keys())
+                info["tensor_names"] = tensor_names
+                info["num_tensors"] = len(tensor_names)
             
             # Load metadata
             metadata_path = path.with_suffix(".json")
@@ -542,24 +550,24 @@ def save_model_weights(
     if not SAFETENSORS_AVAILABLE:
         raise ImportError("SafeTensors required: pip install safetensors>=0.4.0")
     
-    path = Path(path)
-    if not path.suffix:
-        path = path.with_suffix(".safetensors")
+    file_path = Path(path)
+    if not file_path.suffix:
+        file_path = file_path.with_suffix(".safetensors")
     
-    path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
     
     # Flatten and save
     flat_params = flatten_params(params)
-    save_safetensors(flat_params, str(path))
+    save_safetensors(flat_params, str(file_path))
     
     # Save metadata if provided
     if metadata:
-        metadata_path = path.with_suffix(".json")
+        metadata_path = file_path.with_suffix(".json")
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2, default=str)
     
-    logger.info(f"Model weights saved: {path}")
-    return str(path)
+    logger.info(f"Model weights saved: {file_path}")
+    return str(file_path)
 
 
 def load_model_weights(path: str) -> Tuple[Dict, Optional[Dict]]:
@@ -575,15 +583,15 @@ def load_model_weights(path: str) -> Tuple[Dict, Optional[Dict]]:
     if not SAFETENSORS_AVAILABLE:
         raise ImportError("SafeTensors required: pip install safetensors>=0.4.0")
     
-    path = Path(path)
+    file_path = Path(path)
     
     # Load tensors
-    flat_params = load_safetensors(str(path))
+    flat_params = load_safetensors(str(file_path))
     params = unflatten_params(flat_params)
     
     # Load metadata if exists
     metadata = None
-    metadata_path = path.with_suffix(".json")
+    metadata_path = file_path.with_suffix(".json")
     if metadata_path.exists():
         with open(metadata_path, 'r') as f:
             metadata = json.load(f)
@@ -608,16 +616,16 @@ def convert_pickle_to_safetensors(
     """
     import pickle
     
-    pickle_path = Path(pickle_path)
+    pickle_path_obj = Path(pickle_path)
     
     if output_path is None:
-        output_path = pickle_path.with_suffix(".safetensors")
+        output_path_obj = pickle_path_obj.with_suffix(".safetensors")
     else:
-        output_path = Path(output_path)
+        output_path_obj = Path(output_path)
     
     # Load pickle checkpoint (with warning about security)
-    logger.warning(f"Loading pickle file (potentially unsafe): {pickle_path}")
-    with open(pickle_path, 'rb') as f:
+    logger.warning(f"Loading pickle file (potentially unsafe): {pickle_path_obj}")
+    with open(pickle_path_obj, 'rb') as f:
         checkpoint = pickle.load(f)
     
     # Extract components
@@ -626,8 +634,8 @@ def convert_pickle_to_safetensors(
     
     # Create manager and save
     manager = CheckpointManager(
-        checkpoint_dir=str(output_path.parent),
-        model_name=output_path.stem.split("_epoch_")[0] if "_epoch_" in output_path.stem else "model"
+        checkpoint_dir=str(output_path_obj.parent),
+        model_name=output_path_obj.stem.split("_epoch_")[0] if "_epoch_" in output_path_obj.stem else "model"
     )
     
     saved_path = manager.save_checkpoint(
@@ -641,5 +649,5 @@ def convert_pickle_to_safetensors(
         validation_losses=checkpoint.get("validation_losses")
     )
     
-    logger.info(f"Converted {pickle_path} -> {saved_path}")
+    logger.info(f"Converted {pickle_path_obj} -> {saved_path}")
     return saved_path
