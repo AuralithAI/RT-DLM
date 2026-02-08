@@ -61,7 +61,7 @@ class ConsciousnessSimulator(hk.Module):
             hk.Linear(d_model),
             jax.nn.silu,
             hk.Linear(d_model),
-            jax.nn.tanh  # Bounded self-awareness signal
+            jax.nn.tanh
         ], name="self_awareness")
         
         # Introspection module
@@ -76,7 +76,7 @@ class ConsciousnessSimulator(hk.Module):
         # Introspection gate - controls depth of self-reflection
         # Input: combined [d_model * 2], Output: gate [d_model]
         self.introspection_gate = hk.Sequential([
-            hk.Linear(d_model),  # Project to d_model
+            hk.Linear(d_model),
             jax.nn.sigmoid
         ], name="introspection_gate")
         
@@ -662,9 +662,9 @@ class CreativeGenerationEngine(hk.Module):
         """
         # Encode style if provided
         if style_reference is not None:
-            style_encoding = self.style_encoder(style_reference)  # [batch, d_model]
+            style_encoding = self.style_encoder(style_reference)
         else:
-            style_encoding = jnp.zeros((content_context.shape[0], self.d_model))  # [batch, d_model]
+            style_encoding = jnp.zeros((content_context.shape[0], self.d_model))
         
         # Cross-domain inspiration
         inspired_content = self.inspiration_network(
@@ -672,7 +672,7 @@ class CreativeGenerationEngine(hk.Module):
         )  # [batch, seq, d_model]
         
         # Expand style encoding to match sequence dimension
-        style_expanded = jnp.expand_dims(style_encoding, axis=1)  # [batch, 1, d_model]
+        style_expanded = jnp.expand_dims(style_encoding, axis=1)
         style_expanded = jnp.broadcast_to(
             style_expanded, 
             (inspired_content.shape[0], inspired_content.shape[1], self.d_model)
@@ -684,7 +684,7 @@ class CreativeGenerationEngine(hk.Module):
             style_expanded
         ], axis=-1)  # [batch, seq, 2*d_model]
         
-        creative_output = self.creativity_amplifier(creative_input)  # [batch, seq, d_model]
+        creative_output = self.creativity_amplifier(creative_input)
         creative_output = creative_output * creativity_level + inspired_content * (1 - creativity_level)
         
         # Compute entropy-based novelty
@@ -749,7 +749,7 @@ class SocialEmotionalIntelligence(hk.Module):
             hk.Linear(d_model),
             jax.nn.silu,
             hk.Linear(self.NUM_EMOTIONS),
-            jax.nn.sigmoid  # Intensity in [0, 1]
+            jax.nn.sigmoid
         ], name="intensity_estimator")
         
         # Emotion valence detector (positive/negative)
@@ -757,7 +757,7 @@ class SocialEmotionalIntelligence(hk.Module):
             hk.Linear(d_model),
             jax.nn.silu,
             hk.Linear(1),
-            jax.nn.tanh  # Valence in [-1, 1]
+            jax.nn.tanh
         ], name="valence_detector")
         
         # Arousal detector (high/low energy)
@@ -765,7 +765,7 @@ class SocialEmotionalIntelligence(hk.Module):
             hk.Linear(d_model),
             jax.nn.silu,
             hk.Linear(1),
-            jax.nn.sigmoid  # Arousal in [0, 1]
+            jax.nn.sigmoid
         ], name="arousal_detector")
         
         # Mixed emotion detector (can detect multiple simultaneous emotions)
@@ -773,7 +773,7 @@ class SocialEmotionalIntelligence(hk.Module):
             hk.Linear(d_model),
             jax.nn.silu,
             hk.Linear(self.NUM_EMOTIONS),
-            jax.nn.sigmoid  # Each emotion independently in [0, 1]
+            jax.nn.sigmoid
         ], name="mixed_emotion")
         
         # Emotion transition predictor (what emotion might come next)
@@ -882,18 +882,18 @@ class SocialEmotionalIntelligence(hk.Module):
         
         # Handle social analysis - ensure it's 2D [batch, features]
         if len(social_analysis.shape) > 2:
-            social_features = social_analysis.mean(axis=1)  # [batch, d_model]
+            social_features = social_analysis.mean(axis=1)
         else:
-            social_features = social_analysis  # Already [batch, d_model]
+            social_features = social_analysis
         
         # Modulate response based on social-emotional understanding
         # All inputs should be [batch, features]
         modulated_input = jnp.concatenate([
-            social_features,         # [batch, d_model]
-            empathy_signal,          # [batch, d_model]  
-            mixed_emotions,          # [batch, 14]
-            valence,                 # [batch, 1]
-            arousal                  # [batch, 1]
+            social_features,
+            empathy_signal,
+            mixed_emotions,
+            valence,
+            arousal
         ], axis=-1)
         
         socially_aware_response = self.response_modulator(modulated_input)
@@ -998,7 +998,7 @@ class RTDLMAGISystem(hk.Module):
         
         # AGI integration layer with hybrid fusion
         self.agi_integrator = hk.Sequential([
-            hk.Linear(config.d_model * 4),  # Increased for hybrid components
+            hk.Linear(config.d_model * 4),
             jax.nn.silu,
             hk.Linear(config.d_model),
             hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
@@ -1070,7 +1070,7 @@ class RTDLMAGISystem(hk.Module):
                  conversation_history: Optional[jnp.ndarray] = None,
                  knowledge_base: Optional[jnp.ndarray] = None,
                  return_reasoning: bool = False,
-                 is_training: bool = True):
+                 is_training: bool = False):
         """
         Complete AGI forward pass with hybrid architecture
         
@@ -1080,7 +1080,9 @@ class RTDLMAGISystem(hk.Module):
             conversation_history: Optional tensor for conversation context
             knowledge_base: Optional tensor for knowledge retrieval
             return_reasoning: Whether to return reasoning traces
-            is_training: Whether in training mode (affects controller exploration)
+            is_training: Whether in training mode (affects controller exploration).
+                        Defaults to False for deterministic inference behavior.
+                        Training code should explicitly pass is_training=True.
             
         Returns:
             Dictionary containing model outputs (logits, features, etc.)
@@ -1147,7 +1149,6 @@ class RTDLMAGISystem(hk.Module):
             knowledge_base=knowledge_base,
         )
         
-        state = self.compute_plan.initialize_state(core_features)
         
         final_state, execution_trace = self.compute_plan(
             hidden=core_features,
@@ -1228,7 +1229,8 @@ class RTDLMAGISystem(hk.Module):
                 if delta.ndim == 3:
                     delta = delta.mean(axis=1)
                 return make_output(delta, confidence=0.6, cost=0.05)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Memory executor failed, using no-op: {e}")
                 return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
         
         executors[ModuleType.MEMORY_RETRIEVAL] = memory_executor
@@ -1244,7 +1246,8 @@ class RTDLMAGISystem(hk.Module):
                 if delta.ndim == 3:
                     delta = delta.mean(axis=1)
                 return make_output(delta * 0.5, confidence=0.55, cost=0.15)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Graph executor failed, using no-op: {e}")
                 return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
         
         executors[ModuleType.GRAPH_REASONING] = graph_executor
@@ -1257,7 +1260,8 @@ class RTDLMAGISystem(hk.Module):
                 if delta.ndim == 3:
                     delta = delta.mean(axis=1)
                 return make_output(delta * 0.3, confidence=0.7, cost=0.10)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Symbolic executor failed, using no-op: {e}")
                 return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
         
         executors[ModuleType.SYMBOLIC_REASONING] = symbolic_executor
@@ -1270,7 +1274,8 @@ class RTDLMAGISystem(hk.Module):
                 if delta.ndim == 3:
                     delta = delta.mean(axis=1)
                 return make_output(delta * 0.3, confidence=0.6, uncertainty=0.4, cost=0.08)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Probabilistic executor failed, using no-op: {e}")
                 return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
         
         executors[ModuleType.PROBABILISTIC] = probabilistic_executor
@@ -1280,11 +1285,11 @@ class RTDLMAGISystem(hk.Module):
                 try:
                     query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
                     result = self.reasoning_engine(query, core_features)
-                    optimal, probs = self.quantum_optimization(query, result)
+                    optimal, _ = self.quantum_optimization(query, result)
                     delta = optimal.mean(axis=1) if optimal.ndim == 3 else optimal
                     return make_output(delta * 0.2, confidence=0.5, cost=0.20)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Quantum executor failed, using no-op: {e}")
             return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
         
         executors[ModuleType.QUANTUM_SIMULATION] = quantum_executor
@@ -1297,7 +1302,8 @@ class RTDLMAGISystem(hk.Module):
                 if delta.ndim == 3:
                     delta = delta.mean(axis=1)
                 return make_output(delta * 0.4, confidence=0.65, cost=0.12)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"MoE executor failed, using no-op: {e}")
                 return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
         
         executors[ModuleType.MOE_ROUTING] = moe_executor
@@ -1311,8 +1317,8 @@ class RTDLMAGISystem(hk.Module):
                     if delta.ndim == 3:
                         delta = delta.mean(axis=1)
                     return make_output(delta * 0.3, confidence=0.55, cost=0.18)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Scientific executor failed, using no-op: {e}")
             return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
         
         executors[ModuleType.SCIENTIFIC_DISCOVERY] = scientific_executor
@@ -1326,8 +1332,8 @@ class RTDLMAGISystem(hk.Module):
                     if delta.ndim == 3:
                         delta = delta.mean(axis=1)
                     return make_output(delta * 0.3, confidence=0.5, cost=0.15)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Creative executor failed, using no-op: {e}")
             return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
         
         executors[ModuleType.CREATIVE_GENERATION] = creative_executor
@@ -1341,8 +1347,8 @@ class RTDLMAGISystem(hk.Module):
                     if delta.ndim == 3:
                         delta = delta.mean(axis=1)
                     return make_output(delta * 0.2, confidence=0.75, cost=0.10)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Consciousness executor failed, using no-op: {e}")
             return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
         
         executors[ModuleType.CONSCIOUSNESS] = consciousness_executor
@@ -1357,8 +1363,8 @@ class RTDLMAGISystem(hk.Module):
                             proj = hk.Linear(d_model, name="multimodal_controller_proj")
                             delta = proj(delta)
                         return make_output(delta * 0.3, confidence=0.6, cost=0.12)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Multimodal executor failed, using no-op: {e}")
             return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
         
         executors[ModuleType.MULTIMODAL_FUSION] = multimodal_executor
@@ -1371,7 +1377,8 @@ class RTDLMAGISystem(hk.Module):
                 if delta.ndim == 3:
                     delta = delta.mean(axis=1)
                 return make_output(delta * 0.2, confidence=0.6, cost=0.08)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Attention executor failed: {e}")
                 return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
         
         executors[ModuleType.ATTENTION_REFINEMENT] = attention_executor
@@ -1793,15 +1800,32 @@ class RTDLMAGISystem(hk.Module):
 
 
 # Convenience function for model creation
-def create_rtdlm_agi(config: AGIConfig):
-    """Create RT-DLM AGI model with given configuration"""
+def create_rtdlm_agi(config: AGIConfig, use_state: bool = True):
+    """Create RT-DLM AGI model with given configuration.
+    
+    Args:
+        config: AGI system configuration
+        use_state: Whether to use transform_with_state (required if model uses
+                   hk.get_state/hk.set_state). Default True since RTDLMAGISystem
+                   uses stateful operations internally.
+    
+    Returns:
+        Transformed Haiku model function. With use_state=True:
+            - init(rng, ...) -> (params, state)
+            - apply(params, state, rng, ...) -> (output, state)
+        With use_state=False:
+            - init(rng, ...) -> params
+            - apply(params, rng, ...) -> output
+    """
     
     def forward_fn(**kwargs):
         model = RTDLMAGISystem(config)
         return model(**kwargs)
     
-    # Always use transform_with_state since model components use hk state
-    return hk.transform_with_state(forward_fn)
+    if use_state:
+        return hk.transform_with_state(forward_fn)
+    else:
+        return hk.transform(forward_fn)
 
 
 # Training utilities
@@ -1916,12 +1940,14 @@ def compute_agi_loss(logits, targets, aux_outputs=None, config=None):
             
             # Add controller loss components
             for key, value in controller_components.items():
-                if key != "task_loss" and key != "total_loss":  # Avoid double-counting
+                if key != "task_loss" and key != "total_loss":
                     loss_components[f"controller_{key}"] = value
             
-            # Use controller total loss (already includes task_loss)
-            total_loss = controller_total_loss
-            loss_components["controller_total_loss"] = controller_total_loss
+            # Add controller penalties ON TOP of accumulated total_loss
+            controller_penalties = controller_total_loss - core_loss
+            total_loss = total_loss + controller_penalties
+            loss_components["controller_penalties"] = controller_penalties
+            loss_components["controller_total_loss"] = total_loss
     
     # Store all components in aux_outputs for logging
     if aux_outputs is not None:
@@ -1956,9 +1982,72 @@ def compute_consciousness_loss(consciousness_signals):
     
     return 0.0
 
-def compute_multimodal_alignment_loss(_aux_outputs):
-    """Compute loss for multi-modal alignment"""
-    # Placeholder for multi-modal alignment loss
+def compute_multimodal_alignment_loss(aux_outputs):
+    """Compute InfoNCE contrastive loss between text and audio/video/image features.
+    Aligns matching text-modality pairs and pushes mismatched pairs apart.
+    Returns 0.0 if no multimodal features available.
+    """
+    if aux_outputs is None:
+        return 0.0
+    
+    text_features = aux_outputs.get("text_features")
+    if text_features is None:
+        hybrid = aux_outputs.get("hybrid_analysis", {})
+        text_features = hybrid.get("text_encoding")
+    
+    if text_features is None:
+        return 0.0
+    
+    if text_features.ndim == 3:
+        text_features = text_features.mean(axis=1)
+    
+    text_norm = text_features / (jnp.linalg.norm(text_features, axis=-1, keepdims=True) + 1e-8)
+    
+    total_loss = 0.0
+    num_modalities = 0
+    temperature = 0.07
+    
+    modality_keys = ["audio_features", "video_features", "image_features"]
+    
+    for key in modality_keys:
+        other_features = aux_outputs.get(key)
+        if other_features is None:
+            continue
+            
+        if other_features.ndim == 3:
+            other_features = other_features.mean(axis=1)
+        
+        if other_features.shape != text_features.shape:
+            continue
+        
+        other_norm = other_features / (jnp.linalg.norm(other_features, axis=-1, keepdims=True) + 1e-8)
+        similarity = jnp.matmul(text_norm, other_norm.T) / temperature
+        
+        batch_size = text_features.shape[0]
+        labels = jnp.arange(batch_size)
+        
+        loss_t2o = optax.softmax_cross_entropy_with_integer_labels(similarity, labels).mean()
+        loss_o2t = optax.softmax_cross_entropy_with_integer_labels(similarity.T, labels).mean()
+        
+        modality_loss = (loss_t2o + loss_o2t) / 2.0
+        total_loss += modality_loss
+        num_modalities += 1
+    
+    fused_features = aux_outputs.get("fused_features")
+    if fused_features is not None:
+        if fused_features.ndim == 3:
+            fused_features = fused_features.mean(axis=1)
+        
+        if fused_features.shape == text_features.shape:
+            fused_norm = fused_features / (jnp.linalg.norm(fused_features, axis=-1, keepdims=True) + 1e-8)
+            cosine_sim = jnp.sum(text_norm * fused_norm, axis=-1)
+            fusion_loss = jnp.mean(1.0 - cosine_sim)
+            total_loss += 0.5 * fusion_loss
+            num_modalities += 0.5
+    
+    if num_modalities > 0:
+        return total_loss / num_modalities
+    
     return 0.0
 
 
