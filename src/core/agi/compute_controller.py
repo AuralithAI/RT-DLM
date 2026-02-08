@@ -549,19 +549,19 @@ class ComputeController(hk.Module):
             selected_idx = jnp.argmax(module_probs[0])
             selected_modules = [ModuleType(int(selected_idx) + 1)]
         
-        # Check halt conditions
-        halt_threshold_check = halt_prob[0] > self.halt_threshold
+        # Extract scalar values for halt logic and action
+        halt_prob_scalar = halt_prob[0].item() if hasattr(halt_prob[0], 'item') else float(halt_prob[0])
+        budget_scalar = budget_allocation[0].item() if hasattr(budget_allocation[0], 'item') else float(budget_allocation[0])
+        
+        # Check halt conditions using Python scalars
+        halt_threshold_check = halt_prob_scalar > self.halt_threshold
         step_limit_check = state.step >= self.max_steps - 1
-        budget_limit_check = state.budget_remaining < self.min_budget
+        budget_limit_check = budget_scalar < self.min_budget
         should_halt = halt_threshold_check or step_limit_check or budget_limit_check
         
         # If halting, ensure OUTPUT_GENERATION is selected
         if should_halt and ModuleType.OUTPUT_GENERATION not in selected_modules:
             selected_modules = [ModuleType.OUTPUT_GENERATION]
-        
-        # Extract scalar values for action
-        halt_prob_scalar = halt_prob[0].item() if hasattr(halt_prob[0], 'item') else float(halt_prob[0])
-        budget_scalar = budget_allocation[0].item() if hasattr(budget_allocation[0], 'item') else float(budget_allocation[0])
         
         action = ComputeAction(
             modules=selected_modules,
@@ -677,6 +677,54 @@ class ComputePlan(hk.Module):
         self.max_steps = max_steps
         self.initial_budget = initial_budget
         
+    def _get_all_gate_params(
+        self, 
+        hidden_pooled: jnp.ndarray
+    ) -> Tuple[List[jnp.ndarray], List[jnp.ndarray]]:
+        """
+        Get or create all gate parameters deterministically.
+        
+        This method creates parameters for ALL gates (0 to max_steps-1)
+        regardless of which step we're at. This ensures the same parameters
+        exist whether we're in init or apply, and whether the loop runs
+        1 step or all steps.
+        
+        Returns:
+            Tuple of (weights_list, biases_list) for all gates
+        """
+        weights = []
+        biases = []
+        
+        for i in range(self.max_steps):
+            # Create weight and bias for each gate using hk.get_parameter
+            w = hk.get_parameter(
+                f"update_gate_{i}_w",
+                shape=[self.d_model, self.d_model],
+                init=hk.initializers.VarianceScaling(1.0, "fan_avg", "truncated_normal")
+            )
+            b = hk.get_parameter(
+                f"update_gate_{i}_b",
+                shape=[self.d_model],
+                init=jnp.zeros
+            )
+            weights.append(w)
+            biases.append(b)
+        
+        return weights, biases
+    
+    def _apply_gate(
+        self,
+        step: int,
+        hidden_pooled: jnp.ndarray,
+        weights: List[jnp.ndarray],
+        biases: List[jnp.ndarray]
+    ) -> jnp.ndarray:
+        """Apply a specific gate given pre-fetched parameters."""
+        safe_step = min(step, self.max_steps - 1)
+        w = weights[safe_step]
+        b = biases[safe_step]
+        return jax.nn.sigmoid(hidden_pooled @ w + b)
+        
     def initialize_state(
         self,
         hidden: jnp.ndarray,
@@ -694,6 +742,8 @@ class ComputePlan(hk.Module):
         # Default memory summary if not provided
         if memory_summary is None:
             memory_summary = jnp.zeros((batch_size, self.d_model))
+        
+        _ = self._get_all_gate_params(hidden_pooled)
         
         return ComputeState(
             hidden=hidden,
@@ -715,12 +765,6 @@ class ComputePlan(hk.Module):
         cost: float
     ) -> ComputeState:
         """Update state after running a module."""
-        # Apply hidden delta with gating
-        gate = hk.Sequential([
-            hk.Linear(self.d_model),
-            jax.nn.sigmoid
-        ], name=f"update_gate_{state.step}")
-        
         hidden_pooled = state.hidden_pooled
         delta = module_output.hidden_delta
         
@@ -731,7 +775,11 @@ class ComputePlan(hk.Module):
             else:
                 delta = delta.mean(axis=1) if delta.ndim > 2 else delta
         
-        gate_value = gate(hidden_pooled)
+        # Get all gate params (already created in initialize_state)
+        weights, biases = self._get_all_gate_params(hidden_pooled)
+        
+        # Apply the gate for current step
+        gate_value = self._apply_gate(state.step, hidden_pooled, weights, biases)
         new_hidden_pooled = hidden_pooled + gate_value * delta
         
         # Update hidden (3D) if needed
@@ -842,8 +890,16 @@ class ComputePlan(hk.Module):
                 else:
                     logger.warning(f"No executor for module {module_type}")
             
-            # Check halt condition
-            if decision_info["should_halt"]:
+            # Check halt condition - ensure we have a Python bool
+            raw_should_halt = decision_info["should_halt"]
+            if isinstance(raw_should_halt, (jnp.ndarray, jax.Array)):
+                should_halt = bool(jax.device_get(raw_should_halt).item())
+            elif hasattr(raw_should_halt, "item"):
+                should_halt = bool(raw_should_halt.item())
+            else:
+                should_halt = bool(raw_should_halt)
+            
+            if should_halt:
                 logger.debug(f"Halting at step {step} with confidence {state.confidence.mean():.3f}")
                 break
         
