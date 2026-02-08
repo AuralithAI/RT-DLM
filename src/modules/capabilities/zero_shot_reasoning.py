@@ -80,11 +80,12 @@ class ConceptualKnowledgeGraph:
         
     def _update_relation_index(self, concept: ConceptNode):
         """Update fast relation lookup index."""
-        for relation in concept.relations:
-            rel_key = f"{relation['type']}_{relation['target']}"
-            if rel_key not in self.relation_index:
-                self.relation_index[rel_key] = []
-            self.relation_index[rel_key].append(concept.concept_id)
+        for relation_type, targets in concept.relations.items():
+            for target in targets:
+                rel_key = f"{relation_type}_{target}"
+                if rel_key not in self.relation_index:
+                    self.relation_index[rel_key] = []
+                self.relation_index[rel_key].append(concept.concept_id)
             
     def multi_hop_reasoning(self, start_concept: str, target_concept: str, max_hops: int = 3):
         """Perform multi-hop reasoning between concepts."""
@@ -93,12 +94,12 @@ class ConceptualKnowledgeGraph:
             return self.multi_hop_cache[cache_key]
             
         # BFS for reasoning paths
-        queue = [(start_concept, [])]
+        queue: List[Tuple[str, List[Tuple[str, str, str]]]] = [(start_concept, [])]
         visited: Set[str] = set()
         paths: List[List[Tuple[str, str, str]]] = []
         
         for _ in range(max_hops):
-            next_queue = []
+            next_queue: List[Tuple[str, List[Tuple[str, str, str]]]] = []
             for current, path in queue:
                 if current == target_concept:
                     paths.append(path)
@@ -108,12 +109,12 @@ class ConceptualKnowledgeGraph:
                     continue
                 visited.add(current)
                 
-                # Explore connected concepts
+                # Explore connected concepts (relations is Dict[str, Set[str]])
                 if current in self.concepts:
-                    for relation in self.concepts[current].relations:
-                        next_concept = relation['target']
-                        new_path = path + [(current, relation['type'], next_concept)]
-                        next_queue.append((next_concept, new_path))
+                    for relation_type, targets in self.concepts[current].relations.items():
+                        for next_concept in targets:
+                            new_path = path + [(current, relation_type, next_concept)]
+                            next_queue.append((next_concept, new_path))
             queue = next_queue
             
         self.multi_hop_cache[cache_key] = paths[:5]  # Cache top 5 paths

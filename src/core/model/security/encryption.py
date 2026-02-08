@@ -35,7 +35,11 @@ try:
     CRYPTOGRAPHY_AVAILABLE = True
 except ImportError:
     CRYPTOGRAPHY_AVAILABLE = False
-    InvalidToken = Exception  # Fallback for type hints
+    
+    class InvalidToken(Exception):
+        """Fallback exception when cryptography not available."""
+        pass
+    
     logger.warning(
         "cryptography library not installed. Encryption disabled. "
         "Install with: pip install cryptography"
@@ -192,7 +196,7 @@ class SecureStorage:
             if self.config.log_encryption_events:
                 logger.debug("Decrypted data successfully")
             
-            return decrypted.decode()  # type: ignore[union-attr]
+            return decrypted.decode()
         except InvalidToken:
             if self.config.fail_on_decrypt_error:
                 raise

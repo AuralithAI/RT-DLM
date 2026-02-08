@@ -320,7 +320,7 @@ class ContextTools:
             return ToolResult.error_result(tool, f"Tool '{tool}' not supported")
 
         tool_fn = tool_map[tool]
-        result: ToolResult = tool_fn(**kwargs)
+        result = tool_fn(**kwargs)
         return result
 
     def get_tool_stats(self) -> Dict[str, Any]:

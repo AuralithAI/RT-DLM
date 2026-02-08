@@ -329,7 +329,7 @@ class TokenSampler:
         self,
         logits: jnp.ndarray,
         config: SamplingConfig,
-        rng_key: jax.random.PRNGKey,
+        rng_key: jnp.ndarray,
         generated_tokens: Optional[jnp.ndarray] = None
     ) -> SampleOutput:
         """Sample tokens from logits using configured sampling strategy.

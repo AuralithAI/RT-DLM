@@ -103,7 +103,7 @@ def compute_ewc_loss(
     params_star: Any,
     fisher_matrix: Any,
     lambda_ewc: float = 1000.0
-) -> jnp.ndarray:
+) -> Any:
     """
     Compute Elastic Weight Consolidation (EWC) regularization loss.
     
@@ -147,7 +147,7 @@ def compute_si_loss(
     params_star: Any,
     importance_weights: Any,
     lambda_si: float = 1.0
-) -> jnp.ndarray:
+) -> Any:
     """
     Compute Synaptic Intelligence (SI) regularization loss.
     

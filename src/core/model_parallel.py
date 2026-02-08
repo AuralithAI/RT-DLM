@@ -50,6 +50,7 @@ class DeviceMesh:
         
     def _create_mesh(self) -> Mesh:
         """Create JAX device mesh"""
+        mesh_shape: Tuple[int, ...]
         if self.config.tensor_parallel and self.config.pipeline_parallel:
             # 3D mesh: (data, tensor, pipeline)
             dp_size = self.num_devices // (
@@ -64,7 +65,7 @@ class DeviceMesh:
         elif self.config.tensor_parallel:
             # 2D mesh: (data, tensor)
             dp_size = max(1, self.num_devices // self.config.tensor_parallel_size)
-            mesh_shape: Tuple[int, ...] = (dp_size, self.config.tensor_parallel_size)
+            mesh_shape = (dp_size, self.config.tensor_parallel_size)
             axis_names = ("data", "tensor")
         elif self.config.pipeline_parallel:
             # 2D mesh: (data, pipeline)
@@ -509,6 +510,8 @@ class ModelParallelTransformer(hk.Module):
         
         # Transformer layers
         for i in range(self.config.num_layers):
+            attn: Any
+            mlp: Any
             if self.use_tensor_parallel:
                 # Tensor parallel attention
                 attn = TensorParallelAttention(

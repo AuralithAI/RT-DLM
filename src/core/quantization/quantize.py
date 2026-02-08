@@ -5,7 +5,7 @@ Provides post-training quantization (PTQ) for model compression.
 Supports INT8 and INT4 quantization for inference optimization.
 """
 
-from typing import Dict, Any, Optional, Tuple, List, Callable
+from typing import Dict, Any, Optional, Tuple, List, Callable, Union
 from dataclasses import dataclass
 from pathlib import Path
 import logging
@@ -320,7 +320,7 @@ class ModelQuantizer:
     def save(
         self,
         result: QuantizationResult,
-        output_path: str,
+        output_path: Union[str, Path],
     ):
         """
         Save quantized model to SafeTensors format.

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Any, Optional, Tuple, Mapping
+from typing import Dict, List, Any, Optional, Tuple, Mapping, Callable
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -188,8 +188,8 @@ class ToolSelectorWrapper:
     def __init__(self, d_model: int, config: RLMConfig):
         self.d_model = d_model
         self.config = config
-        self._init_fn = None
-        self._apply_fn = None
+        self._init_fn: Optional[Callable[..., Any]] = None
+        self._apply_fn: Optional[Callable[..., Any]] = None
         self._params: Optional[Params] = None
 
     def init(self, rng: jnp.ndarray) -> Params:
@@ -197,13 +197,19 @@ class ToolSelectorWrapper:
             selector = ToolSelector(self.d_model)
             return selector(query, context_metadata, recursion_state)
 
-        self._init_fn, self._apply_fn = hk.transform(forward)
+        transformed = hk.transform(forward)
+        self._init_fn = transformed.init
+        self._apply_fn = transformed.apply
 
         dummy_query = jnp.zeros((1, self.d_model))
         dummy_context = jnp.zeros((1, self.d_model))
         dummy_state = jnp.zeros((1, self.d_model))
 
+        if self._init_fn is None:
+            raise RuntimeError("Transform failed to create init function")
         self._params = self._init_fn(rng, dummy_query, dummy_context, dummy_state)
+        if self._params is None:
+            raise RuntimeError("Init function returned None params")
         return self._params
 
     def select(

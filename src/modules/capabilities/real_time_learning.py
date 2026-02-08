@@ -100,7 +100,7 @@ class DynamicSkillAcquisition(hk.Module):
         self.max_skills = max_skills
         
         # Skill-specific adapter networks
-        self.skill_adapters = {}
+        self.skill_adapters: Dict[str, Any] = {}
         
         # Skill routing network
         self.skill_router = hk.Sequential([

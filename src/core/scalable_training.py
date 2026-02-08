@@ -588,14 +588,15 @@ def profile_collective_communication(
 
 def validate_distributed_setup(mesh: ScalableMesh) -> Dict[str, Any]:
     """Validate distributed training setup is working correctly."""
-    results = {
+    checks: Dict[str, Any] = {}
+    results: Dict[str, Any] = {
         "num_devices": mesh.num_devices,
         "device_types": [str(d) for d in jax.devices()[:4]],
         "mesh_shape": str(mesh.mesh.shape),
-        "checks": {}
+        "checks": checks
     }
     
-    results["checks"]["devices_visible"] = mesh.num_devices > 0
+    checks["devices_visible"] = mesh.num_devices > 0
     
     if mesh.is_distributed:
         try:
@@ -608,14 +609,14 @@ def validate_distributed_setup(mesh: ScalableMesh) -> Dict[str, Any]:
             
             result = test_sync(test_tensor)
             expected = mesh.data_parallel_size
-            results["checks"]["all_reduce_works"] = bool(jnp.allclose(result[0][0], expected))
+            checks["all_reduce_works"] = bool(jnp.allclose(result[0][0], expected))
         except Exception as e:
-            results["checks"]["all_reduce_works"] = False
-            results["checks"]["all_reduce_error"] = str(e)
+            checks["all_reduce_works"] = False
+            checks["all_reduce_error"] = str(e)
     else:
-        results["checks"]["all_reduce_works"] = True
+        checks["all_reduce_works"] = True
     
-    results["checks"]["mesh_valid"] = mesh.mesh is not None
-    results["valid"] = all(v for k, v in results["checks"].items() if isinstance(v, bool))
+    checks["mesh_valid"] = mesh.mesh is not None
+    results["valid"] = all(v for k, v in checks.items() if isinstance(v, bool))
     
     return results

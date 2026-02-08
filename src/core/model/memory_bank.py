@@ -67,11 +67,11 @@ if _SECURITY_AVAILABLE:
     pass  # Classes already imported above
 else:
     # Fallback: minimal stub if security module unavailable
-    class PIIDetector:
+    class PIIDetector:  # noqa: F811
         """Stub when security module unavailable."""
         def detect(self, text): return []  # noqa: ARG002
     
-    class DataSanitizer:
+    class DataSanitizer:  # noqa: F811
         """Stub when security module unavailable."""
         def __init__(self, *args, **kwargs): 
             """Initialize stub."""  # noqa: ARG002
@@ -80,7 +80,7 @@ else:
         def sanitize_dict(self, data): 
             return data
     
-    class SecureStorage:
+    class SecureStorage:  # noqa: F811
         """Stub when security module unavailable."""
         def __init__(self, *args, **kwargs): 
             """Initialize stub."""  # noqa: ARG002
@@ -92,7 +92,7 @@ else:
             try: return json.loads(data)
             except json.JSONDecodeError: return {}
     
-    class IdentifierHasher:
+    class IdentifierHasher:  # noqa: F811
         """Stub when security module unavailable."""
         def __init__(self, *args, **kwargs): 
             """Initialize stub."""  # noqa: ARG002

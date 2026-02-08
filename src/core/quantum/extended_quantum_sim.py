@@ -15,7 +15,7 @@ To disable: Set config.quantum_layers=0 in AGIConfig.
 import jax
 import jax.numpy as jnp
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 from enum import Enum
 import logging
@@ -122,9 +122,9 @@ class SparseStateVector:
             
             # Accumulate amplitudes
             if abs(new_amp_0) > self.threshold:
-                new_amplitudes[idx_0] = new_amplitudes.get(idx_0, 0) + new_amp_0
+                new_amplitudes[idx_0] = complex(new_amplitudes.get(idx_0, 0) + new_amp_0)
             if abs(new_amp_1) > self.threshold:
-                new_amplitudes[idx_1] = new_amplitudes.get(idx_1, 0) + new_amp_1
+                new_amplitudes[idx_1] = complex(new_amplitudes.get(idx_1, 0) + new_amp_1)
         
         # Prune near-zero amplitudes
         self.amplitudes = {k: v for k, v in new_amplitudes.items() if abs(v) > self.threshold}
@@ -546,7 +546,7 @@ class ExtendedQuantumSimulator:
             
         return state_obj
     
-    def get_probabilities(self, state_obj: Dict) -> jnp.ndarray:
+    def get_probabilities(self, state_obj: Dict) -> Union[jnp.ndarray, List[Any]]:
         """Get measurement probabilities"""
         state_type = state_obj["type"]
         
@@ -561,7 +561,7 @@ class ExtendedQuantumSimulator:
         elif state_type == "chunked":
             # Return chunk-level probabilities (full state too large)
             chunks = state_obj["chunks"]
-            chunk_probs = [jnp.abs(c) ** 2 for c in chunks]
+            chunk_probs: List[Any] = [jnp.abs(c) ** 2 for c in chunks]
             return chunk_probs
             
         return jnp.array([])
