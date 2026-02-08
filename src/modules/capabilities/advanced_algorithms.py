@@ -53,27 +53,72 @@ def compute_fisher_information(
     Args:
         model_fn: Model function (params, rng, inputs) -> outputs
         params: Current model parameters (nested pytree)
-        data_samples: Input data samples
-        targets: Target labels
+        data_samples: Input data samples (can be int32 token IDs or float embeddings)
+        targets: Target labels (int32)
         rng: Random key
         num_samples: Number of samples for estimation
         
     Returns:
         Fisher information diagonal per parameter (nested pytree matching params structure)
     """
-    fisher_diag = jax.tree_util.tree_map(jnp.zeros_like, params)
+    # Handle tuple params from transform_with_state: (params_dict, state_dict)
+    # We only compute Fisher information for the model parameters, not state
+    params_dict = params[0] if isinstance(params, tuple) else params
+    
+    # Filter out non-float parameters (e.g., int32 training_step counters)
+    def filter_float_params(tree):
+        """Only keep float parameters for gradient computation."""
+        def keep_floats(x):
+            if isinstance(x, jnp.ndarray) and jnp.issubdtype(x.dtype, jnp.floating):
+                return x
+            elif isinstance(x, jnp.ndarray):
+                # Convert int params to float for gradient computation
+                return x.astype(jnp.float32)
+            return x
+        return jax.tree_util.tree_map(keep_floats, tree)
+    
+    params_for_grad = filter_float_params(params_dict)
+    fisher_diag = jax.tree_util.tree_map(jnp.zeros_like, params_for_grad)
     
     def log_likelihood_grad(params, x, y, rng):
-        """Compute gradient of log-likelihood for a single sample."""
+        """Compute gradient of log-likelihood for a single sample.
+        
+        Note: We compute gradients w.r.t. params (floats), not inputs.
+        The inputs (x, y) are treated as constants in the gradient computation.
+        """
         def single_loss(params):
-            output = model_fn(params, rng, inputs={"text": x[None, :]})
+            # x can be int32 token IDs - that's fine because we're taking
+            # gradients w.r.t. params, not x. The model internally embeds x.
+            # Call model_fn with correct signature:
+            # - For transform_with_state: apply(params, state, rng, ...)
+            # - For transform: apply(params, rng, ...)
+            if has_state:
+                output, _ = model_fn(params, original_state, rng, inputs={"text": x[None, :]})
+            else:
+                output = model_fn(params, rng, inputs={"text": x[None, :]})
             logits = output if isinstance(output, jnp.ndarray) else output.get("logits", output)
-            log_probs = jax.nn.log_softmax(logits, axis=-1)
-            # Gather log prob at target indices
-            return -jnp.mean(jnp.take_along_axis(log_probs, y[None, :, None], axis=-1))
+            
+            # Handle potential shape mismatches
+            if logits.ndim == 3:
+                # Shape: (batch, seq, vocab) - need to gather at target positions
+                log_probs = jax.nn.log_softmax(logits, axis=-1)
+                # y shape: (seq,) -> (1, seq, 1) for take_along_axis
+                y_expanded = y[None, :, None]
+                # Ensure y indices are within vocab size
+                y_clipped = jnp.clip(y_expanded, 0, logits.shape[-1] - 1)
+                selected_log_probs = jnp.take_along_axis(log_probs, y_clipped, axis=-1)
+                return -jnp.mean(selected_log_probs)
+            else:
+                # Shape: (batch, vocab) - classification case
+                log_probs = jax.nn.log_softmax(logits, axis=-1)
+                return -jnp.mean(log_probs[:, y[0]])
         
         grads = jax.grad(single_loss)(params)
         return grads
+    
+    # Track state for reconstruction
+    has_state = isinstance(params, tuple)
+    original_state = params[1] if has_state else None
     
     # Estimate Fisher over samples
     sample_indices = jax.random.choice(
@@ -83,7 +128,7 @@ def compute_fisher_information(
     for idx in sample_indices:
         rng, sample_rng = jax.random.split(rng)
         sample_grads = log_likelihood_grad(
-            params, data_samples[idx], targets[idx], sample_rng
+            params_for_grad, data_samples[idx], targets[idx], sample_rng
         )
         
         # Accumulate squared gradients (diagonal Fisher)
