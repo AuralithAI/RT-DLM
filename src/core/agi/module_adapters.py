@@ -21,9 +21,7 @@ import logging
 from src.core.agi.compute_controller import (
     ModuleType, 
     ModuleOutput, 
-    ComputeState,
-    ModuleContract,
-    ModuleRegistry
+    ComputeState
 )
 
 logger = logging.getLogger(__name__)
