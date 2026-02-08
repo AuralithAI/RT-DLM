@@ -10,19 +10,11 @@ Tests the full integration of ComputeController with:
 import pytest
 import jax
 import jax.numpy as jnp
-import haiku as hk
-from typing import Dict
 
 from src.config.agi_config import AGIConfig
 from src.rtdlm import (
     create_rtdlm_agi,
     compute_agi_loss,
-)
-from src.core.agi.compute_controller import (
-    ModuleType,
-    ModuleOutput,
-    ComputeState,
-    ControllerLossComputer,
 )
 
 

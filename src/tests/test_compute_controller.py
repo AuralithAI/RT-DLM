@@ -13,7 +13,6 @@ import pytest
 import jax
 import jax.numpy as jnp
 import haiku as hk
-from typing import Dict
 
 from src.core.agi.compute_controller import (
     ModuleType,
@@ -21,20 +20,14 @@ from src.core.agi.compute_controller import (
     ModuleOutput,
     ModuleRegistry,
     ComputeState,
-    ComputeAction,
     ComputeController,
     ComputePlan,
-    create_compute_controller_fn,
 )
 
 from src.core.agi.module_adapters import (
-    ModuleAdapter,
     MemoryRetrievalAdapter,
     GraphReasoningAdapter,
-    SymbolicReasoningAdapter,
-    ProbabilisticAdapter,
     OutputGenerationAdapter,
-    create_module_executors,
 )
 
 from src.config.compute_controller_config import (
@@ -418,6 +411,74 @@ class TestComputePlan:
         
         assert hidden_pooled.shape == (batch_size, d_model)
         assert budget == pytest.approx(1.0)
+    
+    def test_deterministic_gate_parameters(self):
+        """Test that all gate parameters are created regardless of execution path.
+        
+        This test verifies the fix for the path-dependent parameter bug where
+        update_gate_{step} parameters were only created for steps that actually
+        executed, causing missing-parameter errors when init ran fewer steps
+        than apply.
+        """
+        d_model = 64
+        batch_size = 2
+        seq_len = 10
+        max_steps = 5
+        
+        # Create params with just initialization (no update_state calls)
+        def init_only(hidden):
+            plan = ComputePlan(d_model=d_model, max_steps=max_steps)
+            state = plan.initialize_state(hidden)
+            return state.hidden_pooled
+        
+        fn = hk.transform(init_only)
+        rng = jax.random.PRNGKey(42)
+        hidden = jax.random.normal(rng, (batch_size, seq_len, d_model))
+        params = fn.init(rng, hidden)
+        
+        # Verify ALL gate parameters exist (not just for executed steps)
+        compute_plan_params = params.get('compute_plan', {})
+        for i in range(max_steps):
+            assert f'update_gate_{i}_w' in compute_plan_params, \
+                f"Missing weight param for gate {i}"
+            assert f'update_gate_{i}_b' in compute_plan_params, \
+                f"Missing bias param for gate {i}"
+        
+        # Now verify we can use these params for ANY number of steps
+        # Test: early exit after 1 step
+        def one_step(hidden):
+            plan = ComputePlan(d_model=d_model, max_steps=max_steps)
+            state = plan.initialize_state(hidden)
+            mock_output = ModuleOutput(
+                hidden_delta=jnp.zeros((batch_size, d_model)),
+                confidence=jnp.ones((batch_size, 1)) * 0.9,
+                uncertainty=jnp.ones((batch_size, 1)) * 0.1,
+                actual_cost=0.1
+            )
+            state = plan.update_state(state, mock_output, ModuleType.ATTENTION_REFINEMENT, 0.1)
+            return state.hidden_pooled
+        
+        fn_one = hk.transform(one_step)
+        result_one = fn_one.apply(params, rng, hidden)
+        assert result_one.shape == (batch_size, d_model)
+        
+        # Test: full loop through all steps
+        def all_steps(hidden):
+            plan = ComputePlan(d_model=d_model, max_steps=max_steps)
+            state = plan.initialize_state(hidden)
+            for _ in range(max_steps):
+                mock_output = ModuleOutput(
+                    hidden_delta=jnp.zeros((batch_size, d_model)),
+                    confidence=jnp.ones((batch_size, 1)) * 0.9,
+                    uncertainty=jnp.ones((batch_size, 1)) * 0.1,
+                    actual_cost=0.1
+                )
+                state = plan.update_state(state, mock_output, ModuleType.ATTENTION_REFINEMENT, 0.1)
+            return state.hidden_pooled
+        
+        fn_all = hk.transform(all_steps)
+        result_all = fn_all.apply(params, rng, hidden)
+        assert result_all.shape == (batch_size, d_model)
 
 
 class TestComputeControllerConfig:
