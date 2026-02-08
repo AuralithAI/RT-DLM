@@ -551,7 +551,7 @@ class TokenSampler:
             return logits
         
         for step in range(max_length - initial_seq_len):
-            if jnp.all(beam_finished):
+            if bool(jnp.all(beam_finished).item()):
                 break
             
             current_pos = initial_seq_len + step
@@ -623,7 +623,7 @@ class TokenSampler:
             beam_scores = top_scores
             beam_finished = new_finished
             
-            if early_stopping and jnp.all(beam_finished):
+            if early_stopping and bool(jnp.all(beam_finished).item()):
                 break
         
         # Apply length penalty for final scoring
