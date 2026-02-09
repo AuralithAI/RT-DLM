@@ -260,10 +260,11 @@ class TokenSampler:
             logit, tokens = args
             # Create penalty mask
             penalty_mask = jnp.zeros(vocab_size)
-            # Set penalty for tokens that have been generated
-            unique_tokens = jnp.unique(tokens, size=tokens.shape[0], fill_value=-1)
-            valid_tokens = unique_tokens[unique_tokens >= 0]
-            penalty_mask = penalty_mask.at[valid_tokens].set(1.0)
+            
+            # Use scatter to mark generated tokens
+            valid_tokens = jnp.clip(tokens, 0, vocab_size - 1)
+            token_markers = jax.nn.one_hot(valid_tokens, vocab_size)
+            penalty_mask = jnp.clip(token_markers.sum(axis=0), 0, 1)
             
             # Apply penalty: divide positive logits, multiply negative logits
             penalized = jnp.where(

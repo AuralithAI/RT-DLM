@@ -66,22 +66,30 @@ class QuantumInspiredAttention(hk.Module):
         
         # Apply rotation gates
         rotations = self.rotation_gates[head_idx]
-        for i, (rx, ry, rz) in enumerate(rotations):
+        
+        # Only apply gates if we have enough qubits for pairs
+        num_pairs = min(self.num_qubits // 2, rotations.shape[0])
+        
+        for i in range(num_pairs):
+            rx = rotations[i, 0]
+            
             # Simulate rotation gates with matrix operations
             cos_half = jnp.cos(rx / 2)
             sin_half = jnp.sin(rx / 2)
             
-            # X rotation matrix
-            rx_matrix = jnp.array([
-                [cos_half, -1j * sin_half],
-                [-1j * sin_half, cos_half]
-            ])
+            # X rotation applied as element-wise operations instead of matrix multiply
+            # This avoids shape issues with small state vectors
+            idx0, idx1 = i * 2, i * 2 + 1
             
-            # Apply to corresponding qubit pairs
-            if i < self.num_qubits // 2:
-                state = state.at[i*2:(i+1)*2].set(
-                    jnp.dot(rx_matrix, state[i*2:(i+1)*2])
-                )
+            # Ensure indices are within bounds
+            if idx1 < state.shape[0]:
+                s0, s1 = state[idx0], state[idx1]
+                # Apply rotation: new_s0 = cos*s0 - i*sin*s1, new_s1 = -i*sin*s0 + cos*s1
+                # For real-valued simulation, ignore imaginary parts
+                new_s0 = cos_half * s0 + sin_half * s1
+                new_s1 = sin_half * s0 + cos_half * s1
+                state = state.at[idx0].set(new_s0)
+                state = state.at[idx1].set(new_s1)
         
         return jnp.real(state)  # Measurement collapses to real values
     

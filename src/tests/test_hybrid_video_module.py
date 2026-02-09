@@ -15,7 +15,6 @@ import haiku as hk
 class TestHybridVideoEncoder(unittest.TestCase):
     """Test HybridVideoEncoder class."""
     
-    @unittest.skip("Known issue: broadcast shape mismatch in feature_fusion")
     def test_encoder_initialization(self):
         """Test HybridVideoEncoder initialization."""
         from src.modules.multimodal.hybrid_video_module import HybridVideoEncoder
@@ -36,7 +35,6 @@ class TestHybridVideoEncoder(unittest.TestCase):
         
         self.assertIsNotNone(params)
     
-    @unittest.skip("Known issue: broadcast shape mismatch in feature_fusion")
     def test_encoder_output_structure(self):
         """Test encoder output structure."""
         from src.modules.multimodal.hybrid_video_module import HybridVideoEncoder
@@ -57,7 +55,6 @@ class TestHybridVideoEncoder(unittest.TestCase):
         self.assertIn('primary_features', output)
         self.assertIn('frame_features', output)
     
-    @unittest.skip("Known issue: broadcast shape mismatch in feature_fusion")
     def test_task_hint_tracking(self):
         """Test task hint for tracking."""
         from src.modules.multimodal.hybrid_video_module import HybridVideoEncoder
@@ -75,7 +72,6 @@ class TestHybridVideoEncoder(unittest.TestCase):
         
         self.assertIn('primary_features', output)
     
-    @unittest.skip("Known issue: broadcast shape mismatch in feature_fusion")
     def test_task_hint_action(self):
         """Test task hint for action recognition."""
         from src.modules.multimodal.hybrid_video_module import HybridVideoEncoder
@@ -181,7 +177,6 @@ class TestMultiScaleFeatureFusion(unittest.TestCase):
 class TestVideoInputShapes(unittest.TestCase):
     """Test video input shape handling."""
     
-    @unittest.skip("Known issue: broadcast shape mismatch in feature_fusion")
     def test_various_frame_counts(self):
         """Test encoder with different frame counts."""
         from src.modules.multimodal.hybrid_video_module import HybridVideoEncoder
@@ -204,7 +199,6 @@ class TestVideoInputShapes(unittest.TestCase):
 class TestNumericalStability(unittest.TestCase):
     """Test numerical stability of video processing."""
     
-    @unittest.skip("Known issue: broadcast shape mismatch in feature_fusion")
     def test_no_nan_output(self):
         """Test encoder doesn't produce NaN."""
         from src.modules.multimodal.hybrid_video_module import HybridVideoEncoder

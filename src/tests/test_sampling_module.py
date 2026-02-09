@@ -199,7 +199,6 @@ class TestTokenSampler(unittest.TestCase):
         filtered = sampler.apply_min_p(logits, min_p=0.0)
         self.assertTrue(jnp.allclose(filtered, logits))
     
-    @unittest.skip("Known issue: NonConcreteBooleanIndexError in apply_repetition_penalty")
     def test_apply_repetition_penalty(self):
         """Test repetition penalty."""
         from src.core.sampling import TokenSampler

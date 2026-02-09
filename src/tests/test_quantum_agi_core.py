@@ -15,7 +15,6 @@ import haiku as hk
 class TestQuantumInspiredAttention(unittest.TestCase):
     """Test QuantumInspiredAttention class."""
     
-    @unittest.skip("Known issue: dot_general shape mismatch in apply_quantum_gates")
     def test_attention_initialization(self):
         """Test QuantumInspiredAttention initialization."""
         from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
@@ -35,7 +34,6 @@ class TestQuantumInspiredAttention(unittest.TestCase):
         
         self.assertIsNotNone(params)
     
-    @unittest.skip("Known issue: dot_general shape mismatch in apply_quantum_gates")
     def test_attention_forward_pass(self):
         """Test attention forward pass."""
         from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
@@ -278,7 +276,6 @@ class TestOutputProjection(unittest.TestCase):
 class TestNumericalStability(unittest.TestCase):
     """Test numerical stability of quantum operations."""
     
-    @unittest.skip("Known issue: dot_general shape mismatch in apply_quantum_gates")
     def test_no_nan_in_output(self):
         """Test that outputs don't contain NaN."""
         from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
@@ -300,7 +297,6 @@ class TestNumericalStability(unittest.TestCase):
         
         self.assertFalse(jnp.any(jnp.isnan(output)))
     
-    @unittest.skip("Known issue: dot_general shape mismatch in apply_quantum_gates")
     def test_no_inf_in_output(self):
         """Test that outputs don't contain Inf."""
         from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
