@@ -56,12 +56,11 @@ class TestTaskMemory(unittest.TestCase):
 class TestFisherInformation(unittest.TestCase):
     """Test Fisher Information computation."""
     
-    @unittest.skip("Known issue: data format mismatch in compute_fisher_information")
     def test_compute_fisher_information_structure(self):
         """Test Fisher information computation returns correct structure."""
         from src.modules.capabilities.advanced_algorithms import compute_fisher_information
         
-        # Create simple model
+        # Create simple model that matches expected signature
         def model_fn(params, rng, inputs):
             x = inputs["text"].astype(jnp.float32)
             return jnp.matmul(x, params["w"]) + params["b"]
@@ -71,8 +70,10 @@ class TestFisherInformation(unittest.TestCase):
             "b": jnp.zeros(5)
         }
         
+        # Data should be 2D: (num_samples, seq_len) for token IDs or features
         data = jax.random.normal(jax.random.PRNGKey(1), (16, 10))
-        targets = jax.random.randint(jax.random.PRNGKey(2), (16,), 0, 5)
+        # Targets should match: (num_samples, seq_len) for sequence tasks
+        targets = jax.random.randint(jax.random.PRNGKey(2), (16, 10), 0, 5)
         
         rng = jax.random.PRNGKey(42)
         
@@ -159,93 +160,88 @@ class TestEWCLoss(unittest.TestCase):
 class TestSynapticIntelligence(unittest.TestCase):
     """Test Synaptic Intelligence (SI) algorithm."""
     
-    def test_si_importance_tracking(self):
-        """Test SI importance weight tracking."""
-        try:
-            from src.modules.capabilities.advanced_algorithms import (
-                SynapticIntelligence, SIState
-            )
-            
-            params = {
-                "w": jnp.ones((5, 5)),
-                "b": jnp.zeros(5)
-            }
-            
-            si = SynapticIntelligence(damping=0.1)
-            state = si.init_state(params)
-            
-            self.assertIsNotNone(state)
-        except ImportError:
-            self.skipTest("SynapticIntelligence not available")
+    def test_si_module_exists(self):
+        """Test SynapticIntelligence module exists and can be instantiated."""
+        import haiku as hk
+        from src.modules.capabilities.advanced_algorithms import SynapticIntelligence
+        
+        def forward(features, gradients):
+            si = SynapticIntelligence(d_model=64, lambda_si=1.0, damping=0.1)
+            return si(features, gradients)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        features = jax.random.normal(rng, (2, 16, 64))
+        gradients = jax.random.normal(rng, (2, 16, 64))
+        
+        params = init.init(rng, features, gradients)
+        self.assertIsNotNone(params)
 
 
 class TestProgressiveNetworks(unittest.TestCase):
     """Test Progressive Neural Networks."""
     
     def test_progressive_network_exists(self):
-        """Test Progressive Network class exists."""
-        try:
-            from src.modules.capabilities.advanced_algorithms import ProgressiveNetwork
-            self.assertIsNotNone(ProgressiveNetwork)
-        except ImportError:
-            self.skipTest("ProgressiveNetwork not available")
+        """Test ProgressiveNeuralNetwork class exists."""
+        import haiku as hk
+        from src.modules.capabilities.advanced_algorithms import ProgressiveNeuralNetwork
+        
+        def forward(x):
+            pnn = ProgressiveNeuralNetwork(d_model=64, max_columns=5)
+            return pnn(x, column_idx=0)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        x = jax.random.normal(rng, (2, 16, 64))
+        
+        params = init.init(rng, x)
+        self.assertIsNotNone(params)
 
 
 class TestMemoryAwareSynapses(unittest.TestCase):
     """Test Memory-Aware Synapses (MAS)."""
     
-    def test_mas_importance_computation(self):
-        """Test MAS importance weight computation."""
-        try:
-            from src.modules.capabilities.advanced_algorithms import (
-                compute_mas_importance
-            )
-            
-            # Simple test
-            self.assertIsNotNone(compute_mas_importance)
-        except ImportError:
-            self.skipTest("compute_mas_importance not available")
+    def test_mas_module_exists(self):
+        """Test MemoryAwareSynapses module exists."""
+        import haiku as hk
+        from src.modules.capabilities.advanced_algorithms import MemoryAwareSynapses
+        
+        def forward(features, output_gradients):
+            mas = MemoryAwareSynapses(d_model=64)
+            return mas(features, output_gradients)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        features = jax.random.normal(rng, (2, 16, 64))
+        output_gradients = jax.random.normal(rng, (2, 16, 64))
+        
+        params = init.init(rng, features, output_gradients)
+        self.assertIsNotNone(params)
 
 
-class TestContinualLearningManager(unittest.TestCase):
-    """Test ContinualLearningManager class."""
+class TestContinualLearner(unittest.TestCase):
+    """Test ContinualLearner class (replaces ContinualLearningManager)."""
     
-    def test_manager_initialization(self):
-        """Test manager initialization."""
-        try:
-            from src.modules.capabilities.advanced_algorithms import (
-                ContinualLearningManager
+    def test_learner_initialization(self):
+        """Test ContinualLearner initialization."""
+        import haiku as hk
+        from src.modules.capabilities.advanced_algorithms import ContinualLearner
+        
+        def forward(x):
+            learner = ContinualLearner(
+                d_model=64,
+                lambda_ewc=400.0,
+                lambda_si=1.0,
+                max_tasks=5
             )
-            
-            manager = ContinualLearningManager(
-                method="ewc",
-                ewc_lambda=400.0
-            )
-            
-            self.assertIsNotNone(manager)
-        except (ImportError, TypeError):
-            self.skipTest("ContinualLearningManager not available")
-    
-    def test_add_task(self):
-        """Test adding a task to the manager."""
-        try:
-            from src.modules.capabilities.advanced_algorithms import (
-                ContinualLearningManager
-            )
-            
-            manager = ContinualLearningManager(
-                method="ewc",
-                ewc_lambda=400.0
-            )
-            
-            params = {"w": jnp.ones((5, 5))}
-            fisher = {"w": jnp.ones((5, 5))}
-            
-            manager.add_task("task_1", params, fisher)
-            
-            self.assertIn("task_1", manager.tasks)
-        except (ImportError, TypeError, AttributeError):
-            self.skipTest("ContinualLearningManager.add_task not available")
+            return learner(x, task_embedding=None)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        x = jax.random.normal(rng, (2, 16, 64))
+        
+        params = init.init(rng, x)
+        self.assertIsNotNone(params)
 
 
 class TestImportanceWeights(unittest.TestCase):

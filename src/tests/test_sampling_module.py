@@ -259,17 +259,21 @@ class TestSpeculativeDecoding(unittest.TestCase):
     
     def test_speculative_decoding_exists(self):
         """Test that speculative decoding utilities exist."""
-        try:
-            from src.core.sampling import (
-                SpeculativeDecoder,
-                DraftModel,
-                SpeculativeDecodingConfig
-            )
-            # If imports succeed, the module has these classes
-            self.assertTrue(True)
-        except ImportError:
-            # Speculative decoding may be optional
-            self.skipTest("Speculative decoding not implemented")
+        from src.core.sampling import SpeculativeDecoder
+        
+        # SpeculativeDecoder exists, test basic instantiation
+        def mock_forward(params, tokens):
+            return jnp.ones((1, tokens.shape[1], 100)) 
+        
+        decoder = SpeculativeDecoder(
+            target_forward_fn=mock_forward,
+            draft_forward_fn=mock_forward,
+            num_speculative_tokens=4,
+            temperature=1.0
+        )
+        
+        self.assertEqual(decoder.num_speculative_tokens, 4)
+        self.assertEqual(decoder.temperature, 1.0)
 
 
 if __name__ == "__main__":

@@ -258,18 +258,22 @@ class TestRealTimeLearningSystem(unittest.TestCase):
     
     def test_system_initialization(self):
         """Test system initialization."""
-        try:
-            from src.modules.capabilities.real_time_learning import RealTimeLearningSystem
-            
-            system = RealTimeLearningSystem(
-                d_model=64,
-                buffer_size=1000,
-                learning_rate=0.001
-            )
-            
-            self.assertEqual(system.d_model, 64)
-        except (ImportError, TypeError, AttributeError) as e:
-            self.skipTest(f"RealTimeLearningSystem not available or incompatible: {e}")
+        from src.modules.capabilities.real_time_learning import RealTimeLearningSystem
+        
+        # RealTimeLearningSystem requires (base_model, d_model, vocab_size)
+        # Create a mock base model
+        class MockBaseModel:
+            pass
+        
+        base_model = MockBaseModel()
+        system = RealTimeLearningSystem(
+            base_model=base_model,
+            d_model=64,
+            vocab_size=1000
+        )
+        
+        self.assertEqual(system.d_model, 64)
+        self.assertEqual(system.vocab_size, 1000)
 
 
 class TestDynamicSkillAcquisition(unittest.TestCase):

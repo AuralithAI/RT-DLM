@@ -195,7 +195,8 @@ class RealTimeLearningSystem:
         
         # Skill management
         self.skills_registry: Dict[str, Any] = {}
-        self.skill_acquisition = DynamicSkillAcquisition(d_model)
+        self._skill_acquisition_d_model = d_model
+        self._skill_acquisition = None
         
         # Fast adaptation optimizer
         self.adaptation_optimizer = optax.adam(learning_rate=1e-4)
@@ -206,6 +207,18 @@ class RealTimeLearningSystem:
             'user_satisfaction': deque(maxlen=1000),
             'learning_speed': deque(maxlen=100)
         }
+    
+    @property
+    def skill_acquisition(self):
+        """Lazy initialization of skill acquisition module within hk.transform context."""
+        if self._skill_acquisition is None:
+            self._skill_acquisition = DynamicSkillAcquisition(self._skill_acquisition_d_model)
+        return self._skill_acquisition
+    
+    @skill_acquisition.setter
+    def skill_acquisition(self, value):
+        """Allow setting skill acquisition module."""
+        self._skill_acquisition = value
     
     def process_user_feedback(self, input_text: str, output_text: str, 
                             feedback: Dict[str, Any]) -> bool:
