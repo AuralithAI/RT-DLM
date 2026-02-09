@@ -45,9 +45,9 @@ class RealTimeFeedbackBuffer:
     def __init__(self, max_size: int = 10000, priority_threshold: float = 0.8):
         self.max_size = max_size
         self.priority_threshold = priority_threshold
-        self.buffer = deque(maxlen=max_size)
-        self.priority_buffer = deque(maxlen=max_size // 4)  # High-priority samples
-        self.skill_buffers = {}  # Per-skill buffers
+        self.buffer: deque[FeedbackSample] = deque(maxlen=max_size)
+        self.priority_buffer: deque[FeedbackSample] = deque(maxlen=max_size // 4)  # High-priority samples
+        self.skill_buffers: Dict[str, deque[FeedbackSample]] = {}  # Per-skill buffers
         
     def add_feedback(self, sample: FeedbackSample):
         """Add feedback sample with automatic prioritization."""
@@ -100,7 +100,7 @@ class DynamicSkillAcquisition(hk.Module):
         self.max_skills = max_skills
         
         # Skill-specific adapter networks
-        self.skill_adapters = {}
+        self.skill_adapters: Dict[str, Any] = {}
         
         # Skill routing network
         self.skill_router = hk.Sequential([
@@ -194,18 +194,31 @@ class RealTimeLearningSystem:
         self.feedback_buffer = RealTimeFeedbackBuffer()
         
         # Skill management
-        self.skills_registry = {}
-        self.skill_acquisition = DynamicSkillAcquisition(d_model)
+        self.skills_registry: Dict[str, Any] = {}
+        self._skill_acquisition_d_model = d_model
+        self._skill_acquisition = None
         
         # Fast adaptation optimizer
         self.adaptation_optimizer = optax.adam(learning_rate=1e-4)
         
         # Performance tracking
-        self.performance_history = {
+        self.performance_history: Dict[str, deque[float]] = {
             'accuracy': deque(maxlen=1000),
             'user_satisfaction': deque(maxlen=1000),
             'learning_speed': deque(maxlen=100)
         }
+    
+    @property
+    def skill_acquisition(self):
+        """Lazy initialization of skill acquisition module within hk.transform context."""
+        if self._skill_acquisition is None:
+            self._skill_acquisition = DynamicSkillAcquisition(self._skill_acquisition_d_model)
+        return self._skill_acquisition
+    
+    @skill_acquisition.setter
+    def skill_acquisition(self, value):
+        """Allow setting skill acquisition module."""
+        self._skill_acquisition = value
     
     def process_user_feedback(self, input_text: str, output_text: str, 
                             feedback: Dict[str, Any]) -> bool:

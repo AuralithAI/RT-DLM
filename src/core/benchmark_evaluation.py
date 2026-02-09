@@ -130,7 +130,7 @@ class ProductionMetrics:
     fairness_violations: Optional[List[str]] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        result = {
+        result: Dict[str, Any] = {
             'perplexity': self.perplexity,
             'validation_loss': self.validation_loss,
             'token_accuracy': self.token_accuracy,

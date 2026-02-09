@@ -5,7 +5,7 @@ Exports JAX models to ONNX format for cross-platform inference.
 Uses jax2tf and tf2onnx for conversion.
 """
 
-from typing import Dict, Any, Optional, Tuple, List, Callable
+from typing import Dict, Any, Optional, Tuple, List, Callable, Union
 from dataclasses import dataclass
 from pathlib import Path
 import logging
@@ -156,8 +156,8 @@ class ONNXExporter:
         Returns:
             Path to exported ONNX model
         """
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path_obj = Path(output_path)
+        output_path_obj.parent.mkdir(parents=True, exist_ok=True)
         
         logger.info(f"Exporting model to ONNX (opset {self.config.opset_version})...")
         
@@ -195,7 +195,7 @@ class ONNXExporter:
         
         return str(output_path)
     
-    def _optimize_onnx(self, model_path: Path):
+    def _optimize_onnx(self, model_path: Union[str, Path]):
         """Apply ONNX optimizations."""
         try:
             import onnx
@@ -227,7 +227,7 @@ class ONNXExporter:
         except ImportError:
             logger.warning("ONNX optimization skipped (onnx/onnxruntime not installed)")
     
-    def _validate_export(self, model_path: Path):
+    def _validate_export(self, model_path: Union[str, Path]):
         """Validate exported ONNX model against JAX model."""
         try:
             import onnxruntime as ort

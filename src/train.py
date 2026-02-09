@@ -121,11 +121,11 @@ class AGITrainer:
         self.step_count = 0
         
         # Metrics tracking
-        self.training_losses = []
-        self.validation_losses = []
-        self.reasoning_accuracies = []
-        self.consciousness_coherence = []
-        self.multimodal_alignment = []
+        self.training_losses: List[float] = []
+        self.validation_losses: List[float] = []
+        self.reasoning_accuracies: List[float] = []
+        self.consciousness_coherence: List[float] = []
+        self.multimodal_alignment: List[float] = []
         
         # Memory profiling (tracks GPU memory usage during training)
         self.memory_profiler = MemoryProfiler(
@@ -623,6 +623,8 @@ class AGITrainer:
         self.rng, init_rng = jax.random.split(self.rng)
         self.params = self.model.init(init_rng, **sample_inputs)
         
+        self._params_is_tuple = isinstance(self.params, tuple)
+        
         # Handle distributed training - replicate params across devices
         if self.is_distributed and self.mesh is not None:
             self.params = replicate_for_data_parallel(
@@ -631,7 +633,8 @@ class AGITrainer:
             )
             logger.info(f"Parameters replicated across {self.mesh.data_parallel_size} devices")
         
-        self.opt_state = self.optimizer.init(self.params)
+        params_for_opt = self.params[0] if self._params_is_tuple else self.params
+        self.opt_state = self.optimizer.init(params_for_opt)
         
         # Count parameters (get from single replica if distributed)
         if self.is_distributed:
@@ -654,7 +657,7 @@ class AGITrainer:
         
         # Initialize gradient accumulator if using accumulation
         if self.gradient_accumulation_steps > 1:
-            self.gradient_accumulator = BatchGradientAccumulator(
+            self.gradient_accumulator: Optional[BatchGradientAccumulator] = BatchGradientAccumulator(
                 accumulation_steps=self.gradient_accumulation_steps,
                 loss_fn=self._make_loss_fn(),
                 model_apply_fn=self.model.apply,
@@ -691,10 +694,14 @@ class AGITrainer:
             num_samples=min(100, len(data_samples))
         )
         
+        # Get only the params dict for snapshot (not state dict)
+        # This matches the structure of fisher_matrix which is computed only for params
+        params_for_snapshot = self.params[0] if isinstance(self.params, tuple) else self.params
+        
         # Create task memory
         task_memory = TaskMemory(
             task_id=task_id,
-            params_snapshot=jax.tree_util.tree_map(lambda x: x.copy(), self.params),
+            params_snapshot=jax.tree_util.tree_map(lambda x: x.copy(), params_for_snapshot),
             fisher_matrix=fisher_matrix,
             importance_weights=fisher_matrix,
             performance_metrics={"final_loss": float(self.training_losses[-1]) if self.training_losses else 0.0},
@@ -709,7 +716,7 @@ class AGITrainer:
         Compute EWC regularization loss from all previous task memories.
         
         Args:
-            params: Current model parameters
+            params: Current model parameters (dict or tuple from transform_with_state)
             
         Returns:
             EWC regularization loss
@@ -717,10 +724,13 @@ class AGITrainer:
         if not self.task_memories:
             return jnp.float32(0.0)
         
+        # Handle tuple params from transform_with_state
+        params_dict = params[0] if isinstance(params, tuple) else params
+        
         total_ewc_loss = jnp.float32(0.0)
         for memory in self.task_memories:
             ewc_loss = compute_ewc_loss(
-                params=params,
+                params=params_dict,
                 params_star=memory.params_snapshot,
                 fisher_matrix=memory.fisher_matrix,
                 lambda_ewc=self.lambda_ewc
@@ -803,16 +813,36 @@ class AGITrainer:
     
     @jax.jit
     def train_step(self, params, opt_state, batch, rng):
-        """Single training step with comprehensive loss and NaN handling"""
+        """Single training step with comprehensive loss and NaN handling
         
-        def loss_fn(params, batch, rng):
-            # Forward pass
-            model_output = self.model.apply(
-                params, rng,
-                inputs={"text": batch["input_ids"]},
-                multimodal_inputs=batch.get("multimodal_inputs"),
-                return_reasoning=True
-            )
+        Args:
+            params: Model parameters - can be tuple (params, state) from transform_with_state
+            opt_state: Optimizer state (matches structure of params[0] if tuple)
+            batch: Training batch
+            rng: Random key
+        """
+        if isinstance(params, tuple):
+            actual_params, model_state = params
+        else:
+            actual_params = params
+            model_state = None
+        
+        def loss_fn(actual_params, batch, rng):
+            if model_state is not None:
+                full_params = (actual_params, model_state)
+                model_output, _ = self.model.apply(
+                    full_params, rng,
+                    inputs={"text": batch["input_ids"]},
+                    multimodal_inputs=batch.get("multimodal_inputs"),
+                    return_reasoning=True
+                )
+            else:
+                model_output = self.model.apply(
+                    actual_params, rng,
+                    inputs={"text": batch["input_ids"]},
+                    multimodal_inputs=batch.get("multimodal_inputs"),
+                    return_reasoning=True
+                )
             
             # Compute comprehensive loss
             loss = compute_agi_loss(
@@ -827,7 +857,7 @@ class AGITrainer:
         # Compute gradients
         (loss, model_output), grads = jax.value_and_grad(
             loss_fn, has_aux=True
-        )(params, batch, rng)
+        )(actual_params, batch, rng)
         
         # NaN check for loss - replace with zero if NaN detected
         loss = jax.lax.cond(
@@ -846,8 +876,13 @@ class AGITrainer:
         grads = zero_nan_grads(grads)
         
         # Update parameters
-        updates, new_opt_state = self.optimizer.update(grads, opt_state, params)
-        new_params = optax.apply_updates(params, updates)
+        updates, new_opt_state = self.optimizer.update(grads, opt_state, actual_params)
+        new_actual_params = optax.apply_updates(actual_params, updates)
+        
+        if model_state is not None:
+            new_params = (new_actual_params, model_state)
+        else:
+            new_params = new_actual_params
         
         return new_params, new_opt_state, loss, model_output
     
@@ -874,7 +909,7 @@ class AGITrainer:
         Adds EWC loss to prevent catastrophic forgetting of previous tasks.
         
         Args:
-            params: Model parameters
+            params: Model parameters (can be tuple (params, state) for transform_with_state)
             opt_state: Optimizer state
             batch: Training batch
             rng: Random key
@@ -882,16 +917,29 @@ class AGITrainer:
             lambda_ewc: EWC regularization strength
             
         Returns:
-            Updated params, optimizer state, total loss, EWC loss component
+            Updated params, optimizer state, total loss, base_loss, EWC loss component
         """
-        def loss_fn_with_ewc(params, batch, rng):
-            # Forward pass
-            model_output = self.model.apply(
-                params, rng,
-                inputs={"text": batch["input_ids"]},
-                multimodal_inputs=batch.get("multimodal_inputs"),
-                return_reasoning=True
-            )
+        if isinstance(params, tuple):
+            actual_params, model_state = params
+        else:
+            actual_params = params
+            model_state = None
+        
+        def loss_fn_with_ewc(actual_params, batch, rng):
+            if model_state is not None:
+                model_output, _ = self.model.apply(
+                    actual_params, model_state, rng,
+                    inputs={"text": batch["input_ids"]},
+                    multimodal_inputs=batch.get("multimodal_inputs"),
+                    return_reasoning=True
+                )
+            else:
+                model_output = self.model.apply(
+                    actual_params, rng,
+                    inputs={"text": batch["input_ids"]},
+                    multimodal_inputs=batch.get("multimodal_inputs"),
+                    return_reasoning=True
+                )
             
             # Compute base AGI loss
             base_loss = compute_agi_loss(
@@ -904,9 +952,13 @@ class AGITrainer:
             # Compute EWC regularization loss
             ewc_loss = jnp.float32(0.0)
             for memory in task_memories:
+                memory_params = memory.params_snapshot
+                if isinstance(memory_params, tuple):
+                    memory_params = memory_params[0]
+                
                 ewc_loss += compute_ewc_loss(
-                    params=params,
-                    params_star=memory.params_snapshot,
+                    params=actual_params,
+                    params_star=memory_params,
                     fisher_matrix=memory.fisher_matrix,
                     lambda_ewc=lambda_ewc
                 )
@@ -916,9 +968,9 @@ class AGITrainer:
             return total_loss, (model_output, base_loss, ewc_loss)
         
         # Compute gradients
-        (total_loss, (_, base_loss, ewc_loss)), grads = jax.value_and_grad(
+        (total_loss, (_, base_loss, ewc_loss)), actual_grads = jax.value_and_grad(
             loss_fn_with_ewc, has_aux=True
-        )(params, batch, rng)
+        )(actual_params, batch, rng)
         
         # NaN check for loss
         total_loss = jax.lax.cond(
@@ -930,15 +982,20 @@ class AGITrainer:
         
         # NaN check for gradients
         def zero_nan_grads(g):
-            return jax.tree_util.tree_map(
-                lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x), 
-                g
-            )
-        grads = zero_nan_grads(grads)
+            def maybe_fix_nan(x):
+                if jnp.issubdtype(x.dtype, jnp.floating):
+                    return jnp.where(jnp.isnan(x), jnp.zeros_like(x), x)
+                return x
+            return jax.tree_util.tree_map(maybe_fix_nan, g)
+        actual_grads = zero_nan_grads(actual_grads)
         
-        # Update parameters
-        updates, new_opt_state = self.optimizer.update(grads, opt_state, params)
-        new_params = optax.apply_updates(params, updates)
+        updates, new_opt_state = self.optimizer.update(actual_grads, opt_state, actual_params)
+        new_actual_params = optax.apply_updates(actual_params, updates)
+        
+        if model_state is not None:
+            new_params = (new_actual_params, model_state)
+        else:
+            new_params = new_actual_params
         
         return new_params, new_opt_state, total_loss, base_loss, ewc_loss
 
@@ -1093,8 +1150,12 @@ class AGITrainer:
             keep_last_n=5
         )
         
+        params_to_save = self.params
+        if isinstance(self.params, tuple):
+            params_to_save = self.params[0]
+        
         checkpoint_manager.save_checkpoint(
-            params=self.params,
+            params=params_to_save,
             opt_state=self.opt_state,
             epoch=epoch,
             step_count=self.step_count,
@@ -1170,13 +1231,22 @@ class AGITrainer:
         self.step_count = checkpoint.get("step_count", 0)
         
         # Restore training history if available
-        metadata = checkpoint.get("metadata", {})
-        if metadata.get("training_losses"):
-            self.training_losses = list(metadata["training_losses"])
-            logger.info(f"Restored {len(self.training_losses)} training loss records")
-        if metadata.get("validation_losses"):
-            self.validation_losses = list(metadata["validation_losses"])
-            logger.info(f"Restored {len(self.validation_losses)} validation loss records")
+        metadata = checkpoint.get("metadata", None)
+        if metadata is not None:
+            if hasattr(metadata, 'training_losses'):
+                if metadata.training_losses:
+                    self.training_losses = list(metadata.training_losses)
+                    logger.info(f"Restored {len(self.training_losses)} training loss records")
+                if metadata.validation_losses:
+                    self.validation_losses = list(metadata.validation_losses)
+                    logger.info(f"Restored {len(self.validation_losses)} validation loss records")
+            elif isinstance(metadata, dict):
+                if metadata.get("training_losses"):
+                    self.training_losses = list(metadata["training_losses"])
+                    logger.info(f"Restored {len(self.training_losses)} training loss records")
+                if metadata.get("validation_losses"):
+                    self.validation_losses = list(metadata["validation_losses"])
+                    logger.info(f"Restored {len(self.validation_losses)} validation loss records")
         
         # Calculate resume epoch
         resume_epoch = checkpoint.get("epoch", 0)
@@ -1241,7 +1311,7 @@ class AGITrainer:
         Returns:
             Dictionary with all production metrics
         """
-        metrics = {}
+        metrics: Dict[str, Any] = {}
         
         # Perplexity
         metrics['perplexity'] = self.perplexity_tracker.get_perplexity()

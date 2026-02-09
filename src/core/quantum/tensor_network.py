@@ -201,7 +201,7 @@ class MatrixProductState:
         result_conj = jnp.conj(result)
         norm_sq = jnp.einsum("...,...->", result, result_conj)
         
-        return jnp.sqrt(jnp.real(norm_sq))
+        return float(jnp.sqrt(jnp.real(norm_sq)))
     
     def normalize(self):
         """Normalize the MPS state"""
@@ -210,7 +210,7 @@ class MatrixProductState:
             # Absorb normalization into first tensor
             self.tensors[0] = self.tensors[0] / norm
             
-    def sample(self, rng_key: jax.random.PRNGKey) -> jnp.ndarray:
+    def sample(self, rng_key: jnp.ndarray) -> jnp.ndarray:
         """
         Sample a bit string from MPS probability distribution.
         
@@ -277,7 +277,7 @@ class MatrixProductState:
         # Final contraction
         result = jnp.einsum("ab,ab->", middle, right)
         
-        return result
+        return complex(result)
 
 
 # =============================================================================
@@ -395,6 +395,8 @@ class TensorNetworkQuantumSimulator:
         
     def apply_gate(self, gate: jnp.ndarray, qubits: List[int]):
         """Apply gate to specified qubits"""
+        if self.state is None:
+            raise RuntimeError("Tensor network state not initialized")
         if len(qubits) == 1:
             self.state.apply_single_qubit_gate(gate, qubits[0])
         elif len(qubits) == 2:
@@ -491,9 +493,9 @@ class TensorNetworkQuantumSimulator:
         for i in range(n - 1):
             self.apply_cnot(i, i + 1)
             
-    def sample(self, rng_key: jax.random.PRNGKey, num_samples: int = 1) -> jnp.ndarray:
+    def sample(self, rng_key: jnp.ndarray, num_samples: int = 1) -> jnp.ndarray:
         """Sample bit strings from the quantum state"""
-        if isinstance(self.state, MatrixProductState):
+        if self.state is not None and isinstance(self.state, MatrixProductState):
             samples = []
             for _ in range(num_samples):
                 rng_key, sample_key = jax.random.split(rng_key)
@@ -505,8 +507,9 @@ class TensorNetworkQuantumSimulator:
             
     def get_bond_dimensions(self) -> List[int]:
         """Get current bond dimensions (for MPS)"""
-        if isinstance(self.state, MatrixProductState):
-            return self.state.get_bond_dimensions()
+        if self.state is not None and isinstance(self.state, MatrixProductState):
+            bond_dims: List[int] = self.state.get_bond_dimensions()
+            return bond_dims
         return []
     
     def get_entanglement_entropy(self, site: int) -> float:
@@ -515,7 +518,7 @@ class TensorNetworkQuantumSimulator:
         
         S = -Σ λ² log(λ²) where λ are Schmidt values
         """
-        if isinstance(self.state, MatrixProductState):
+        if self.state is not None and isinstance(self.state, MatrixProductState):
             # Put in mixed canonical form
             self.state.canonicalize_left()
             

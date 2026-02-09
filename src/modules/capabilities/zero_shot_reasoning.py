@@ -64,13 +64,13 @@ class ConceptualKnowledgeGraph:
             'is_a', 'part_of', 'causes', 'enables', 'similar_to',
             'opposite_of', 'before', 'after', 'contains', 'used_for'
         }
-        self.concept_embeddings = None  # Will be JAX array for similarity search
-        self.concept_ids = []  # Parallel to embeddings
+        self.concept_embeddings: Optional[jnp.ndarray] = None  # Will be JAX array for similarity search
+        self.concept_ids: List[str] = []  # Parallel to embeddings
         
         # Enterprise-scale storage and indexing
-        self.concept_cache = {}  # LRU cache for frequent lookups
-        self.relation_index = {}  # Fast relation lookup
-        self.multi_hop_cache = {}  # Cache for multi-hop reasoning
+        self.concept_cache: Dict[str, Any] = {}  # LRU cache for frequent lookups
+        self.relation_index: Dict[str, List[str]] = {}  # Fast relation lookup
+        self.multi_hop_cache: Dict[str, List[List[Tuple[str, str, str]]]] = {}  # Cache for multi-hop reasoning
         
     def add_concept(self, concept: ConceptNode):
         """Add a new concept to the knowledge graph."""
@@ -80,11 +80,12 @@ class ConceptualKnowledgeGraph:
         
     def _update_relation_index(self, concept: ConceptNode):
         """Update fast relation lookup index."""
-        for relation in concept.relations:
-            rel_key = f"{relation['type']}_{relation['target']}"
-            if rel_key not in self.relation_index:
-                self.relation_index[rel_key] = []
-            self.relation_index[rel_key].append(concept.concept_id)
+        for relation_type, targets in concept.relations.items():
+            for target in targets:
+                rel_key = f"{relation_type}_{target}"
+                if rel_key not in self.relation_index:
+                    self.relation_index[rel_key] = []
+                self.relation_index[rel_key].append(concept.concept_id)
             
     def multi_hop_reasoning(self, start_concept: str, target_concept: str, max_hops: int = 3):
         """Perform multi-hop reasoning between concepts."""
@@ -93,12 +94,12 @@ class ConceptualKnowledgeGraph:
             return self.multi_hop_cache[cache_key]
             
         # BFS for reasoning paths
-        queue = [(start_concept, [])]
-        visited = set()
-        paths = []
+        queue: List[Tuple[str, List[Tuple[str, str, str]]]] = [(start_concept, [])]
+        visited: Set[str] = set()
+        paths: List[List[Tuple[str, str, str]]] = []
         
         for _ in range(max_hops):
-            next_queue = []
+            next_queue: List[Tuple[str, List[Tuple[str, str, str]]]] = []
             for current, path in queue:
                 if current == target_concept:
                     paths.append(path)
@@ -108,12 +109,12 @@ class ConceptualKnowledgeGraph:
                     continue
                 visited.add(current)
                 
-                # Explore connected concepts
+                # Explore connected concepts (relations is Dict[str, Set[str]])
                 if current in self.concepts:
-                    for relation in self.concepts[current].relations:
-                        next_concept = relation['target']
-                        new_path = path + [(current, relation['type'], next_concept)]
-                        next_queue.append((next_concept, new_path))
+                    for relation_type, targets in self.concepts[current].relations.items():
+                        for next_concept in targets:
+                            new_path = path + [(current, relation_type, next_concept)]
+                            next_queue.append((next_concept, new_path))
             queue = next_queue
             
         self.multi_hop_cache[cache_key] = paths[:5]  # Cache top 5 paths

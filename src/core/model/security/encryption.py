@@ -35,7 +35,11 @@ try:
     CRYPTOGRAPHY_AVAILABLE = True
 except ImportError:
     CRYPTOGRAPHY_AVAILABLE = False
-    InvalidToken = Exception  # Fallback for type hints
+    
+    class InvalidToken(Exception):
+        """Fallback exception when cryptography not available."""
+        pass
+    
     logger.warning(
         "cryptography library not installed. Encryption disabled. "
         "Install with: pip install cryptography"
@@ -232,7 +236,8 @@ class SecureStorage:
         
         decrypted = self.decrypt(ciphertext)
         try:
-            return json.loads(decrypted)
+            result: Dict[str, Any] = json.loads(decrypted)
+            return result
         except json.JSONDecodeError:
             logger.warning("Failed to parse decrypted JSON")
             return {}

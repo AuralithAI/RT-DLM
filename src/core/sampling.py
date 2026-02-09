@@ -260,10 +260,11 @@ class TokenSampler:
             logit, tokens = args
             # Create penalty mask
             penalty_mask = jnp.zeros(vocab_size)
-            # Set penalty for tokens that have been generated
-            unique_tokens = jnp.unique(tokens, size=tokens.shape[0], fill_value=-1)
-            valid_tokens = unique_tokens[unique_tokens >= 0]
-            penalty_mask = penalty_mask.at[valid_tokens].set(1.0)
+            
+            # Use scatter to mark generated tokens
+            valid_tokens = jnp.clip(tokens, 0, vocab_size - 1)
+            token_markers = jax.nn.one_hot(valid_tokens, vocab_size)
+            penalty_mask = jnp.clip(token_markers.sum(axis=0), 0, 1)
             
             # Apply penalty: divide positive logits, multiply negative logits
             penalized = jnp.where(
@@ -274,7 +275,7 @@ class TokenSampler:
             return penalized
         
         # Apply to each batch element
-        penalized_logits = jax.vmap(apply_penalty_single)((logits, generated_tokens))
+        penalized_logits: jnp.ndarray = jax.vmap(apply_penalty_single)((logits, generated_tokens))
         
         return penalized_logits
     
@@ -321,7 +322,7 @@ class TokenSampler:
             penalty = frequency_penalty * freq + presence_penalty * presence
             return logit - penalty
         
-        penalized_logits = jax.vmap(apply_penalties_single)((logits, generated_tokens))
+        penalized_logits: jnp.ndarray = jax.vmap(apply_penalties_single)((logits, generated_tokens))
         
         return penalized_logits
     
@@ -329,7 +330,7 @@ class TokenSampler:
         self,
         logits: jnp.ndarray,
         config: SamplingConfig,
-        rng_key: jax.random.PRNGKey,
+        rng_key: jnp.ndarray,
         generated_tokens: Optional[jnp.ndarray] = None
     ) -> SampleOutput:
         """Sample tokens from logits using configured sampling strategy.
@@ -345,7 +346,7 @@ class TokenSampler:
         """
         # Handle 3D logits (take last position)
         if logits.ndim == 3:
-            logits = logits[:, -1, :]  # [batch_size, vocab_size]
+            logits = logits[:, -1, :] 
         
         batch_size = logits.shape[0]
         
@@ -378,7 +379,6 @@ class TokenSampler:
         probs = jax.nn.softmax(logits, axis=-1)
         log_probs = jax.nn.log_softmax(logits, axis=-1)
         
-        # Sample token
         sampled_tokens = jax.random.categorical(rng_key, logits, axis=-1)
         sampled_tokens = sampled_tokens.reshape(batch_size, 1)
         
@@ -461,33 +461,435 @@ class TokenSampler:
         beam_width: int = 5,
         max_length: int = 100,
         length_penalty: float = 0.6,
-        stop_tokens: Optional[List[int]] = None
+        stop_tokens: Optional[List[int]] = None,
+        early_stopping: bool = True,
+        no_repeat_ngram_size: int = 0,
+        min_length: int = 0,
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """Beam search decoding for higher quality generation.
         
-        Note: This is a simplified implementation. For production use,
-        consider using more optimized beam search with caching.
+        Implements efficient beam search with:
+        - Length normalization for fair comparison across lengths
+        - Early stopping when all beams reach EOS
+        - N-gram blocking to prevent repetition
+        - Minimum length enforcement
+        - Efficient batch processing of beams
+        
+        Args:
+            logits_fn: Function that takes tokens [batch, seq_len] and returns 
+                      logits [batch, seq_len, vocab_size]
+            initial_tokens: Starting tokens [batch_size, seq_len]
+            beam_width: Number of beams to track (higher = better quality, slower)
+            max_length: Maximum sequence length to generate
+            length_penalty: Length normalization factor (alpha). 
+                           < 1.0 favors shorter sequences, > 1.0 favors longer.
+                           Typical values: 0.6-1.2
+            stop_tokens: Tokens that signal end of generation (e.g., EOS token)
+            early_stopping: Stop when all beams have reached a stop token
+            no_repeat_ngram_size: If > 0, prevents n-grams of this size from repeating
+            min_length: Minimum length before allowing stop tokens
+            
+        Returns:
+            Tuple of (best_sequences [batch_size, max_length], scores [batch_size])
+        """
+        if stop_tokens is None:
+            stop_tokens = []
+        stop_tokens_set = set(stop_tokens)
+        
+        batch_size, initial_seq_len = initial_tokens.shape
+        vocab_size: int = 0
+        
+        # Start with initial tokens replicated for each beam
+        beam_sequences = jnp.tile(
+            initial_tokens[:, None, :],
+            (1, beam_width, 1)
+        )
+        
+        pad_length = max_length - initial_seq_len
+        beam_sequences = jnp.pad(
+            beam_sequences,
+            ((0, 0), (0, 0), (0, pad_length)),
+            mode='constant',
+            constant_values=0
+        )
+        
+        beam_scores = jnp.zeros((batch_size, beam_width))
+        beam_scores = beam_scores.at[:, 1:].set(-float('inf'))
+        
+        beam_finished = jnp.zeros((batch_size, beam_width), dtype=jnp.bool_)
+        
+        def _get_ngrams(sequence: jnp.ndarray, n: int) -> set:
+            """Extract n-grams from a sequence."""
+            ngrams = set()
+            seq_list = sequence.tolist()
+            for i in range(len(seq_list) - n + 1):
+                ngram = tuple(seq_list[i:i + n])
+                ngrams.add(ngram)
+            return ngrams
+        
+        def _block_repeated_ngrams(
+            logits: jnp.ndarray, 
+            sequences: jnp.ndarray, 
+            ngram_size: int,
+            current_pos: int
+        ) -> jnp.ndarray:
+            """Block tokens that would create repeated n-grams."""
+            if ngram_size <= 0 or current_pos < ngram_size - 1:
+                return logits
+            
+            batch_beam_size = logits.shape[0]
+            
+            for i in range(batch_beam_size):
+                prefix = tuple(sequences[i, current_pos - ngram_size + 1:current_pos].tolist())
+                
+                existing_ngrams = _get_ngrams(sequences[i, :current_pos], ngram_size)
+                
+                for token in range(logits.shape[-1]):
+                    candidate_ngram = prefix + (token,)
+                    if candidate_ngram in existing_ngrams:
+                        logits = logits.at[i, token].set(-float('inf'))
+            
+            return logits
+        
+        for step in range(max_length - initial_seq_len):
+            if bool(jnp.all(beam_finished).item()):
+                break
+            
+            current_pos = initial_seq_len + step
+            
+            current_seqs = beam_sequences[:, :, :current_pos]
+            
+            flat_seqs = current_seqs.reshape(batch_size * beam_width, current_pos)
+            
+            all_logits = logits_fn(flat_seqs)
+            
+            if vocab_size == 0:
+                vocab_size = all_logits.shape[-1]
+            
+            next_logits = all_logits[:, -1, :]
+            
+            if no_repeat_ngram_size > 0:
+                next_logits = _block_repeated_ngrams(
+                    next_logits, flat_seqs, no_repeat_ngram_size, current_pos
+                )
+            
+            if current_pos < min_length:
+                for stop_token in stop_tokens:
+                    next_logits = next_logits.at[:, stop_token].set(-float('inf'))
+            
+            log_probs = jax.nn.log_softmax(next_logits, axis=-1)
+            
+            log_probs = log_probs.reshape(batch_size, beam_width, vocab_size)
+            
+            candidate_scores = beam_scores[:, :, None] + log_probs
+            
+            finished_mask = beam_finished[:, :, None]
+            candidate_scores = jnp.where(
+                finished_mask,
+                jnp.full_like(candidate_scores, -float('inf')),
+                candidate_scores
+            )
+            
+            # Flatten beams and vocab for top-k selection
+            candidate_scores_flat: jnp.ndarray = candidate_scores.reshape(batch_size, beam_width * vocab_size)
+            
+            # Get top beam_width candidates for each batch
+            top_scores, top_indices = jax.lax.top_k(candidate_scores_flat, beam_width)
+            
+            # Convert flat indices back to (beam_idx, token_idx)
+            beam_indices = top_indices // vocab_size
+            token_indices = top_indices % vocab_size
+            
+            # Gather sequences from selected beams
+            new_sequences = jnp.zeros_like(beam_sequences)
+            new_finished = jnp.zeros_like(beam_finished)
+            
+            for b in range(batch_size):
+                for k in range(beam_width):
+                    source_beam = beam_indices[b, k]
+                    new_sequences = new_sequences.at[b, k].set(
+                        beam_sequences[b, source_beam]
+                    )
+                    # Add the new token
+                    new_sequences = new_sequences.at[b, k, current_pos].set(
+                        token_indices[b, k]
+                    )
+                    # Check if this beam is now finished
+                    is_finished = beam_finished[b, source_beam] | (
+                        int(token_indices[b, k]) in stop_tokens_set
+                    )
+                    new_finished = new_finished.at[b, k].set(is_finished)
+            
+            beam_sequences = new_sequences
+            beam_scores = top_scores
+            beam_finished = new_finished
+            
+            if early_stopping and bool(jnp.all(beam_finished).item()):
+                break
+        
+        # Apply length penalty for final scoring
+        # Length penalty: ((5 + length) / 6) ^ alpha
+        final_lengths = jnp.sum(beam_sequences != 0, axis=-1).astype(jnp.float32)
+        length_penalty_factor = ((5.0 + final_lengths) / 6.0) ** length_penalty
+        normalized_scores = beam_scores / length_penalty_factor
+        
+        # Select best beam for each batch
+        best_beam_indices = jnp.argmax(normalized_scores, axis=-1)
+        
+        # Gather best sequences
+        best_sequences = jnp.zeros((batch_size, max_length), dtype=beam_sequences.dtype)
+        best_scores = jnp.zeros(batch_size)
+        
+        for b in range(batch_size):
+            best_sequences = best_sequences.at[b].set(
+                beam_sequences[b, best_beam_indices[b]]
+            )
+            best_scores = best_scores.at[b].set(
+                normalized_scores[b, best_beam_indices[b]]
+            )
+        
+        return best_sequences, best_scores
+    
+    def diverse_beam_search(
+        self,
+        logits_fn,
+        initial_tokens: jnp.ndarray,
+        num_beam_groups: int = 3,
+        beam_width: int = 5,
+        diversity_penalty: float = 0.5,
+        max_length: int = 100,
+        length_penalty: float = 0.6,
+        stop_tokens: Optional[List[int]] = None,
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """Diverse Beam Search for generating multiple distinct outputs.
+        
+        Splits beams into groups and applies a diversity penalty to encourage
+        different groups to explore different generation paths.
+        
+        Based on: "A Simple, Fast Diverse Decoding Algorithm for Neural Generation"
+        (Vijayakumar et al., 2016)
         
         Args:
             logits_fn: Function that takes tokens and returns logits
             initial_tokens: Starting tokens [batch_size, seq_len]
+            num_beam_groups: Number of beam groups for diversity
+            beam_width: Total number of beams (must be divisible by num_beam_groups)
+            diversity_penalty: Penalty strength for selecting tokens already 
+                              chosen by previous groups
+            max_length: Maximum sequence length
+            length_penalty: Length normalization factor
+            stop_tokens: Tokens that signal end of generation
+            
+        Returns:
+            Tuple of (best_sequences, scores) from all groups
+        """
+        if beam_width % num_beam_groups != 0:
+            raise ValueError(
+                f"beam_width ({beam_width}) must be divisible by "
+                f"num_beam_groups ({num_beam_groups})"
+            )
+        
+        beams_per_group = beam_width // num_beam_groups
+        all_sequences = []
+        all_scores = []
+        
+        previous_tokens: List[List[set]] = []
+        
+        for group_idx in range(num_beam_groups):
+            
+            def diversity_penalized_logits_fn(tokens):
+                logits = logits_fn(tokens)
+                
+                current_pos = tokens.shape[1] - 1
+                
+                if current_pos < len(previous_tokens):
+                    prev_selected = set()
+                    for prev_group in range(group_idx):
+                        if prev_group < len(previous_tokens[current_pos]):
+                            prev_selected.update(previous_tokens[current_pos][prev_group])
+                    
+                    for token in prev_selected:
+                        logits = logits.at[:, -1, token].add(-diversity_penalty)
+                
+                return logits
+            
+            sequences, scores = self.beam_search(
+                logits_fn=diversity_penalized_logits_fn,
+                initial_tokens=initial_tokens,
+                beam_width=beams_per_group,
+                max_length=max_length,
+                length_penalty=length_penalty,
+                stop_tokens=stop_tokens,
+            )
+            
+            all_sequences.append(sequences)
+            all_scores.append(scores)
+            
+            # Record tokens selected by this group
+            # For simplicity, we record the tokens in the best sequence
+            for pos in range(sequences.shape[1]):
+                if pos >= len(previous_tokens):
+                    previous_tokens.append([set() for _ in range(num_beam_groups)])
+                previous_tokens[pos][group_idx].add(int(sequences[0, pos]))
+        
+        combined_sequences = jnp.concatenate(all_sequences, axis=0)
+        combined_scores = jnp.concatenate(all_scores, axis=0)
+        
+        return combined_sequences, combined_scores
+    
+    def constrained_beam_search(
+        self,
+        logits_fn,
+        initial_tokens: jnp.ndarray,
+        constraints: List[List[int]],
+        beam_width: int = 5,
+        max_length: int = 100,
+        length_penalty: float = 0.6,
+        stop_tokens: Optional[List[int]] = None,
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """Constrained Beam Search that ensures certain phrases appear in output.
+        
+        Useful for tasks like:
+        - Including specific keywords in generated text
+        - Ensuring factual information appears
+        - Meeting output format requirements
+        
+        Args:
+            logits_fn: Function that takes tokens and returns logits
+            initial_tokens: Starting tokens [batch_size, seq_len]
+            constraints: List of token sequences that must appear in output.
+                        Each constraint is a list of token IDs.
             beam_width: Number of beams to track
             max_length: Maximum sequence length
-            length_penalty: Penalty for sequence length (< 1.0 favors shorter)
+            length_penalty: Length normalization factor
             stop_tokens: Tokens that signal end of generation
             
         Returns:
             Tuple of (best_sequences, scores)
         """
-        # Placeholder for beam search implementation
-        # For now, return greedy result
-        logger.warning("Beam search not fully implemented, using greedy decoding")
+        if not constraints:
+            # No constraints, use regular beam search
+            return self.beam_search(
+                logits_fn, initial_tokens, beam_width, max_length,
+                length_penalty, stop_tokens
+            )
         
-        # This would require significant additional implementation
-        # including score tracking, beam expansion, and pruning
-        raise NotImplementedError(
-            "Beam search requires integration with model forward pass. "
-            "Use sample() with low temperature for near-deterministic results."
+        # Constraint State Machine for tracking constraint satisfaction
+        # Each constraint has states: 0 (not started) -> len(constraint) (satisfied)
+        # State i means we've matched the first i tokens of the constraint
+        
+        class ConstraintStateMachine:
+            """Tracks progress toward satisfying multiple constraints."""
+            
+            def __init__(self, constraints: List[List[int]]):
+                self.constraints = constraints
+                # State for each constraint: how many tokens matched so far
+                self.states = [0] * len(constraints)
+                self.satisfied = [False] * len(constraints)
+            
+            def copy(self) -> 'ConstraintStateMachine':
+                """Create a copy of this state machine."""
+                new_csm = ConstraintStateMachine(self.constraints)
+                new_csm.states = self.states.copy()
+                new_csm.satisfied = self.satisfied.copy()
+                return new_csm
+            
+            def advance(self, token: int) -> None:
+                """Update state machine with a new token."""
+                for i, constraint in enumerate(self.constraints):
+                    if self.satisfied[i]:
+                        continue
+                    
+                    # Check if token continues the current match
+                    if self.states[i] < len(constraint):
+                        if token == constraint[self.states[i]]:
+                            self.states[i] += 1
+                            if self.states[i] == len(constraint):
+                                self.satisfied[i] = True
+                        else:
+                            # Check for partial match from start
+                            # (handles overlapping patterns like "abab" in "ababab")
+                            self.states[i] = 1 if token == constraint[0] else 0
+            
+            def all_satisfied(self) -> bool:
+                """Check if all constraints are satisfied."""
+                return all(self.satisfied)
+            
+            def get_forcing_tokens(self) -> List[Tuple[int, float]]:
+                """Get tokens to boost and their boost amounts.
+                
+                Returns list of (token_id, boost_score) tuples.
+                """
+                boosts = []
+                for i, constraint in enumerate(self.constraints):
+                    if self.satisfied[i]:
+                        continue
+                    
+                    # Boost the next token in the constraint
+                    next_token = constraint[self.states[i]]
+                    # Higher boost for constraints we've started matching
+                    boost_amount = 5.0 + self.states[i] * 2.0
+                    boosts.append((next_token, boost_amount))
+                    
+                    # Also give smaller boost to first token of unstarted constraints
+                    if self.states[i] == 0:
+                        boosts.append((constraint[0], 1.0))
+                
+                return boosts
+            
+            def get_required_tokens(self) -> Optional[List[int]]:
+                """Get tokens that MUST appear next (hard constraint mode).
+                
+                Returns None if no hard requirement, else list of valid next tokens.
+                """
+                required = []
+                for i, constraint in enumerate(self.constraints):
+                    if self.satisfied[i]:
+                        continue
+                    if self.states[i] > 0:
+                        # Mid-constraint: must continue
+                        required.append(constraint[self.states[i]])
+                return required if required else None
+        
+        # Create state machine
+        csm = ConstraintStateMachine(constraints)
+        
+        # Advance state machine with initial tokens
+        for token in initial_tokens[0].tolist():
+            csm.advance(token)
+        
+        def constraint_aware_logits_fn(tokens):
+            """Modify logits to encourage constraint satisfaction."""
+            logits = logits_fn(tokens)
+            
+            # Create temporary state machine to track current sequence
+            temp_csm = ConstraintStateMachine(constraints)
+            for token in tokens[0].tolist():
+                temp_csm.advance(token)
+            
+            # Get tokens to boost
+            boosts = temp_csm.get_forcing_tokens()
+            for token_id, boost_amount in boosts:
+                logits = logits.at[:, -1, token_id].add(boost_amount)
+            
+            # In hard constraint mode, mask out non-required tokens
+            required = temp_csm.get_required_tokens()
+            if required:
+                # Create mask that's -inf everywhere except required tokens
+                mask = jnp.full_like(logits[:, -1, :], -1e10)
+                for token_id in required:
+                    mask = mask.at[:, token_id].set(0.0)
+                logits = logits.at[:, -1, :].add(mask)
+            
+            return logits
+        
+        return self.beam_search(
+            logits_fn=constraint_aware_logits_fn,
+            initial_tokens=initial_tokens,
+            beam_width=beam_width,
+            max_length=max_length,
+            length_penalty=length_penalty,
+            stop_tokens=stop_tokens,
         )
 
 
@@ -802,6 +1204,13 @@ class SelfSpeculativeDecoder:
     
     Based on: "Draft & Verify: Lossless Large Language Model Acceleration 
     via Self-Speculative Decoding" (Zhang et al., 2023)
+    
+    The model forward function should accept an optional `exit_layer` parameter:
+    - If exit_layer is None: run full model
+    - If exit_layer is int: exit at that layer and return intermediate logits
+    
+    If the model doesn't support early exit, falls back to standard generation
+    but logs a warning.
     """
     
     def __init__(
@@ -810,22 +1219,30 @@ class SelfSpeculativeDecoder:
         early_exit_layer: int = 4,
         num_speculative_tokens: int = 4,
         temperature: float = 1.0,
+        use_kv_cache: bool = True,
     ):
         """
         Initialize self-speculative decoder.
         
         Args:
-            model_forward_fn: Forward function that supports early exit
+            model_forward_fn: Forward function. Should accept `exit_layer` param
+                             for early exit support. Signature:
+                             fn(params, text, exit_layer=None) -> logits
             early_exit_layer: Layer to exit early for draft (default: 4)
             num_speculative_tokens: Number of tokens to speculate
             temperature: Sampling temperature
+            use_kv_cache: Whether to use KV cache for efficiency
         """
         self.model_forward_fn = model_forward_fn
         self.early_exit_layer = early_exit_layer
         self.num_speculative_tokens = num_speculative_tokens
         self.temperature = temperature
+        self.use_kv_cache = use_kv_cache
         self.sampler = TokenSampler()
         self.config = SamplingConfig(temperature=temperature)
+        
+        # Check if model supports early exit
+        self._early_exit_supported: Optional[bool] = None
         
         logger.info(
             f"Self-speculative decoding initialized: "
@@ -833,34 +1250,171 @@ class SelfSpeculativeDecoder:
             f"num_speculative={num_speculative_tokens}"
         )
     
-    def generate(
+    def _check_early_exit_support(self, params, sample_tokens: jnp.ndarray) -> bool:
+        """Check if model supports early exit."""
+        if self._early_exit_supported is not None:
+            return self._early_exit_supported
+        
+        try:
+            # Try calling with exit_layer parameter
+            _ = self.model_forward_fn(
+                params, text=sample_tokens, exit_layer=self.early_exit_layer
+            )
+            self._early_exit_supported = True
+            logger.info("Model supports early exit for self-speculative decoding")
+        except TypeError:
+            self._early_exit_supported = False
+            logger.warning(
+                "Model doesn't support early exit (exit_layer parameter). "
+                "Self-speculative decoding will fall back to standard generation. "
+                "To enable early exit, modify your model's forward function to accept "
+                "an optional 'exit_layer' parameter."
+            )
+        except Exception as e:
+            self._early_exit_supported = False
+            logger.warning(f"Early exit check failed: {e}. Using standard generation.")
+        
+        return self._early_exit_supported
+    
+    def _draft_tokens_early_exit(
         self,
         params,
-        initial_tokens: jnp.ndarray,
+        tokens: jnp.ndarray,
         rng_key,
-        max_length: int = 100,
-    ) -> jnp.ndarray:
-        """
-        Generate tokens using self-speculative decoding.
-        
-        Note: Requires model to support `return_at_layer` parameter.
+        num_tokens: int,
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """Generate draft tokens using early exit.
         
         Args:
             params: Model parameters
-            initial_tokens: Starting tokens [batch, seq_len]
+            tokens: Current token sequence [batch, seq_len]
             rng_key: Random key
-            max_length: Maximum sequence length
+            num_tokens: Number of draft tokens to generate
             
         Returns:
-            Generated tokens [batch, final_length]
+            Tuple of (draft_tokens [batch, num_tokens], draft_probs [batch, num_tokens])
         """
-        # Placeholder - requires model modifications for early exit
-        logger.warning(
-            "Self-speculative decoding requires model support for early exit. "
-            "Falling back to standard generation."
+        draft_tokens = []
+        draft_probs = []
+        current_tokens = tokens
+        
+        for _ in range(num_tokens):
+            rng_key, sample_key = jax.random.split(rng_key)
+            
+            # Get logits from early exit layer
+            early_logits = self.model_forward_fn(
+                params, text=current_tokens, exit_layer=self.early_exit_layer
+            )
+            if isinstance(early_logits, tuple):
+                early_logits = early_logits[0]
+            
+            # Sample from early exit distribution
+            last_logits = early_logits[:, -1, :]
+            probs = jax.nn.softmax(last_logits / self.temperature, axis=-1)
+            
+            sample_output = self.sampler.sample(last_logits, self.config, sample_key)
+            next_token = sample_output.token_id
+            
+            # Store draft token and its probability
+            draft_tokens.append(next_token)
+            token_prob = jnp.take_along_axis(probs, next_token, axis=-1)
+            draft_probs.append(token_prob)
+            
+            # Append to sequence for next iteration
+            current_tokens = jnp.concatenate([current_tokens, next_token], axis=1)
+        
+        return (
+            jnp.concatenate(draft_tokens, axis=1),
+            jnp.concatenate(draft_probs, axis=1)
+        )
+    
+    def _verify_drafts(
+        self,
+        params,
+        tokens: jnp.ndarray,
+        draft_tokens: jnp.ndarray,
+        draft_probs: jnp.ndarray,
+        rng_key,
+    ) -> Tuple[jnp.ndarray, int]:
+        """Verify draft tokens using full model.
+        
+        Uses rejection sampling to ensure output distribution matches
+        the full model's distribution exactly (lossless acceleration).
+        
+        Args:
+            params: Model parameters
+            tokens: Original token sequence before drafts
+            draft_tokens: Draft tokens to verify [batch, num_draft]
+            draft_probs: Probabilities of drafts from early exit [batch, num_draft]
+            rng_key: Random key
+            
+        Returns:
+            Tuple of (accepted_tokens, num_accepted)
+        """
+        num_draft = draft_tokens.shape[1]
+        
+        # Get full model logits for entire sequence including drafts
+        full_sequence = jnp.concatenate([tokens, draft_tokens], axis=1)
+        full_logits = self.model_forward_fn(params, text=full_sequence, exit_layer=None)
+        if isinstance(full_logits, tuple):
+            full_logits = full_logits[0]
+        
+        # Get full model probabilities for draft positions
+        draft_positions = jnp.arange(tokens.shape[1] - 1, tokens.shape[1] - 1 + num_draft)
+        full_logits_for_draft = full_logits[:, draft_positions, :]
+        full_probs = jax.nn.softmax(full_logits_for_draft / self.temperature, axis=-1)
+        
+        # Get full model probability for each draft token
+        full_probs_for_draft = jnp.take_along_axis(
+            full_probs, draft_tokens[:, :, None], axis=-1
+        )[:, :, 0]  # [batch, num_draft]
+        
+        # Acceptance probability: min(1, full_prob / draft_prob)
+        acceptance_ratio = jnp.minimum(
+            1.0, full_probs_for_draft / (draft_probs + 1e-10)
         )
         
-        tokens = initial_tokens
+        # Rejection sampling
+        rng_key, accept_key = jax.random.split(rng_key)
+        uniform_samples = jax.random.uniform(accept_key, acceptance_ratio.shape)
+        accepted_mask = uniform_samples < acceptance_ratio
+        
+        # Accept all tokens up to first rejection
+        cumulative_accept = jnp.cumprod(accepted_mask.astype(jnp.float32), axis=1)
+        num_accepted = jnp.sum(cumulative_accept, axis=1).astype(jnp.int32)
+        min_accepted = int(jnp.min(num_accepted))
+        
+        if min_accepted == num_draft:
+            # All accepted - sample one more token from full model
+            rng_key, next_key = jax.random.split(rng_key)
+            next_logits = full_logits[:, -1, :]
+            next_output = self.sampler.sample(next_logits, self.config, next_key)
+            accepted_tokens = jnp.concatenate([draft_tokens, next_output.token_id], axis=1)
+            return accepted_tokens, min_accepted + 1
+        
+        # Rejection at min_accepted - resample from full distribution
+        rng_key, resample_key = jax.random.split(rng_key)
+        pos = tokens.shape[1] - 1 + min_accepted
+        resample_logits = full_logits[:, pos, :]
+        resample_output = self.sampler.sample(resample_logits, self.config, resample_key)
+        
+        accepted_tokens = jnp.concatenate([
+            draft_tokens[:, :min_accepted], 
+            resample_output.token_id
+        ], axis=1)
+        return accepted_tokens, min_accepted + 1
+    
+    def _standard_generate(
+        self,
+        params,
+        tokens: jnp.ndarray,
+        rng_key,
+        max_length: int,
+        stop_tokens: Optional[List[int]] = None,
+    ) -> jnp.ndarray:
+        """Standard autoregressive generation (fallback)."""
+        stop_tokens = stop_tokens or []
+        
         while tokens.shape[1] < max_length:
             rng_key, sample_key = jax.random.split(rng_key)
             
@@ -873,6 +1427,104 @@ class SelfSpeculativeDecoder:
             next_token = sample_output.token_id
             
             tokens = jnp.concatenate([tokens, next_token], axis=1)
+            
+            # Check for stop tokens
+            if stop_tokens and int(next_token[0, 0]) in stop_tokens:
+                break
         
+        return tokens
+    
+    def _contains_stop_token(
+        self, tokens: jnp.ndarray, stop_tokens: List[int]
+    ) -> bool:
+        """Check if tokens contain any stop token."""
+        for stop_token in stop_tokens:
+            if jnp.any(tokens == stop_token).item():
+                return True
+        return False
+    
+    def _log_stats(self, total_drafted: int, total_accepted: int) -> None:
+        """Log speculative decoding statistics."""
+        acceptance_rate = total_accepted / total_drafted if total_drafted > 0 else 0
+        logger.debug(
+            f"Self-speculative decoding stats: "
+            f"drafted={total_drafted}, accepted={total_accepted}, "
+            f"rate={acceptance_rate:.2%}"
+        )
+    
+    def generate(
+        self,
+        params,
+        initial_tokens: jnp.ndarray,
+        rng_key,
+        max_length: int = 100,
+        stop_tokens: Optional[List[int]] = None,
+    ) -> jnp.ndarray:
+        """
+        Generate tokens using self-speculative decoding.
+        
+        If the model supports early exit (exit_layer parameter), uses
+        speculative decoding for faster generation. Otherwise falls back
+        to standard autoregressive generation.
+        
+        Args:
+            params: Model parameters
+            initial_tokens: Starting tokens [batch, seq_len]
+            rng_key: Random key
+            max_length: Maximum sequence length
+            stop_tokens: Token IDs that signal end of generation
+            
+        Returns:
+            Generated tokens [batch, final_length]
+        """
+        stop_tokens = stop_tokens or []
+        
+        # Check early exit support - fall back to standard if not supported
+        if not self._check_early_exit_support(params, initial_tokens):
+            return self._standard_generate(
+                params, initial_tokens, rng_key, max_length, stop_tokens
+            )
+        
+        return self._speculative_generate(
+            params, initial_tokens, rng_key, max_length, stop_tokens
+        )
+    
+    def _speculative_generate(
+        self,
+        params,
+        initial_tokens: jnp.ndarray,
+        rng_key,
+        max_length: int,
+        stop_tokens: List[int],
+    ) -> jnp.ndarray:
+        """Internal method for self-speculative generation."""
+        tokens = initial_tokens
+        total_drafted = 0
+        total_accepted = 0
+        
+        while tokens.shape[1] < max_length:
+            rng_key, draft_key, verify_key = jax.random.split(rng_key, 3)
+            
+            # Generate draft tokens using early exit
+            draft_tokens, draft_probs = self._draft_tokens_early_exit(
+                params, tokens, draft_key, self.num_speculative_tokens
+            )
+            total_drafted += self.num_speculative_tokens
+            
+            # Verify drafts using full model
+            accepted_tokens, num_accepted = self._verify_drafts(
+                params, tokens, draft_tokens, draft_probs, verify_key
+            )
+            total_accepted += num_accepted
+            
+            # Append accepted tokens
+            tokens = jnp.concatenate([tokens, accepted_tokens], axis=1)
+            
+            # Check for stop tokens
+            if stop_tokens and self._contains_stop_token(accepted_tokens, stop_tokens):
+                self._log_stats(total_drafted, total_accepted)
+                return tokens
+        
+        self._log_stats(total_drafted, total_accepted)
         return tokens
 

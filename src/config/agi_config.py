@@ -251,6 +251,24 @@ class AGIConfig:
         self.quantum_chunked_simulation = kwargs.get("quantum_chunked_simulation", True)  # Enable chunked simulation
         self.quantum_sparse_mode = kwargs.get("quantum_sparse_mode", True)  # Sparse state representation
 
+        # --- Compute Controller Parameters (Dynamic Module Orchestration) ---
+        self.use_compute_controller = kwargs.get("use_compute_controller", False)  # Enable dynamic compute allocation
+        self.controller_max_steps = kwargs.get("controller_max_steps", 10)  # Max steps per forward pass
+        self.controller_initial_budget = kwargs.get("controller_initial_budget", 1.0)  # Initial compute budget
+        self.controller_halt_threshold = kwargs.get("controller_halt_threshold", 0.8)  # Halt when confidence exceeds
+        self.controller_min_budget = kwargs.get("controller_min_budget", 0.05)  # Minimum budget per step
+        self.controller_temperature = kwargs.get("controller_temperature", 1.0)  # Module selection temperature
+        
+        # Controller Training Losses
+        self.controller_lambda_compute = kwargs.get("controller_lambda_compute", 0.01)  # Compute efficiency weight
+        self.controller_lambda_utilization = kwargs.get("controller_lambda_utilization", 0.005)  # Module utilization weight
+        self.controller_lambda_calibration = kwargs.get("controller_lambda_calibration", 0.1)  # Confidence calibration weight
+        self.controller_lambda_budget = kwargs.get("controller_lambda_budget", 0.05)  # Budget adherence weight
+        self.controller_lambda_ponder = kwargs.get("controller_lambda_ponder", 0.01)  # Ponder cost weight
+        
+        # Controller Strategy
+        self.controller_strategy = kwargs.get("controller_strategy", "balanced")  # "fast", "balanced", "thorough", "adaptive"
+
         # Validate configuration
         self._validate_config()
 
@@ -282,6 +300,14 @@ class AGIConfig:
         if self.distributed_training:
             assert self.num_devices >= 1, "num_devices must be at least 1"
             assert self.gradient_accumulation_steps >= 1, "gradient_accumulation_steps must be at least 1"
+        
+        # Validate compute controller settings
+        if self.use_compute_controller:
+            assert self.controller_max_steps >= 1, "controller_max_steps must be at least 1"
+            assert 0 < self.controller_initial_budget <= 10.0, "controller_initial_budget must be between 0 and 10"
+            assert 0 < self.controller_halt_threshold <= 1.0, "controller_halt_threshold must be between 0 and 1"
+            valid_strategies = ["fast", "balanced", "thorough", "adaptive"]
+            assert self.controller_strategy in valid_strategies, f"controller_strategy must be one of {valid_strategies}"
             
     def to_dict(self):
         """Convert config to dictionary"""
@@ -414,6 +440,14 @@ class AGIConfig:
             print(f"    - Gradient accumulation: {self.gradient_accumulation_steps}")
         print(f"  - Quantum max qubits: {self.quantum_max_qubits}")
         print(f"  - Quantum chunked sim: {self.quantum_chunked_simulation}")
+        
+        print("\nCompute Controller:")
+        print(f"  - Enabled: {self.use_compute_controller}")
+        if self.use_compute_controller:
+            print(f"    - Strategy: {self.controller_strategy}")
+            print(f"    - Max steps: {self.controller_max_steps}")
+            print(f"    - Initial budget: {self.controller_initial_budget}")
+            print(f"    - Halt threshold: {self.controller_halt_threshold}")
         
         print("\nTraining:")
         print(f"  - Batch size: {self.batch_size}")
