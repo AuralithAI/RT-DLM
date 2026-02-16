@@ -166,7 +166,8 @@ class DataSanitizer:
         if not data:
             return data
         
-        return self._sanitize_recursive(data)
+        result: Dict[str, Any] = self._sanitize_recursive(data)
+        return result
     
     def sanitize_list(self, data: List[Any]) -> List[Any]:
         """

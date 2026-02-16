@@ -574,11 +574,8 @@ class MultiScaleFeatureFusion(hk.Module):
             name="fusion_attention"
         )
         
-        # Feature weighting
-        self.feature_weights = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.softmax
-        ], name="feature_weights")
+        # Feature weighting - outputs num_features weights
+        self.feature_weights_proj = hk.Linear(d_model, name="feature_weights_proj")
         
         # Final projection
         self.final_projection = hk.Sequential([
@@ -604,12 +601,14 @@ class MultiScaleFeatureFusion(hk.Module):
         fused_reshaped = fused.reshape(batch_size, time_steps, num_features, d_model)
         
         # Weight different feature types
-        feature_weights = self.feature_weights(fused_reshaped.mean(axis=1))  # [batch, num_features]
+        pooled_features = fused_reshaped.mean(axis=1)
+        feature_scores = self.feature_weights_proj(pooled_features).mean(axis=-1)
+        feature_weights = jax.nn.softmax(feature_scores, axis=-1)
+        
         weighted_features = jnp.sum(
             fused_reshaped * feature_weights[:, None, :, None], axis=2
-        )  # [batch, time, d_model]
+        )
         
-        # Final projection
         output = self.final_projection(weighted_features)
         
         return output

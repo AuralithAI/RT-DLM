@@ -255,7 +255,7 @@ class RecursiveCallManager:
             }
 
         if self.config.aggregation_strategy == "weighted_mean" and result_embeddings and query_embedding is not None:
-            aggregated = self._weighted_aggregate(
+            aggregated: Any = self._weighted_aggregate(
                 query_embedding, result_embeddings
             )
         elif self.config.aggregation_strategy == "concat":
@@ -291,16 +291,16 @@ class RecursiveCallManager:
         result_embeddings: List[jnp.ndarray],
     ) -> jnp.ndarray:
         query_flat = np.asarray(query_embedding).flatten()
-        weights = []
+        weights_list: List[float] = []
 
         for emb in result_embeddings:
             emb_flat = np.asarray(emb).flatten()
             similarity = np.dot(query_flat, emb_flat) / (
                 np.linalg.norm(query_flat) * np.linalg.norm(emb_flat) + 1e-8
             )
-            weights.append(max(0, similarity))
+            weights_list.append(max(0, similarity))
 
-        weights = np.array(weights)
+        weights = np.array(weights_list)
         if weights.sum() > 0:
             weights = weights / weights.sum()
         else:
