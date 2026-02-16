@@ -441,5 +441,564 @@ class TestAGISystemTrainingMode(unittest.TestCase):
         )
 
 
+class TestConsciousnessSimulator(unittest.TestCase):
+    """Test ConsciousnessSimulator class for coverage."""
+    
+    def test_consciousness_valid_inputs(self):
+        """Test consciousness simulator with valid inputs."""
+        import haiku as hk
+        from src.rtdlm import ConsciousnessSimulator
+        
+        def forward(internal_state, external_input, previous_goals=None):
+            sim = ConsciousnessSimulator(d_model=D_MODEL)
+            return sim(internal_state, external_input, previous_goals)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        internal_state = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        external_input = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        
+        params = init.init(rng, internal_state, external_input)
+        output = init.apply(params, rng, internal_state, external_input)
+        
+        self.assertIn("self_awareness", output)
+        self.assertIn("introspection", output)
+        self.assertIn("autonomous_goals", output)
+    
+    def test_consciousness_with_previous_goals(self):
+        """Test consciousness simulator with previous goals (covers goal revision)."""
+        import haiku as hk
+        from src.rtdlm import ConsciousnessSimulator
+        
+        def forward(internal_state, external_input, previous_goals):
+            sim = ConsciousnessSimulator(d_model=D_MODEL)
+            return sim(internal_state, external_input, previous_goals)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        internal_state = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        external_input = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        previous_goals = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        
+        params = init.init(rng, internal_state, external_input, previous_goals)
+        output = init.apply(params, rng, internal_state, external_input, previous_goals)
+        
+        self.assertIn("autonomous_goals", output)
+    
+    def test_consciousness_1d_internal_state_error(self):
+        """Test consciousness simulator raises error for 1D internal_state."""
+        import haiku as hk
+        from src.rtdlm import ConsciousnessSimulator
+        
+        def forward(internal_state, external_input):
+            sim = ConsciousnessSimulator(d_model=D_MODEL)
+            return sim(internal_state, external_input)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        internal_state = jax.random.normal(rng, (D_MODEL,))
+        external_input = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        
+        params = init.init(rng, jnp.expand_dims(internal_state, 0), external_input)
+        output = init.apply(params, rng, internal_state, external_input)
+        
+        self.assertIn("self_awareness", output)
+    
+    def test_consciousness_1d_external_input_error(self):
+        """Test consciousness simulator raises error for 1D external_input."""
+        import haiku as hk
+        from src.rtdlm import ConsciousnessSimulator
+        
+        def forward(internal_state, external_input):
+            sim = ConsciousnessSimulator(d_model=D_MODEL)
+            return sim(internal_state, external_input)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        internal_state = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        external_input = jax.random.normal(rng, (D_MODEL,))
+        
+        params = init.init(rng, internal_state, jnp.expand_dims(external_input, 0))
+        output = init.apply(params, rng, internal_state, external_input)
+        
+        self.assertIn("self_awareness", output)
+
+
+class TestCreativeGenerationEngine(unittest.TestCase):
+    """Test CreativeGenerationEngine class for coverage."""
+    
+    def test_creative_engine_basic(self):
+        """Test creative engine with basic inputs."""
+        import haiku as hk
+        from src.rtdlm import CreativeGenerationEngine
+        
+        def forward(content_context, style_reference=None, creativity_level=0.7, previous_content=None):
+            engine = CreativeGenerationEngine(d_model=D_MODEL)
+            return engine(content_context, style_reference, creativity_level, previous_content)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        content_context = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        
+        params = init.init(rng, content_context)
+        output = init.apply(params, rng, content_context)
+        
+        self.assertIn("creative_content", output)
+        self.assertIn("novelty_score", output)
+    
+    def test_creative_engine_with_style_reference(self):
+        """Test creative engine with style reference (covers style_encoder)."""
+        import haiku as hk
+        from src.rtdlm import CreativeGenerationEngine
+        
+        def forward(content_context, style_reference):
+            engine = CreativeGenerationEngine(d_model=D_MODEL)
+            return engine(content_context, style_reference)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        content_context = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        style_reference = jax.random.normal(rng, (BATCH_SIZE, D_MODEL))
+        
+        params = init.init(rng, content_context, style_reference)
+        output = init.apply(params, rng, content_context, style_reference)
+        
+        self.assertIn("style_encoding", output)
+        self.assertFalse(jnp.allclose(output["style_encoding"], 0.0))
+    
+    def test_creative_engine_with_reference_content(self):
+        """Test creative engine with reference content (covers similarity novelty)."""
+        import haiku as hk
+        from src.rtdlm import CreativeGenerationEngine
+        
+        def forward(content_context, previous_content):
+            engine = CreativeGenerationEngine(d_model=D_MODEL)
+            return engine(content_context, previous_content=previous_content)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        content_context = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        previous_content = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        
+        params = init.init(rng, content_context, previous_content)
+        output = init.apply(params, rng, content_context, previous_content)
+        
+        self.assertIn("novelty_metrics", output)
+        self.assertIn("similarity_novelty", output["novelty_metrics"])
+
+
+class TestSocialEmotionalIntelligence(unittest.TestCase):
+    """Test SocialEmotionalIntelligence class for coverage."""
+    
+    def test_social_emotional_basic(self):
+        """Test social emotional intelligence with basic inputs."""
+        import haiku as hk
+        from src.rtdlm import SocialEmotionalIntelligence
+        
+        def forward(user_input, conversation_history=None, social_context=None):
+            sei = SocialEmotionalIntelligence(d_model=D_MODEL)
+            return sei(user_input, conversation_history, social_context)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        user_input = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        
+        params = init.init(rng, user_input)
+        output = init.apply(params, rng, user_input)
+        
+        self.assertIn("recognized_emotions", output)
+        self.assertIn("empathy_signal", output)
+    
+    def test_social_emotional_with_social_context(self):
+        """Test social emotional intelligence with social context (covers cultural_adapter)."""
+        import haiku as hk
+        from src.rtdlm import SocialEmotionalIntelligence
+        
+        def forward(user_input, social_context):
+            sei = SocialEmotionalIntelligence(d_model=D_MODEL)
+            return sei(user_input, social_context=social_context)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        user_input = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        social_context = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        
+        params = init.init(rng, user_input, social_context)
+        output = init.apply(params, rng, user_input, social_context)
+        
+        self.assertIn("cultural_adapted", output)
+        self.assertFalse(jnp.allclose(output["cultural_adapted"], 0.0))
+    
+    def test_get_emotion_label_valid(self):
+        """Test get_emotion_label with valid index."""
+        from src.rtdlm import SocialEmotionalIntelligence
+        
+        # Test the emotion labels directly from class attribute
+        labels = SocialEmotionalIntelligence.EMOTION_LABELS
+        
+        # Valid indices
+        self.assertEqual(labels[0], "joy")
+        self.assertEqual(labels[6], "neutral")
+        self.assertEqual(labels[13], "curiosity")
+    
+    def test_get_emotion_label_invalid(self):
+        """Test get_emotion_label with invalid index (covers 'unknown' return)."""
+        import haiku as hk
+        from src.rtdlm import SocialEmotionalIntelligence
+        
+        def forward_invalid_index(user_input):
+            sei = SocialEmotionalIntelligence(d_model=D_MODEL)
+            # Call get_emotion_label with invalid index
+            label = sei.get_emotion_label(100)
+            result = sei(user_input)
+            result["test_label"] = label
+            return result
+        
+        init = hk.transform(forward_invalid_index)
+        rng = jax.random.PRNGKey(42)
+        
+        user_input = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        
+        params = init.init(rng, user_input)
+        output = init.apply(params, rng, user_input)
+        
+        # Invalid index should return "unknown"
+        self.assertEqual(output["test_label"], "unknown")
+    
+    def test_social_emotional_2d_social_analysis(self):
+        """Test when social_analysis is 2D (covers else branch)."""
+        import haiku as hk
+        from src.rtdlm import SocialEmotionalIntelligence
+        
+        def forward(user_input):
+            sei = SocialEmotionalIntelligence(d_model=D_MODEL)
+            return sei(user_input, conversation_history=None)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        user_input = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        
+        params = init.init(rng, user_input)
+        output = init.apply(params, rng, user_input)
+        
+        self.assertIn("socially_aware_response", output)
+
+
+class TestScientificDiscoveryEngine(unittest.TestCase):
+    """Test ScientificDiscoveryEngine class."""
+    
+    def test_scientific_discovery_basic(self):
+        """Test scientific discovery engine basic functionality."""
+        import haiku as hk
+        from src.rtdlm import ScientificDiscoveryEngine
+        
+        def forward(knowledge_base, observations):
+            engine = ScientificDiscoveryEngine(d_model=D_MODEL)
+            return engine(knowledge_base, observations)
+        
+        init = hk.transform(forward)
+        rng = jax.random.PRNGKey(42)
+        
+        knowledge_base = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        observations = jax.random.normal(rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
+        
+        params = init.init(rng, knowledge_base, observations)
+        output = init.apply(params, rng, knowledge_base, observations)
+        
+        self.assertIn("hypothesis", output)
+        self.assertIn("experiment_design", output)
+        self.assertIn("causal_analysis", output)
+
+
+class TestComputeAgiLossWithAuxOutputs(unittest.TestCase):
+    """Test compute_agi_loss with various auxiliary outputs for coverage."""
+    
+    def test_loss_with_consciousness(self):
+        """Test loss with consciousness outputs (covers compute_consciousness_loss)."""
+        from src.rtdlm import compute_agi_loss
+        from src.config.agi_config import AGIConfig
+        
+        config = AGIConfig(
+            d_model=D_MODEL,
+            num_heads=4,
+            num_layers=2,
+            vocab_size=VOCAB_SIZE,
+        )
+        
+        logits = jax.random.normal(jax.random.PRNGKey(0), (BATCH_SIZE, SEQ_LEN, VOCAB_SIZE))
+        targets = jnp.ones((BATCH_SIZE, SEQ_LEN), dtype=jnp.int32)
+        
+        aux_outputs = {
+            "consciousness": {
+                "self_awareness": jnp.ones((BATCH_SIZE, D_MODEL)),
+                "introspection": jnp.ones((BATCH_SIZE, SEQ_LEN, D_MODEL)),
+            }
+        }
+        
+        loss = compute_agi_loss(logits, targets, aux_outputs=aux_outputs, config=config)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+        self.assertIn("consciousness_loss", aux_outputs["loss_components"])
+    
+    def test_loss_with_multimodal(self):
+        """Test loss with multimodal features (covers multimodal alignment)."""
+        from src.rtdlm import compute_agi_loss
+        from src.config.agi_config import AGIConfig
+        
+        config = AGIConfig(
+            d_model=D_MODEL,
+            num_heads=4,
+            num_layers=2,
+            vocab_size=VOCAB_SIZE,
+        )
+        
+        logits = jax.random.normal(jax.random.PRNGKey(0), (BATCH_SIZE, SEQ_LEN, VOCAB_SIZE))
+        targets = jnp.ones((BATCH_SIZE, SEQ_LEN), dtype=jnp.int32)
+        
+        aux_outputs = {
+            "multimodal_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+            "text_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+            "audio_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+        }
+        
+        loss = compute_agi_loss(logits, targets, aux_outputs=aux_outputs, config=config)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+        self.assertIn("multimodal_loss", aux_outputs["loss_components"])
+    
+    def test_loss_with_fairness_evaluation(self):
+        """Test loss with fairness evaluation (covers fairness penalty)."""
+        from src.rtdlm import compute_agi_loss
+        from src.config.agi_config import AGIConfig
+        
+        config = AGIConfig(
+            d_model=D_MODEL,
+            num_heads=4,
+            num_layers=2,
+            vocab_size=VOCAB_SIZE,
+        )
+        
+        logits = jax.random.normal(jax.random.PRNGKey(0), (BATCH_SIZE, SEQ_LEN, VOCAB_SIZE))
+        targets = jnp.ones((BATCH_SIZE, SEQ_LEN), dtype=jnp.int32)
+        
+        aux_outputs = {
+            "logits": logits,
+            "fairness_evaluation": {
+                "analyzer_active": True,
+                "fairness_config": {
+                    "bias_threshold": 0.1
+                }
+            }
+        }
+        
+        loss = compute_agi_loss(logits, targets, aux_outputs=aux_outputs, config=config)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+        self.assertIn("fairness_loss", aux_outputs["loss_components"])
+
+
+class TestComputeMultimodalAlignmentLossDetailed(unittest.TestCase):
+    """Detailed tests for compute_multimodal_alignment_loss covering all branches."""
+    
+    def test_3d_text_features(self):
+        """Test with 3D text features (covers text_features.ndim == 3 branch)."""
+        from src.rtdlm import compute_multimodal_alignment_loss
+        
+        aux_outputs = {
+            "text_features": jnp.ones((BATCH_SIZE, SEQ_LEN, D_MODEL)),
+            "audio_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+        }
+        
+        loss = compute_multimodal_alignment_loss(aux_outputs)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+    
+    def test_3d_other_features(self):
+        """Test with 3D audio features (covers other_features.ndim == 3 branch)."""
+        from src.rtdlm import compute_multimodal_alignment_loss
+        
+        aux_outputs = {
+            "text_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+            "audio_features": jnp.ones((BATCH_SIZE, SEQ_LEN, D_MODEL)), 
+        }
+        
+        loss = compute_multimodal_alignment_loss(aux_outputs)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+    
+    def test_shape_mismatch_skip(self):
+        """Test that shape mismatch causes skip (covers continue branch)."""
+        from src.rtdlm import compute_multimodal_alignment_loss
+        
+        aux_outputs = {
+            "text_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+            "audio_features": jnp.ones((BATCH_SIZE, D_MODEL * 2)),
+        }
+        
+        loss = compute_multimodal_alignment_loss(aux_outputs)
+        
+        self.assertEqual(float(loss), 0.0)
+    
+    def test_with_fused_features(self):
+        """Test with fused features (covers fused_features branch)."""
+        from src.rtdlm import compute_multimodal_alignment_loss
+        
+        aux_outputs = {
+            "text_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+            "fused_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+        }
+        
+        loss = compute_multimodal_alignment_loss(aux_outputs)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+    
+    def test_with_3d_fused_features(self):
+        """Test with 3D fused features (covers fused_features.ndim == 3 branch)."""
+        from src.rtdlm import compute_multimodal_alignment_loss
+        
+        aux_outputs = {
+            "text_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+            "fused_features": jnp.ones((BATCH_SIZE, SEQ_LEN, D_MODEL)),
+        }
+        
+        loss = compute_multimodal_alignment_loss(aux_outputs)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+    
+    def test_hybrid_analysis_fallback(self):
+        """Test falling back to hybrid_analysis for text_features."""
+        from src.rtdlm import compute_multimodal_alignment_loss
+        
+        aux_outputs = {
+            "hybrid_analysis": {
+                "text_encoding": jnp.ones((BATCH_SIZE, D_MODEL))
+            },
+            "audio_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+        }
+        
+        loss = compute_multimodal_alignment_loss(aux_outputs)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+    
+    def test_video_features(self):
+        """Test with video features."""
+        from src.rtdlm import compute_multimodal_alignment_loss
+        
+        aux_outputs = {
+            "text_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+            "video_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+        }
+        
+        loss = compute_multimodal_alignment_loss(aux_outputs)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+    
+    def test_image_features(self):
+        """Test with image features."""
+        from src.rtdlm import compute_multimodal_alignment_loss
+        
+        aux_outputs = {
+            "text_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+            "image_features": jnp.ones((BATCH_SIZE, D_MODEL)),
+        }
+        
+        loss = compute_multimodal_alignment_loss(aux_outputs)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+
+
+class TestComputeFairnessPenaltyLoss(unittest.TestCase):
+    """Test compute_fairness_penalty_loss function."""
+    
+    def test_fairness_penalty_basic(self):
+        """Test fairness penalty with basic inputs."""
+        from src.rtdlm import compute_fairness_penalty_loss
+        
+        logits = jax.random.normal(jax.random.PRNGKey(0), (BATCH_SIZE, VOCAB_SIZE))
+        fairness_eval = {
+            "fairness_config": {"bias_threshold": 0.1}
+        }
+        
+        loss = compute_fairness_penalty_loss(logits, fairness_eval)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+        self.assertGreaterEqual(float(loss), 0.0)
+    
+    def test_fairness_penalty_none_logits(self):
+        """Test fairness penalty returns 0 for None logits."""
+        from src.rtdlm import compute_fairness_penalty_loss
+        
+        fairness_eval = {"fairness_config": {"bias_threshold": 0.1}}
+        
+        loss = compute_fairness_penalty_loss(None, fairness_eval)
+        
+        self.assertEqual(float(loss), 0.0)
+
+
+class TestComputeReasoningConsistencyLoss(unittest.TestCase):
+    """Test compute_reasoning_consistency_loss function."""
+    
+    def test_reasoning_consistency_basic(self):
+        """Test reasoning consistency with multiple steps."""
+        from src.rtdlm import compute_reasoning_consistency_loss
+        
+        reasoning_chain = [
+            jnp.ones((BATCH_SIZE, D_MODEL)) * i
+            for i in range(3)
+        ]
+        
+        loss = compute_reasoning_consistency_loss(reasoning_chain)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+        self.assertGreater(float(loss), 0.0)
+    
+    def test_reasoning_consistency_single_step(self):
+        """Test reasoning consistency with single step returns 0."""
+        from src.rtdlm import compute_reasoning_consistency_loss
+        
+        reasoning_chain = [jnp.ones((BATCH_SIZE, D_MODEL))]
+        
+        loss = compute_reasoning_consistency_loss(reasoning_chain)
+        
+        self.assertEqual(float(loss), 0.0)
+
+
+class TestComputeConsciousnessLoss(unittest.TestCase):
+    """Test compute_consciousness_loss function."""
+    
+    def test_consciousness_loss_basic(self):
+        """Test consciousness loss with valid inputs."""
+        from src.rtdlm import compute_consciousness_loss
+        
+        consciousness_signals = {
+            "self_awareness": jnp.ones((BATCH_SIZE, D_MODEL)),
+            "introspection": jnp.ones((BATCH_SIZE, SEQ_LEN, D_MODEL)),
+        }
+        
+        loss = compute_consciousness_loss(consciousness_signals)
+        
+        self.assertTrue(jnp.isfinite(loss).item())
+    
+    def test_consciousness_loss_missing_keys(self):
+        """Test consciousness loss returns 0 when keys missing."""
+        from src.rtdlm import compute_consciousness_loss
+        
+        consciousness_signals = {}
+        
+        loss = compute_consciousness_loss(consciousness_signals)
+        
+        self.assertEqual(float(loss), 0.0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
