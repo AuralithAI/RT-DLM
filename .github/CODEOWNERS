@@ -1,0 +1,5 @@
+# CODEOWNERS - Defines who must review PRs for different parts of the codebase
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default: You must approve all changes
+* @Ashutosh-Kumar832

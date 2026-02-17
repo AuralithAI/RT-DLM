@@ -1,0 +1,91 @@
+name: Secret Scanning & Security
+
+on:
+  push:
+    branches: [main, RTDLM-deployment]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  secret-scan:
+    name: Scan for Secrets
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog Secret Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+
+      # Note: Gitleaks disabled - requires GITLEAKS_LICENSE from gitleaks.io for GitHub Actions
+      # TruffleHog above provides equivalent secret scanning functionality
+      # - name: Gitleaks Secret Scan
+      #   uses: gitleaks/gitleaks-action@v2
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          # Only deny licenses that are truly incompatible with Apache 2.0 distribution
+          # Note: GPL/AGPL dependencies CAN be used, but derivative works must follow GPL terms
+          # We allow them as dependencies but block SSPL (truly incompatible with Apache 2.0)
+          deny-licenses: SSPL-1.0, BUSL-1.1
+          comment-summary-in-pr: always
+
+  safety-check:
+    name: Python Safety Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies and safety
+        run: |
+          pip install safety
+          # Install project dependencies so safety can check them
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt || true
+          fi
+
+      - name: Check for vulnerabilities
+        run: |
+          # Check installed packages in the environment
+          safety check --output json > safety-report.json || true
+          cat safety-report.json
+        continue-on-error: true
+
+      - name: Upload safety report
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-report
+          path: safety-report.json
+          retention-days: 30
