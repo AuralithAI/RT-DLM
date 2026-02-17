@@ -15,7 +15,7 @@ We take security seriously. If you discover a security vulnerability, please fol
 Security vulnerabilities should be reported privately to prevent exploitation.
 
 ### 2. **Contact us directly**
-- Email: security@auralithai.com
+- Email: contact@auralithai.com
 - Or use GitHub's private vulnerability reporting feature
 
 ### 3. **Include the following information**
