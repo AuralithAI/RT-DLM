@@ -178,6 +178,7 @@ Set `quantum_layers=0` to disable quantum simulation for faster training.
 - [Deployment Guide](docs/DEPLOYMENT.md) - Deployment architecture and how-to
 - [Sampling Strategies](docs/SAMPLING.md) - Token generation configuration
 - [Quick Start Guide](docs/QUICKSTART.md) - Getting started
+- [Security Policy](docs/SECURITY.md) - Reporting vulnerabilities
 - [Changelog](CHANGELOG.md) - Version history and changes
 
 ## Deployment & Infrastructure
