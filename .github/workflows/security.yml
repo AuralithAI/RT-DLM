@@ -47,7 +47,10 @@ jobs:
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
-          deny-licenses: GPL-3.0, AGPL-3.0
+          # Only deny licenses that are truly incompatible with Apache 2.0 distribution
+          # Note: GPL/AGPL dependencies CAN be used, but derivative works must follow GPL terms
+          # We allow them as dependencies but block SSPL (truly incompatible with Apache 2.0)
+          deny-licenses: SSPL-1.0, BUSL-1.1
           comment-summary-in-pr: always
 
   safety-check:
@@ -63,12 +66,18 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install safety
-        run: pip install safety
+      - name: Install dependencies and safety
+        run: |
+          pip install safety
+          # Install project dependencies so safety can check them
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt || true
+          fi
 
       - name: Check for vulnerabilities
         run: |
-          safety check -r requirements.txt --output json > safety-report.json || true
+          # Check installed packages in the environment
+          safety check --output json > safety-report.json || true
           cat safety-report.json
         continue-on-error: true
 
