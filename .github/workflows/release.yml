@@ -51,7 +51,7 @@ jobs:
             COMMITS=$(git log --oneline $LATEST_TAG..HEAD 2>/dev/null || git log --oneline -20)
           fi
           
-          if echo "$COMMITS" | grep -qiE "BREAKING CHANGE|!:"; then
+          if echo "$COMMITS" | grep -qiE "BREAKING CHANGE:|feat!:|fix!:"; then
             MAJOR=$((MAJOR + 1))
             MINOR=0
             PATCH=0
