@@ -29,10 +29,12 @@ jobs:
           head: HEAD
           extra_args: --only-verified
 
-      - name: Gitleaks Secret Scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Note: Gitleaks disabled - requires GITLEAKS_LICENSE from gitleaks.io for GitHub Actions
+      # TruffleHog above provides equivalent secret scanning functionality
+      # - name: Gitleaks Secret Scan
+      #   uses: gitleaks/gitleaks-action@v2
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   dependency-review:
     name: Dependency Review
