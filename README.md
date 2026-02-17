@@ -7,6 +7,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![CI](https://github.com/AuralithAI/RT-DLM/actions/workflows/test.yml/badge.svg)](https://github.com/AuralithAI/RT-DLM/actions/workflows/test.yml)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](Dockerfile.train)
+[![Protected by Gitleaks](https://img.shields.io/badge/protected%20by-gitleaks-blue)](https://github.com/zricethezav/gitleaks-action)
 
 A JAX/Haiku-based neural architecture for training, combining transformer models, mixture of experts, quantum-inspired computing, and multi-paradigm hybrid learning.
 
