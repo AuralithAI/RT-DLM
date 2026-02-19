@@ -13,6 +13,9 @@ A JAX/Haiku-based neural architecture for training, combining transformer models
 
 > **Note**: This repository focuses on **model architecture and training**. Data collection, tokenization, and processing are handled by the standalone [Auralith-Data-Pipeline](https://github.com/AuralithAI/Auralith-Data-Pipeline) repository.
 
+## Architecture
+![RT-DLM Architecture Diagram](image.png)
+
 ## Overview
 
 RT-DLM provides a unified architecture for building and training advanced AI models. The system combines classical deep learning with symbolic reasoning, probabilistic inference, and quantum-ready modules.
