@@ -16,6 +16,10 @@ A JAX/Haiku-based neural architecture for training, combining transformer models
 ## Architecture
 <img width="1827" height="1163" alt="image" src="https://github.com/user-attachments/assets/38ae10e8-7cfa-4e6b-b0b9-cec587f00b0a" />
 
+## RT-DLM TMS Memory System – Complete End-to-End Architecture
+<img width="2439" height="437" alt="TMSMemorySystemArchitecture" src="https://github.com/user-attachments/assets/96486436-7979-48b9-bf1a-3586b01ed058" />
+
+
 ## Overview
 
 RT-DLM provides a unified architecture for building and training advanced AI models. The system combines classical deep learning with symbolic reasoning, probabilistic inference, and quantum-ready modules.
@@ -214,4 +218,5 @@ Common tasks via Makefile: `make install-dev`, `make test`, `make test-cov`, `ma
 ## License
 
 See [LICENSE](LICENSE) file for details.
+
 
