@@ -319,7 +319,7 @@ class TestDummyBatch:
 # =========================================================================
 
 class TestRTDLMWiring:
-    """Tests that Phase 1 modules are correctly wired into RTDLMAGISystem."""
+    """Tests that GRPO modules are correctly wired into RTDLMAGISystem."""
 
     def test_grpo_value_head_in_agi_system(self):
         """GRPOValueHead is created when use_grpo=True."""

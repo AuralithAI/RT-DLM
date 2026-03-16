@@ -643,6 +643,130 @@ class SelfCritiqueHead(hk.Module):
         return hidden_state + decay * revision_signal
 
 
+class SelfCritiqueModule(hk.Module):
+    """
+    Closed-loop self-critique module: generate → critique → revise.
+    
+    Wraps SelfCritiqueHead in an iterative loop that:
+    1. Evaluates output quality via the critique head
+    2. If quality < threshold, applies revision signal
+    3. Re-evaluates quality after revision
+    4. Repeats until quality passes OR max_revisions reached
+    
+    Also tracks a process reward signal: +0.3 when a revision step
+    improves the quality score (fed back to GRPO training).
+    
+    Args:
+        d_model: Model dimension
+        quality_threshold: Quality score needed to accept output
+        max_revisions: Maximum revision iterations
+    """
+    
+    def __init__(
+        self,
+        d_model: int,
+        quality_threshold: float = 0.6,
+        max_revisions: int = 2,
+        name: Optional[str] = None,
+    ):
+        super().__init__(name=name)
+        self.d_model = d_model
+        self.quality_threshold = quality_threshold
+        self.max_revisions = max_revisions
+        
+        self.critique_head = SelfCritiqueHead(
+            d_model=d_model,
+            quality_threshold=quality_threshold,
+            max_revisions=max_revisions,
+            name="critique_head",
+        )
+    
+    def __call__(
+        self,
+        hidden_state: jnp.ndarray,
+        is_training: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Run the generate → critique → revise loop.
+        
+        Args:
+            hidden_state: Output hidden state [batch, d_model] or [batch, seq, d_model]
+            is_training: Whether in training mode
+            
+        Returns:
+            Dictionary with:
+                - revised_output: Final (possibly revised) hidden state [batch, d_model]
+                - quality_scores: List of quality scores at each step
+                - num_revisions_applied: Number of revisions that were applied
+                - process_rewards: List of reward signals per revision step
+                - total_process_reward: Sum of all process rewards
+                - accepted_early: Whether quality passed before max_revisions
+        """
+        # Pool if sequence input
+        if hidden_state.ndim == 3:
+            pooled = hidden_state.mean(axis=1)
+        else:
+            pooled = hidden_state
+        
+        current = pooled
+        quality_scores = []
+        process_rewards = []
+        num_revisions_applied = 0
+        accepted = jnp.array(False)
+        
+        # Always run all iterations for static computation graph (JAX tracing)
+        for i in range(self.max_revisions + 1):
+            # Critique current output
+            critique_result = self.critique_head(current, is_training=is_training)
+            quality = critique_result["quality_score"]
+            quality_scores.append(quality)
+            
+            if i == 0:
+                # First pass — no revision yet
+                prev_quality = quality
+                # Check if already good enough
+                passes = quality.mean() >= self.quality_threshold
+                accepted = accepted | passes
+                continue
+            
+            # Apply revision (always compute, conditionally apply)
+            revised = self.critique_head.revise(
+                current,
+                critique_result["revision_signal"],
+                iteration=i - 1,
+            )
+            
+            # Compute process reward: +0.3 if quality improved
+            quality_delta = quality.mean() - prev_quality.mean()
+            step_reward = jnp.where(quality_delta > 0.0, 0.3, 0.0)
+            process_rewards.append(step_reward)
+            
+            # Only apply if not yet accepted
+            should_apply = ~accepted
+            apply_mask = jnp.where(should_apply, 1.0, 0.0)
+            
+            current = current + apply_mask * (revised - current)
+            num_revisions_applied += int(jnp.where(should_apply, 1, 0))
+            
+            # Check acceptance after revision
+            passes = quality.mean() >= self.quality_threshold
+            accepted = accepted | passes
+            
+            prev_quality = quality
+        
+        total_process_reward = sum(process_rewards) if process_rewards else jnp.array(0.0)
+        
+        return {
+            "revised_output": current,
+            "quality_scores": quality_scores,
+            "num_revisions_applied": num_revisions_applied,
+            "process_rewards": process_rewards,
+            "total_process_reward": total_process_reward,
+            "accepted_early": accepted,
+            "final_quality": quality_scores[-1] if quality_scores else jnp.array(0.0),
+        }
+
+
 class MetaLearningController(hk.Module):
     """Meta-learning controller for few-shot adaptation"""
     

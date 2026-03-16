@@ -1,5 +1,5 @@
 """
-Tests for Phase 2: Benchmark Harness + MLflow Integration
+Tests for Benchmark Harness + MLflow Integration
 
 Covers:
     - BenchmarkBase / BenchmarkSample / BenchmarkResult / BenchmarkSuite

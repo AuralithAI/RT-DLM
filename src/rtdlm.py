@@ -50,6 +50,7 @@ from src.core.reasoning import (
     ReasoningEngine,
     VerifyReflectReasoning,
     SelfCritiqueHead,
+    SelfCritiqueModule,
 )
 
 class ConsciousnessSimulator(hk.Module):
@@ -1091,6 +1092,13 @@ class RTDLMAGISystem(hk.Module):
                 d_model=config.d_model,
                 name="self_critique_head"
             )
+            # Full closed-loop self-critique module (generate → critique → revise)
+            self.self_critique_module = SelfCritiqueModule(
+                d_model=config.d_model,
+                quality_threshold=config.self_critique_threshold,
+                max_revisions=config.max_revisions,
+                name="self_critique_module",
+            )
         
         # Final output projection
         self.output_head = hk.Linear(config.vocab_size, name="output_head")
@@ -1219,12 +1227,41 @@ class RTDLMAGISystem(hk.Module):
         
         # Self-critique on low-confidence outputs
         if (self.config.enable_self_critique 
-                and hasattr(self, 'self_critique_head') 
+                and hasattr(self, 'self_critique_module') 
                 and is_training):
+            # Run full closed-loop self-critique: critique → revise → re-critique
+            critique_module_result = self.self_critique_module(
+                final_features.mean(axis=1), is_training=is_training
+            )
+            output["critique_quality_score"] = critique_module_result["final_quality"]
+            output["critique_quality_scores"] = critique_module_result["quality_scores"]
+            output["critique_needs_revision"] = critique_module_result["num_revisions_applied"] > 0
+            output["critique_num_revisions"] = critique_module_result["num_revisions_applied"]
+            output["critique_process_reward"] = critique_module_result["total_process_reward"]
+            output["critique_accepted_early"] = critique_module_result["accepted_early"]
+            
+            # Apply revised output back into features for logit recomputation
+            revised = critique_module_result["revised_output"]  # [batch, d_model]
+            revised_3d = jnp.broadcast_to(
+                revised[:, None, :],
+                (revised.shape[0], core_features.shape[1], revised.shape[-1])
+            )
+            # Blend revised features with original (gated by revision count)
+            revision_blend = jnp.clip(
+                critique_module_result["num_revisions_applied"] * 0.3, 0.0, 0.8
+            )
+            blended_features = (1.0 - revision_blend) * final_features + revision_blend * revised_3d
+            
+            # Recompute logits with revised features
+            output["logits"] = self.output_head(blended_features)
+            output["features"] = blended_features
+        elif (self.config.enable_self_critique
+                and hasattr(self, 'self_critique_head')
+                and not is_training):
+            # Inference mode: just run single critique for quality scoring
             critique_result = self.self_critique_head(final_features.mean(axis=1))
             output["critique_quality_score"] = critique_result["quality_score"]
             output["critique_needs_revision"] = critique_result["needs_revision"]
-            output["critique_revision_signal"] = critique_result["revision_signal"]
         
         if return_reasoning:
             output["reasoning_chain"] = [
@@ -2003,6 +2040,14 @@ def compute_agi_loss(logits, targets, aux_outputs=None, config=None):
             critique_loss = -jnp.mean(jnp.log(critique_quality + 1e-8))
             total_loss = total_loss + config.critique_loss_coeff * critique_loss
             loss_components["self_critique_loss"] = critique_loss
+            
+            # Process reward bonus — encourage revisions that improve quality
+            if "critique_process_reward" in aux_outputs:
+                process_reward = aux_outputs["critique_process_reward"]
+                # Negative reward as loss: higher reward → lower loss
+                process_reward_loss = -0.1 * jnp.mean(process_reward)
+                total_loss = total_loss + process_reward_loss
+                loss_components["self_critique_process_reward_loss"] = process_reward_loss
     
     # Store all components in aux_outputs for logging
     if aux_outputs is not None:

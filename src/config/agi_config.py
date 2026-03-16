@@ -316,6 +316,18 @@ class AGIConfig:
         self.mlflow_run_name = kwargs.get("mlflow_run_name", None)  # Optional run name
         self.mlflow_log_interval = kwargs.get("mlflow_log_interval", 10)  # Steps between metric logs
 
+        # --- Synthetic Data Self-Improvement ---
+        self.enable_synthetic_data = kwargs.get("enable_synthetic_data", False)  # Enable synthetic hard-example mining
+        self.synthetic_data_difficulty_threshold = kwargs.get("synthetic_data_difficulty_threshold", 0.6)  # Confidence below this → "hard"
+        self.synthetic_data_batch_multiplier = kwargs.get("synthetic_data_batch_multiplier", 0.2)  # Fraction of epoch size to generate
+        self.synthetic_data_quality_improvement_min = kwargs.get("synthetic_data_quality_improvement_min", 0.1)  # Min quality gain to keep sample
+        self.synthetic_data_output_dir = kwargs.get("synthetic_data_output_dir", "synthetic_shards")  # Dir for generated shards
+
+        # --- Code Modality Routing ---
+        self.enable_code_routing = kwargs.get("enable_code_routing", False)  # Enable code-aware module routing
+        self.code_routing_threshold = kwargs.get("code_routing_threshold", 0.6)  # Code confidence threshold for routing boost
+        self.code_routing_boost = kwargs.get("code_routing_boost", 1.5)  # Multiplier for code-relevant module probabilities
+
         # --- Benchmark Evaluation ---
         self.benchmark_enabled = kwargs.get("benchmark_enabled", False)  # Enable benchmark harness
         self.benchmark_names = kwargs.get("benchmark_names", ["gpqa"])  # Benchmarks to run: gpqa, aime, swe, livecode
@@ -392,6 +404,22 @@ class AGIConfig:
             assert 0 < self.self_critique_threshold <= 1.0, "self_critique_threshold must be between 0 and 1"
             assert self.max_revisions >= 1, "max_revisions must be at least 1"
             assert self.critique_loss_coeff >= 0, "critique_loss_coeff must be non-negative"
+
+        # Validate synthetic data settings
+        if self.enable_synthetic_data:
+            assert 0 < self.synthetic_data_difficulty_threshold <= 1.0, \
+                "synthetic_data_difficulty_threshold must be between 0 and 1"
+            assert 0 < self.synthetic_data_batch_multiplier <= 1.0, \
+                "synthetic_data_batch_multiplier must be between 0 and 1"
+            assert 0 <= self.synthetic_data_quality_improvement_min <= 1.0, \
+                "synthetic_data_quality_improvement_min must be between 0 and 1"
+
+        # Validate code routing settings
+        if self.enable_code_routing:
+            assert 0 < self.code_routing_threshold <= 1.0, \
+                "code_routing_threshold must be between 0 and 1"
+            assert self.code_routing_boost >= 1.0, \
+                "code_routing_boost must be at least 1.0"
 
         # Validate think budget settings
         if self.enable_think_budget:
@@ -590,6 +618,20 @@ class AGIConfig:
         if self.enable_self_critique:
             print(f"    - Quality threshold: {self.self_critique_threshold}")
             print(f"    - Max revisions: {self.max_revisions}")
+
+        print("\nSynthetic Data Self-Improvement:")
+        print(f"  - Enabled: {self.enable_synthetic_data}")
+        if self.enable_synthetic_data:
+            print(f"    - Difficulty threshold: {self.synthetic_data_difficulty_threshold}")
+            print(f"    - Batch multiplier: {self.synthetic_data_batch_multiplier}")
+            print(f"    - Quality improvement min: {self.synthetic_data_quality_improvement_min}")
+            print(f"    - Output dir: {self.synthetic_data_output_dir}")
+
+        print("\nCode Modality Routing:")
+        print(f"  - Enabled: {self.enable_code_routing}")
+        if self.enable_code_routing:
+            print(f"    - Code confidence threshold: {self.code_routing_threshold}")
+            print(f"    - Routing boost: {self.code_routing_boost}x")
         
         print("\nThink Budget:")
         print(f"  - Enabled: {self.enable_think_budget}")

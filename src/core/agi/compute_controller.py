@@ -156,6 +156,9 @@ class ComputeState(NamedTuple):
     
     # History of module outputs (for analysis)
     module_outputs: List[ModuleOutput]
+    
+    # Code modality confidence [0, 1] — how likely the input is code
+    code_confidence: float = 0.0
 
 
 @dataclass 
@@ -341,6 +344,43 @@ class ModuleRegistry:
             for m in modules 
             if m in self._modules
         )
+
+    def get_code_boosted_costs(
+        self,
+        code_confidence: float,
+        boost_factor: float = 1.5,
+        threshold: float = 0.6,
+    ) -> Dict[ModuleType, float]:
+        """Get adjusted base costs with code-modality routing boost.
+        
+        When ``code_confidence > threshold``, code-relevant modules
+        (MEMORY_RETRIEVAL, SYMBOLIC_REASONING, GRAPH_REASONING) get their
+        base cost divided by ``boost_factor`` — making them cheaper and
+        therefore more likely to be selected by the controller.
+        
+        Args:
+            code_confidence: How likely the input is code [0, 1]
+            boost_factor: Multiplier for code-relevant modules
+            threshold: Minimum code_confidence to activate boost
+            
+        Returns:
+            Dict mapping ModuleType → adjusted base_cost
+        """
+        CODE_MODULES = {
+            ModuleType.MEMORY_RETRIEVAL,
+            ModuleType.SYMBOLIC_REASONING,
+            ModuleType.GRAPH_REASONING,
+        }
+        
+        costs: Dict[ModuleType, float] = {}
+        for module_type, contract in self._modules.items():
+            cost = contract.base_cost
+            if (code_confidence > threshold
+                    and module_type in CODE_MODULES):
+                cost = cost / boost_factor
+            costs[module_type] = cost
+        
+        return costs
 
 
 class ComputeController(hk.Module):

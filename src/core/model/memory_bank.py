@@ -188,6 +188,123 @@ class ContextualMemoryIndex:
         return [item[0] for item in candidates[:k]]
 
 
+class LanguageAwareRetrievalFilter:
+    """
+    Language-aware retrieval filter that detects code vs natural language queries.
+    
+    Uses a simple 2-layer MLP trained to produce a ``code_confidence`` score
+    [0, 1] from query embeddings.  When code_confidence > threshold, retrieval
+    is biased towards memories tagged with ``"code"``.
+    
+    This is NOT an hk.Module — it runs in pure numpy so it can be used outside
+    a Haiku transform context (e.g. inside the data loader or retrieval
+    pipeline).  For trainable parameters, call ``init_params()`` once and
+    pass the params dict to ``__call__``.
+    
+    Args:
+        embedding_dim: Dimension of query embeddings
+        hidden_dim: Hidden layer size (default: embedding_dim // 4)
+        threshold: Code confidence threshold for routing boost
+    """
+    
+    def __init__(
+        self,
+        embedding_dim: int,
+        hidden_dim: Optional[int] = None,
+        threshold: float = 0.6,
+    ):
+        self.embedding_dim = embedding_dim
+        self.hidden_dim = hidden_dim or max(32, embedding_dim // 4)
+        self.threshold = threshold
+        self._params: Optional[Dict[str, np.ndarray]] = None
+    
+    def init_params(self, rng: Optional[np.random.Generator] = None) -> Dict[str, np.ndarray]:
+        """Initialise MLP weights (Xavier uniform).
+        
+        Returns:
+            params dict with w1, b1, w2, b2
+        """
+        rng = rng or np.random.default_rng(42)
+        scale1 = np.sqrt(2.0 / (self.embedding_dim + self.hidden_dim))
+        scale2 = np.sqrt(2.0 / (self.hidden_dim + 1))
+        
+        self._params = {
+            "w1": rng.uniform(-scale1, scale1, (self.embedding_dim, self.hidden_dim)).astype(np.float32),
+            "b1": np.zeros(self.hidden_dim, dtype=np.float32),
+            "w2": rng.uniform(-scale2, scale2, (self.hidden_dim, 1)).astype(np.float32),
+            "b2": np.zeros(1, dtype=np.float32),
+        }
+        return self._params
+    
+    def is_code_query(
+        self,
+        query_embedding: np.ndarray,
+        params: Optional[Dict[str, np.ndarray]] = None,
+    ) -> float:
+        """Predict whether a query is code-related.
+        
+        Args:
+            query_embedding: Query vector [d] or [1, d]
+            params: Optional MLP params (uses stored params if None)
+            
+        Returns:
+            code_confidence: float in [0, 1]
+        """
+        p = params or self._params
+        if p is None:
+            p = self.init_params()
+        
+        x = np.asarray(query_embedding).flatten()
+        if x.shape[0] != self.embedding_dim:
+            # Truncate or pad
+            if x.shape[0] > self.embedding_dim:
+                x = x[:self.embedding_dim]
+            else:
+                x = np.pad(x, (0, self.embedding_dim - x.shape[0]))
+        
+        # Layer 1: Linear + SiLU
+        h = x @ p["w1"] + p["b1"]
+        h = h * (1.0 / (1.0 + np.exp(-h)))  # SiLU
+        
+        # Layer 2: Linear + Sigmoid
+        out = h @ p["w2"] + p["b2"]
+        code_confidence = float(1.0 / (1.0 + np.exp(-out[0])))  # Sigmoid
+        
+        return code_confidence
+    
+    def filter_memories(
+        self,
+        query_embedding: np.ndarray,
+        memories: List,
+        params: Optional[Dict[str, np.ndarray]] = None,
+    ) -> Tuple[List, float]:
+        """Filter and re-rank memories based on code confidence.
+        
+        If query is code-related, boost memories tagged with "code".
+        
+        Args:
+            query_embedding: Query vector
+            memories: List of MemoryItem objects
+            params: Optional MLP params
+            
+        Returns:
+            (filtered_memories, code_confidence)
+        """
+        code_conf = self.is_code_query(query_embedding, params)
+        
+        if code_conf < self.threshold:
+            return memories, code_conf
+        
+        # Boost code-tagged memories
+        scored = []
+        for mem in memories:
+            boost = 1.5 if "code" in getattr(mem, "context_tags", []) else 1.0
+            scored.append((mem, boost))
+        
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [m for m, _ in scored], code_conf
+
+
 @dataclass
 class LTMEntry:
     """Entry for Long-Term Memory with metadata for persistence."""

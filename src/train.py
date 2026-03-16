@@ -192,6 +192,17 @@ class AGITrainer:
             except Exception as e:
                 logger.warning(f"Failed to initialize MLflow tracker: {e}")
                 self.mlflow_tracker = None
+
+        # Synthetic data self-improvement (optional)
+        self.synthetic_data_generator = None
+        if getattr(config, 'enable_synthetic_data', False):
+            try:
+                from core.synthetic_data_loop import SyntheticDataGenerator
+                self.synthetic_data_generator = SyntheticDataGenerator(config)
+                logger.info("Synthetic data self-improvement enabled")
+            except Exception as e:
+                logger.warning(f"Failed to initialize synthetic data generator: {e}")
+                self.synthetic_data_generator = None
         
     def configure_retrieval(
         self, 
@@ -1735,6 +1746,31 @@ class AGITrainer:
                     )
                     if should_stop:
                         break
+
+                # Synthetic data self-improvement (end of epoch)
+                if self.synthetic_data_generator is not None and use_streaming:
+                    try:
+                        self.rng, synth_rng = jax.random.split(self.rng)
+                        # Collect a sample of batches for hard-example mining
+                        sample_batches = []
+                        for i, b in enumerate(train_data.iter_epoch()):
+                            sample_batches.append(b)
+                            if i >= 20:  # Sample up to 20 batches
+                                break
+                        
+                        shard_path = self.synthetic_data_generator.run_epoch_end(
+                            model_fn=self.model.apply,
+                            params=self.params,
+                            state=getattr(self, '_model_state', {}),
+                            rng=synth_rng,
+                            seed_batches=sample_batches,
+                            critique_fn=None,  # Will use model's critique in future
+                            epoch=epoch,
+                        )
+                        if shard_path:
+                            logger.info(f"  Synthetic shard generated: {shard_path}")
+                    except Exception as e:
+                        logger.warning(f"Synthetic data generation failed: {e}")
         finally:
             # End MLflow run
             if mlflow_ctx is not None:
@@ -1891,8 +1927,21 @@ class ShardedDataLoader:
         logger.info(f"DataLoader initialized: {self.num_shards} shards, ~{self.total_samples} samples")
     
     def _load_shard(self, shard_path: Path) -> Dict[str, np.ndarray]:
-        """Load a single shard from disk."""
+        """Load a single shard from disk.
+        
+        If the shard contains a ``modality`` tensor with value 4 (code),
+        sets a ``code_modality`` flag so downstream batch creation can
+        propagate ``code_confidence`` into the training batch.
+        """
         tensors = self._load_safetensors(str(shard_path))
+        
+        # Detect code modality (modality == 4)
+        if "modality" in tensors:
+            modality_vals = tensors["modality"]
+            # Check if any sample in the shard is code (modality 4)
+            is_code = np.any(modality_vals == 4)
+            tensors["_is_code_shard"] = np.array([1 if is_code else 0])
+        
         return tensors
     
     def _create_batches_from_shard(
@@ -1903,6 +1952,11 @@ class ShardedDataLoader:
         input_ids = shard_data["input_ids"]
         targets = shard_data.get("targets", input_ids)
         
+        # Code modality detection
+        is_code_shard = bool(shard_data.get("_is_code_shard", np.array([0]))[0])
+        # Per-sample modality if available
+        modality_tensor = shard_data.get("modality", None)
+        
         num_samples = input_ids.shape[0]
         batches = []
         
@@ -1911,6 +1965,15 @@ class ShardedDataLoader:
             
             batch_input_ids = jnp.array(input_ids[start_idx:end_idx])
             batch_targets = jnp.array(targets[start_idx:end_idx])
+            
+            # Compute code_confidence for this batch
+            if modality_tensor is not None:
+                batch_modality = modality_tensor[start_idx:end_idx]
+                code_fraction = float(np.mean(batch_modality == 4))
+            elif is_code_shard:
+                code_fraction = 1.0
+            else:
+                code_fraction = 0.0
             
             current_batch_size = batch_input_ids.shape[0]
             if current_batch_size < self.batch_size:
@@ -1930,6 +1993,7 @@ class ShardedDataLoader:
                 "input_ids": batch_input_ids,
                 "targets": batch_targets,
                 "text": batch_input_ids,
+                "code_confidence": code_fraction,
             })
         
         return batches
