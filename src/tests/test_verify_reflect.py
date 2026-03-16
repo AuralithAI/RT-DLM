@@ -17,7 +17,6 @@ import pytest
 import jax
 import jax.numpy as jnp
 import haiku as hk
-import numpy as np
 
 from src.config.agi_config import AGIConfig
 from src.core.reasoning import (
@@ -25,13 +24,12 @@ from src.core.reasoning import (
     ReflectionModule,
     VerifyReflectReasoning,
     SelfCritiqueHead,
-    ChainOfThoughtReasoning,
 )
-
 
 # =============================================================================
 # VerificationHead Tests
 # =============================================================================
+
 
 class TestVerificationHead:
     """Tests for the Verification Head module."""
@@ -48,6 +46,7 @@ class TestVerificationHead:
         def _fn(answer, thought, query):
             verifier = VerificationHead(d_model)
             return verifier(answer, thought, query)
+
         return hk.transform(_fn)
 
     def test_verification_output_shape(self, d_model, rng):
@@ -125,6 +124,7 @@ class TestVerificationHead:
 # ReflectionModule Tests
 # =============================================================================
 
+
 class TestReflectionModule:
     """Tests for the Reflection Module."""
 
@@ -140,6 +140,7 @@ class TestReflectionModule:
         def _fn(answer, thought, v_score):
             reflector = ReflectionModule(d_model)
             return reflector(answer, thought, v_score)
+
         return hk.transform(_fn)
 
     def test_reflection_output_shape(self, d_model, rng):
@@ -174,8 +175,9 @@ class TestReflectionModule:
 
         # Low verification should generally produce larger corrections
         # (due to correction_scale = 1 - v_score)
-        assert low_norm > high_norm * 0.5, \
-            f"Expected larger correction for low verification: {low_norm} vs {high_norm}"
+        assert (
+            low_norm > high_norm * 0.5
+        ), f"Expected larger correction for low verification: {low_norm} vs {high_norm}"
 
     def test_reflection_correction_bounded(self, d_model, rng):
         """Test that correction delta is bounded (tanh + gate)."""
@@ -202,7 +204,7 @@ class TestReflectionModule:
 
         def loss_fn(params):
             corrected, _ = fn.apply(params, rng, answer, thought, v_score)
-            return jnp.mean(corrected ** 2)
+            return jnp.mean(corrected**2)
 
         grads = jax.grad(loss_fn)(params)
         total_norm = sum(float(jnp.linalg.norm(g)) for g in jax.tree.leaves(grads))
@@ -212,6 +214,7 @@ class TestReflectionModule:
 # =============================================================================
 # VerifyReflectReasoning Tests
 # =============================================================================
+
 
 class TestVerifyReflectReasoning:
     """Tests for the full Verify/Reflect reasoning loop."""
@@ -234,6 +237,7 @@ class TestVerifyReflectReasoning:
                 use_semantic_graph=False,
             )
             return vr(query, context)
+
         return hk.transform(_fn)
 
     def test_vr_basic_output_keys(self, d_model, rng):
@@ -246,9 +250,13 @@ class TestVerifyReflectReasoning:
         result = fn.apply(params, rng, query, context)
 
         expected_keys = [
-            "final_answer", "reasoning_chain", "confidences",
-            "thought_summary", "verification_scores", "num_reflections",
-            "reflection_deltas"
+            "final_answer",
+            "reasoning_chain",
+            "confidences",
+            "thought_summary",
+            "verification_scores",
+            "num_reflections",
+            "reflection_deltas",
         ]
         for key in expected_keys:
             assert key in result, f"Missing key: {key}"
@@ -332,6 +340,7 @@ class TestVerifyReflectReasoning:
 # SelfCritiqueHead Tests
 # =============================================================================
 
+
 class TestSelfCritiqueHead:
     """Tests for the Self-Critique Head module."""
 
@@ -347,12 +356,14 @@ class TestSelfCritiqueHead:
         def _fn(hidden, is_training=True):
             head = SelfCritiqueHead(d_model, threshold, max_revisions)
             return head(hidden, is_training)
+
         return hk.transform(_fn)
 
     def _build_revision_fn(self, d_model):
         def _fn(hidden, revision_signal, iteration):
             head = SelfCritiqueHead(d_model)
             return head.revise(hidden, revision_signal, iteration)
+
         return hk.transform(_fn)
 
     def test_critique_output_keys(self, d_model, rng):
@@ -480,6 +491,7 @@ class TestSelfCritiqueHead:
 # AGIConfig Verify/Reflect and Self-Critique Tests
 # =============================================================================
 
+
 class TestAGIConfigVerifyReflect:
     """Tests for verify/reflect and self-critique config settings."""
 
@@ -542,9 +554,7 @@ class TestAGIConfigVerifyReflect:
         """Test think budget validation."""
         with pytest.raises(AssertionError):
             AGIConfig(
-                enable_think_budget=True,
-                think_budget_max_tokens=10,
-                think_budget_min_tokens=100
+                enable_think_budget=True, think_budget_max_tokens=10, think_budget_min_tokens=100
             )
 
     def test_kv_cache_defaults(self):

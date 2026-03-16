@@ -11,7 +11,7 @@ Metric: Accuracy over multiple-choice questions (A/B/C/D)
 
 import logging
 import random
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from core.benchmarks.base_benchmark import BenchmarkBase, BenchmarkSample
 
@@ -94,8 +94,7 @@ class GPQABenchmark(BenchmarkBase):
             logger.info(f"Loaded GPQA Diamond: {len(ds)} samples")
         except Exception as e:
             logger.warning(
-                f"Could not load GPQA from HuggingFace: {e}. "
-                f"Using synthetic fallback data."
+                f"Could not load GPQA from HuggingFace: {e}. " f"Using synthetic fallback data."
             )
             return self._synthetic_fallback()
 
@@ -118,17 +117,12 @@ class GPQABenchmark(BenchmarkBase):
                 # Shuffle and track correct answer position
                 indexed = list(enumerate(choices))
                 rng.shuffle(indexed)
-                correct_idx = next(
-                    i for i, (orig_idx, _) in enumerate(indexed)
-                    if orig_idx == 0
-                )
+                correct_idx = next(i for i, (orig_idx, _) in enumerate(indexed) if orig_idx == 0)
                 choices = [c for _, c in indexed]
 
             # Build prompt with answer labels
             labels = "ABCD"
-            choices_text = "\n".join(
-                f"({labels[i]}) {c}" for i, c in enumerate(choices)
-            )
+            choices_text = "\n".join(f"({labels[i]}) {c}" for i, c in enumerate(choices))
             prompt = (
                 f"Answer the following question by selecting A, B, C, or D.\n\n"
                 f"Question: {question}\n\n"
@@ -138,18 +132,20 @@ class GPQABenchmark(BenchmarkBase):
 
             domain = row.get(self.DOMAIN_COL, "general")
 
-            samples.append(BenchmarkSample(
-                sample_id=f"gpqa_{idx}",
-                prompt=prompt,
-                choices=choices,
-                correct_answer=correct_idx,
-                category=str(domain),
-                metadata={
-                    "correct_text": correct_answer,
-                    "domain": str(domain),
-                    "index": idx,
-                },
-            ))
+            samples.append(
+                BenchmarkSample(
+                    sample_id=f"gpqa_{idx}",
+                    prompt=prompt,
+                    choices=choices,
+                    correct_answer=correct_idx,
+                    category=str(domain),
+                    metadata={
+                        "correct_text": correct_answer,
+                        "domain": str(domain),
+                        "index": idx,
+                    },
+                )
+            )
 
         logger.info(f"Prepared {len(samples)} GPQA samples")
         self._samples = samples
@@ -162,26 +158,44 @@ class GPQABenchmark(BenchmarkBase):
         """
         rng = random.Random(self.seed)
         domains = [
-            "quantum_mechanics", "astrophysics", "molecular_biology",
-            "organic_chemistry", "condensed_matter",
+            "quantum_mechanics",
+            "astrophysics",
+            "molecular_biology",
+            "organic_chemistry",
+            "condensed_matter",
         ]
 
         templates = [
-            ("What is the ground state energy of a hydrogen atom?",
-             ["-13.6 eV", "-3.4 eV", "-27.2 eV", "-1.51 eV"], 0),
-            ("Which particle mediates the strong nuclear force?",
-             ["Gluon", "Photon", "W boson", "Graviton"], 0),
-            ("What is the Schwarzschild radius of a solar-mass black hole?",
-             ["~3 km", "~30 km", "~300 km", "~3000 km"], 0),
-            ("Which molecule has the highest bond dissociation energy?",
-             ["N₂", "O₂", "CO", "H₂"], 0),
-            ("What is the Pauli exclusion principle?",
-             [
-                 "No two identical fermions can occupy the same quantum state",
-                 "Energy is always conserved in quantum systems",
-                 "Momentum and position cannot be simultaneously known",
-                 "Wave function collapse is irreversible",
-             ], 0),
+            (
+                "What is the ground state energy of a hydrogen atom?",
+                ["-13.6 eV", "-3.4 eV", "-27.2 eV", "-1.51 eV"],
+                0,
+            ),
+            (
+                "Which particle mediates the strong nuclear force?",
+                ["Gluon", "Photon", "W boson", "Graviton"],
+                0,
+            ),
+            (
+                "What is the Schwarzschild radius of a solar-mass black hole?",
+                ["~3 km", "~30 km", "~300 km", "~3000 km"],
+                0,
+            ),
+            (
+                "Which molecule has the highest bond dissociation energy?",
+                ["N₂", "O₂", "CO", "H₂"],
+                0,
+            ),
+            (
+                "What is the Pauli exclusion principle?",
+                [
+                    "No two identical fermions can occupy the same quantum state",
+                    "Energy is always conserved in quantum systems",
+                    "Momentum and position cannot be simultaneously known",
+                    "Wave function collapse is irreversible",
+                ],
+                0,
+            ),
         ]
 
         samples: List[BenchmarkSample] = []
@@ -195,15 +209,11 @@ class GPQABenchmark(BenchmarkBase):
             if self.shuffle_choices:
                 indexed = list(enumerate(choices))
                 rng.shuffle(indexed)
-                correct = next(
-                    j for j, (orig, _) in enumerate(indexed) if orig == 0
-                )
+                correct = next(j for j, (orig, _) in enumerate(indexed) if orig == 0)
                 choices = [c for _, c in indexed]
 
             labels = "ABCD"
-            choices_text = "\n".join(
-                f"({labels[j]}) {c}" for j, c in enumerate(choices)
-            )
+            choices_text = "\n".join(f"({labels[j]}) {c}" for j, c in enumerate(choices))
             prompt = (
                 f"Answer the following question by selecting A, B, C, or D.\n\n"
                 f"Question: {question}\n\n"
@@ -211,17 +221,19 @@ class GPQABenchmark(BenchmarkBase):
                 f"Answer:"
             )
 
-            samples.append(BenchmarkSample(
-                sample_id=f"gpqa_synth_{i}",
-                prompt=prompt,
-                choices=choices,
-                correct_answer=correct,
-                category=domain,
-                metadata={
-                    "synthetic": True,
-                    "domain": domain,
-                },
-            ))
+            samples.append(
+                BenchmarkSample(
+                    sample_id=f"gpqa_synth_{i}",
+                    prompt=prompt,
+                    choices=choices,
+                    correct_answer=correct,
+                    category=domain,
+                    metadata={
+                        "synthetic": True,
+                        "domain": domain,
+                    },
+                )
+            )
 
         logger.info(f"Generated {len(samples)} synthetic GPQA samples")
         self._samples = samples

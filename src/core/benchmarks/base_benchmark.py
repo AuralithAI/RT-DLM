@@ -20,13 +20,12 @@ import abc
 import json
 import logging
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +33,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Data Structures
 # =============================================================================
+
 
 @dataclass
 class BenchmarkSample:
@@ -50,6 +50,7 @@ class BenchmarkSample:
         category: Optional sub-category for breakdown (e.g., GPQA domain)
         metadata: Extra benchmark-specific data (difficulty, source, etc.)
     """
+
     sample_id: str
     prompt: str
     choices: Optional[List[str]] = None
@@ -73,6 +74,7 @@ class BenchmarkResult:
         predictions: List of (sample_id, predicted, correct, is_correct) tuples
         config: Evaluation config snapshot
     """
+
     benchmark_name: str
     accuracy: float
     num_correct: int
@@ -90,9 +92,7 @@ class BenchmarkResult:
             "accuracy": round(self.accuracy, 4),
             "num_correct": self.num_correct,
             "num_total": self.num_total,
-            "category_scores": {
-                k: round(v, 4) for k, v in self.category_scores.items()
-            },
+            "category_scores": {k: round(v, 4) for k, v in self.category_scores.items()},
             "total_time_sec": round(self.total_time_sec, 2),
             "samples_per_sec": round(self.samples_per_sec, 2),
             "config": self.config,
@@ -110,6 +110,7 @@ class BenchmarkResult:
 # =============================================================================
 # Abstract Benchmark Base
 # =============================================================================
+
 
 class BenchmarkBase(abc.ABC):
     """Abstract base class for benchmark evaluators.
@@ -283,13 +284,15 @@ class BenchmarkBase(abc.ABC):
             cat_correct[cat] = cat_correct.get(cat, 0) + (1 if is_correct else 0)
             cat_total[cat] = cat_total.get(cat, 0) + 1
 
-            predictions_log.append({
-                "sample_id": sample.sample_id,
-                "predicted": str(prediction),
-                "correct_answer": str(sample.correct_answer),
-                "is_correct": is_correct,
-                "category": cat,
-            })
+            predictions_log.append(
+                {
+                    "sample_id": sample.sample_id,
+                    "predicted": str(prediction),
+                    "correct_answer": str(sample.correct_answer),
+                    "is_correct": is_correct,
+                    "category": cat,
+                }
+            )
 
             if verbose:
                 status = "✓" if is_correct else "✗"
@@ -302,9 +305,7 @@ class BenchmarkBase(abc.ABC):
 
         # Per-category accuracy
         category_scores = {
-            cat: cat_correct[cat] / cat_total[cat]
-            for cat in cat_total
-            if cat_total[cat] > 0
+            cat: cat_correct[cat] / cat_total[cat] for cat in cat_total if cat_total[cat] > 0
         }
 
         result = BenchmarkResult(
@@ -344,9 +345,7 @@ class BenchmarkBase(abc.ABC):
         ]
         if result.category_scores:
             lines.append("  Categories:")
-            for cat, score in sorted(
-                result.category_scores.items(), key=lambda x: -x[1]
-            ):
+            for cat, score in sorted(result.category_scores.items(), key=lambda x: -x[1]):
                 lines.append(f"    {cat}: {score:.2%}")
         lines.append(f"{'='*60}\n")
         return "\n".join(lines)
@@ -355,6 +354,7 @@ class BenchmarkBase(abc.ABC):
 # =============================================================================
 # Benchmark Suite (multi-benchmark orchestrator)
 # =============================================================================
+
 
 class BenchmarkSuite:
     """Orchestrate evaluation across multiple benchmarks.
@@ -456,7 +456,4 @@ class BenchmarkSuite:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize all results to a single dict."""
-        return {
-            name: result.to_dict()
-            for name, result in self._results.items()
-        }
+        return {name: result.to_dict() for name, result in self._results.items()}

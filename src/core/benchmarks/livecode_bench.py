@@ -14,8 +14,7 @@ This module provides prompt construction and output-based heuristic scoring.
 
 import logging
 import random
-import re
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from core.benchmarks.base_benchmark import BenchmarkBase, BenchmarkSample
 
@@ -95,9 +94,7 @@ class LiveCodeBenchmark(BenchmarkBase):
             )
             return self._lightweight_score(sample, pred_str)
 
-    def _lightweight_score(
-        self, sample: BenchmarkSample, prediction: str
-    ) -> bool:
+    def _lightweight_score(self, sample: BenchmarkSample, prediction: str) -> bool:
         """Heuristic scoring for code generation.
 
         Checks:
@@ -109,8 +106,15 @@ class LiveCodeBenchmark(BenchmarkBase):
         has_code_structure = any(
             keyword in prediction
             for keyword in [
-                "def ", "class ", "for ", "while ", "if ",
-                "import ", "from ", "return ", "print(",
+                "def ",
+                "class ",
+                "for ",
+                "while ",
+                "if ",
+                "import ",
+                "from ",
+                "return ",
+                "print(",
             ]
         )
 
@@ -126,15 +130,19 @@ class LiveCodeBenchmark(BenchmarkBase):
             has_input = any(
                 pattern in prediction
                 for pattern in [
-                    "input()", "sys.stdin", "readline",
-                    "int(input", "map(int",
+                    "input()",
+                    "sys.stdin",
+                    "readline",
+                    "int(input",
+                    "map(int",
                 ]
             )
             return has_input
 
         # Fallback: at least has non-trivial code
         code_lines = [
-            line for line in prediction.split("\n")
+            line
+            for line in prediction.split("\n")
             if line.strip() and not line.strip().startswith("#")
         ]
         return len(code_lines) >= 3
@@ -183,10 +191,7 @@ class LiveCodeBenchmark(BenchmarkBase):
                 or row.get("problem_description", "")
                 or row.get("question", "")
             )
-            solution = (
-                row.get("solution", "")
-                or row.get("reference_solution", "")
-            )
+            solution = row.get("solution", "") or row.get("reference_solution", "")
 
             difficulty = row.get("difficulty", row.get("question_difficulty", "unknown"))
             source = row.get("platform", row.get("source", "unknown"))
@@ -203,20 +208,22 @@ class LiveCodeBenchmark(BenchmarkBase):
             # Build prompt
             prompt = self._build_prompt(problem, test_inputs, test_outputs)
 
-            samples.append(BenchmarkSample(
-                sample_id=str(question_id),
-                prompt=prompt,
-                choices=None,
-                correct_answer=solution,
-                category=str(difficulty),
-                metadata={
-                    "source": str(source),
-                    "difficulty": str(difficulty),
-                    "test_inputs": test_inputs,
-                    "test_outputs": test_outputs,
-                    "solution": solution,
-                },
-            ))
+            samples.append(
+                BenchmarkSample(
+                    sample_id=str(question_id),
+                    prompt=prompt,
+                    choices=None,
+                    correct_answer=solution,
+                    category=str(difficulty),
+                    metadata={
+                        "source": str(source),
+                        "difficulty": str(difficulty),
+                        "test_inputs": test_inputs,
+                        "test_outputs": test_outputs,
+                        "solution": solution,
+                    },
+                )
+            )
 
         return samples
 
@@ -235,9 +242,7 @@ class LiveCodeBenchmark(BenchmarkBase):
         # Add example test cases
         if test_inputs and test_outputs:
             prompt_parts.append("\nExamples:")
-            for i, (inp, out) in enumerate(
-                zip(test_inputs[:3], test_outputs[:3])
-            ):
+            for i, (inp, out) in enumerate(zip(test_inputs[:3], test_outputs[:3])):
                 prompt_parts.append(f"\nInput {i+1}:\n{inp}")
                 prompt_parts.append(f"Output {i+1}:\n{out}")
 
@@ -392,20 +397,22 @@ class LiveCodeBenchmark(BenchmarkBase):
                 prob["test_outputs"],
             )
 
-            samples.append(BenchmarkSample(
-                sample_id=f"lc_synth_{i}",
-                prompt=prompt,
-                choices=None,
-                correct_answer=prob["solution"],
-                category=prob["difficulty"],
-                metadata={
-                    "synthetic": True,
-                    "difficulty": prob["difficulty"],
-                    "test_inputs": prob["test_inputs"],
-                    "test_outputs": prob["test_outputs"],
-                    "solution": prob["solution"],
-                },
-            ))
+            samples.append(
+                BenchmarkSample(
+                    sample_id=f"lc_synth_{i}",
+                    prompt=prompt,
+                    choices=None,
+                    correct_answer=prob["solution"],
+                    category=prob["difficulty"],
+                    metadata={
+                        "synthetic": True,
+                        "difficulty": prob["difficulty"],
+                        "test_inputs": prob["test_inputs"],
+                        "test_outputs": prob["test_outputs"],
+                        "solution": prob["solution"],
+                    },
+                )
+            )
 
         logger.info(f"Generated {len(samples)} synthetic LiveCodeBench samples")
         self._samples = samples

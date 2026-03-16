@@ -109,9 +109,7 @@ class TestRecursiveCallManager:
         def solve_fn(query, context_var, ctx):
             return {"answer": f"solved {query}"}
 
-        result = manager.spawn_subcall(
-            parent_ctx, "sub query", "sub_var", solve_fn
-        )
+        result = manager.spawn_subcall(parent_ctx, "sub query", "sub_var", solve_fn)
 
         assert result.success is True
         assert result.result == {"answer": "solved sub query"}
@@ -123,9 +121,7 @@ class TestRecursiveCallManager:
         def solve_fn(query, context_var, ctx):
             return {"answer": "should not reach"}
 
-        result = manager.spawn_subcall(
-            parent_ctx, "sub query", "sub_var", solve_fn
-        )
+        result = manager.spawn_subcall(parent_ctx, "sub query", "sub_var", solve_fn)
 
         assert result.success is False
         assert "limit" in result.error.lower()
@@ -136,9 +132,7 @@ class TestRecursiveCallManager:
         def solve_fn(query, context_var, ctx):
             raise ValueError("Intentional error")
 
-        result = manager.spawn_subcall(
-            parent_ctx, "sub query", "sub_var", solve_fn
-        )
+        result = manager.spawn_subcall(parent_ctx, "sub query", "sub_var", solve_fn)
 
         assert result.success is False
         assert "Intentional error" in result.error
@@ -166,9 +160,7 @@ class TestRecursiveCallManager:
         def solve_fn(query, context_var, ctx):
             return {"answer": f"solved {query}"}
 
-        results = manager.spawn_parallel_subcalls(
-            parent_ctx, subcalls, solve_fn
-        )
+        results = manager.spawn_parallel_subcalls(parent_ctx, subcalls, solve_fn)
 
         assert len(results) == 3
         assert all(r.success for r in results)
@@ -192,9 +184,7 @@ class TestRecursiveCallManager:
             time.sleep(0.01)
             return {"answer": f"solved {query}"}
 
-        results = manager.spawn_parallel_subcalls(
-            parent_ctx, subcalls, solve_fn
-        )
+        results = manager.spawn_parallel_subcalls(parent_ctx, subcalls, solve_fn)
 
         assert len(results) == 2
         assert all(r.success for r in results)

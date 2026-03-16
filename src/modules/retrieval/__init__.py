@@ -21,7 +21,7 @@ Usage:
 Industry Context:
     - GPT-4, Claude, Gemini: Keep retrieval external/optional
     - Perplexity: RAG-native with hybrid retrieval
-    - This implementation: Optional augmentation layer on top of 
+    - This implementation: Optional augmentation layer on top of
       RT-DLM's existing tiered memory system
 """
 
@@ -56,25 +56,21 @@ from src.modules.retrieval.training_integration import (
 
 __all__ = [
     # Configuration (from config/)
-    'RetrievalConfig',
-    'RetrievalProvider',
-    'ChunkingStrategy',
-    
+    "RetrievalConfig",
+    "RetrievalProvider",
+    "ChunkingStrategy",
     # Document Processing
-    'DocumentIngester',
-    'DocumentChunk',
-    
+    "DocumentIngester",
+    "DocumentChunk",
     # Retrieval
-    'HybridRetriever',
-    'RetrievalResult',
-    'SparseRetriever',
-    'DenseRetriever',
-    
+    "HybridRetriever",
+    "RetrievalResult",
+    "SparseRetriever",
+    "DenseRetriever",
     # Augmented Attention
-    'RetrievalAugmentedAttention',
-    'CrossAttentionRetrieval',
-    
+    "RetrievalAugmentedAttention",
+    "CrossAttentionRetrieval",
     # Training Integration
-    'RetrievalAugmentedTraining',
-    'RetrievalContrastiveLoss',
+    "RetrievalAugmentedTraining",
+    "RetrievalContrastiveLoss",
 ]

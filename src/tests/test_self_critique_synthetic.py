@@ -11,12 +11,9 @@ Covers:
 - AGIConfig flags (synthetic data, code routing)
 """
 
-import json
-import os
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import jax
 import jax.numpy as jnp
@@ -32,6 +29,7 @@ if str(SRC_DIR) not in sys.path:
 # =============================================================================
 # Test: SelfCritiqueModule
 # =============================================================================
+
 
 class TestSelfCritiqueModule:
     """Tests for the closed-loop self-critique module."""
@@ -62,8 +60,12 @@ class TestSelfCritiqueModule:
     def test_output_keys(self):
         result = self._init_and_apply()
         expected_keys = {
-            "revised_output", "quality_scores", "num_revisions_applied",
-            "process_rewards", "total_process_reward", "accepted_early",
+            "revised_output",
+            "quality_scores",
+            "num_revisions_applied",
+            "process_rewards",
+            "total_process_reward",
+            "accepted_early",
             "final_quality",
         }
         assert expected_keys.issubset(set(result.keys()))
@@ -156,6 +158,7 @@ class TestSelfCritiqueModule:
 # Test: SyntheticDataGenerator
 # =============================================================================
 
+
 class TestSyntheticDataGenerator:
     """Tests for synthetic hard-example mining and shard generation."""
 
@@ -170,10 +173,10 @@ class TestSyntheticDataGenerator:
             "max_seq_length": 32,
         }
         defaults.update(overrides)
-        
+
         class Config:
             pass
-        
+
         cfg = Config()
         for k, v in defaults.items():
             setattr(cfg, k, v)
@@ -191,6 +194,7 @@ class TestSyntheticDataGenerator:
 
     def test_init(self):
         from core.synthetic_data_loop import SyntheticDataGenerator
+
         cfg = self._make_config()
         gen = SyntheticDataGenerator(cfg)
         assert gen.difficulty_threshold == 0.6
@@ -377,17 +381,20 @@ class TestSyntheticDataGenerator:
 # Test: LanguageAwareRetrievalFilter
 # =============================================================================
 
+
 class TestLanguageAwareRetrievalFilter:
     """Tests for code vs natural language detection."""
 
     def test_init(self):
         from core.model.memory_bank import LanguageAwareRetrievalFilter
+
         filt = LanguageAwareRetrievalFilter(embedding_dim=128)
         assert filt.embedding_dim == 128
         assert filt.hidden_dim == 32  # 128 // 4
 
     def test_init_params(self):
         from core.model.memory_bank import LanguageAwareRetrievalFilter
+
         filt = LanguageAwareRetrievalFilter(embedding_dim=64)
         params = filt.init_params()
         assert "w1" in params
@@ -399,6 +406,7 @@ class TestLanguageAwareRetrievalFilter:
 
     def test_is_code_query_returns_float(self):
         from core.model.memory_bank import LanguageAwareRetrievalFilter
+
         filt = LanguageAwareRetrievalFilter(embedding_dim=32)
         filt.init_params()
         query = np.random.randn(32).astype(np.float32)
@@ -409,6 +417,7 @@ class TestLanguageAwareRetrievalFilter:
     def test_is_code_query_truncation(self):
         """Query longer than embedding_dim should be truncated."""
         from core.model.memory_bank import LanguageAwareRetrievalFilter
+
         filt = LanguageAwareRetrievalFilter(embedding_dim=16)
         filt.init_params()
         long_query = np.random.randn(100).astype(np.float32)
@@ -418,6 +427,7 @@ class TestLanguageAwareRetrievalFilter:
     def test_is_code_query_padding(self):
         """Query shorter than embedding_dim should be padded."""
         from core.model.memory_bank import LanguageAwareRetrievalFilter
+
         filt = LanguageAwareRetrievalFilter(embedding_dim=64)
         filt.init_params()
         short_query = np.random.randn(10).astype(np.float32)
@@ -428,9 +438,7 @@ class TestLanguageAwareRetrievalFilter:
         """When code_confidence < threshold, memories unchanged."""
         from core.model.memory_bank import LanguageAwareRetrievalFilter
 
-        filt = LanguageAwareRetrievalFilter(
-            embedding_dim=16, threshold=0.99
-        )
+        filt = LanguageAwareRetrievalFilter(embedding_dim=16, threshold=0.99)
         params = filt.init_params()
 
         class FakeMem:
@@ -447,9 +455,7 @@ class TestLanguageAwareRetrievalFilter:
         """When code_confidence > threshold, code-tagged memories boosted."""
         from core.model.memory_bank import LanguageAwareRetrievalFilter
 
-        filt = LanguageAwareRetrievalFilter(
-            embedding_dim=16, threshold=0.01
-        )
+        filt = LanguageAwareRetrievalFilter(embedding_dim=16, threshold=0.01)
         # Initialize with weights that produce high code_confidence
         rng = np.random.default_rng(42)
         params = filt.init_params(rng)
@@ -469,12 +475,14 @@ class TestLanguageAwareRetrievalFilter:
     def test_auto_init_params(self):
         """If no params set, init_params is called automatically."""
         from core.model.memory_bank import LanguageAwareRetrievalFilter
+
         filt = LanguageAwareRetrievalFilter(embedding_dim=32)
         result = filt.is_code_query(np.zeros(32, dtype=np.float32))
         assert 0.0 <= result <= 1.0
 
     def test_custom_hidden_dim(self):
         from core.model.memory_bank import LanguageAwareRetrievalFilter
+
         filt = LanguageAwareRetrievalFilter(embedding_dim=128, hidden_dim=64)
         params = filt.init_params()
         assert params["w1"].shape == (128, 64)
@@ -485,11 +493,13 @@ class TestLanguageAwareRetrievalFilter:
 # Test: ComputeState.code_confidence
 # =============================================================================
 
+
 class TestComputeStateCodeConfidence:
     """Tests for the new code_confidence field on ComputeState."""
 
     def test_default_code_confidence(self):
-        from core.agi.compute_controller import ComputeState, ModuleType
+        from core.agi.compute_controller import ComputeState
+
         state = ComputeState(
             hidden=jnp.zeros((1, 4, 64)),
             hidden_pooled=jnp.zeros((1, 64)),
@@ -505,6 +515,7 @@ class TestComputeStateCodeConfidence:
 
     def test_custom_code_confidence(self):
         from core.agi.compute_controller import ComputeState
+
         state = ComputeState(
             hidden=jnp.zeros((1, 4, 64)),
             hidden_pooled=jnp.zeros((1, 64)),
@@ -522,6 +533,7 @@ class TestComputeStateCodeConfidence:
     def test_code_confidence_in_tuple(self):
         """Ensure code_confidence is accessible as a tuple field."""
         from core.agi.compute_controller import ComputeState
+
         state = ComputeState(
             hidden=jnp.zeros((1, 4, 64)),
             hidden_pooled=jnp.zeros((1, 64)),
@@ -542,20 +554,21 @@ class TestComputeStateCodeConfidence:
 # Test: ModuleRegistry.get_code_boosted_costs
 # =============================================================================
 
+
 class TestModuleRegistryCodeBoosted:
     """Tests for code-modality routing boost in ModuleRegistry."""
 
     def test_no_boost_below_threshold(self):
-        from core.agi.compute_controller import ModuleRegistry, ModuleType
+        from core.agi.compute_controller import ModuleRegistry
+
         registry = ModuleRegistry()
-        costs = registry.get_code_boosted_costs(
-            code_confidence=0.3, threshold=0.6
-        )
+        costs = registry.get_code_boosted_costs(code_confidence=0.3, threshold=0.6)
         for mt, contract in registry.get_all().items():
             assert costs[mt] == contract.base_cost
 
     def test_boost_above_threshold(self):
         from core.agi.compute_controller import ModuleRegistry, ModuleType
+
         registry = ModuleRegistry()
         costs = registry.get_code_boosted_costs(
             code_confidence=0.8, threshold=0.6, boost_factor=2.0
@@ -571,18 +584,22 @@ class TestModuleRegistryCodeBoosted:
 
     def test_non_code_modules_unchanged(self):
         from core.agi.compute_controller import ModuleRegistry, ModuleType
+
         registry = ModuleRegistry()
-        costs = registry.get_code_boosted_costs(
-            code_confidence=0.9, threshold=0.5
-        )
-        for mt in [ModuleType.QUANTUM_SIMULATION, ModuleType.CREATIVE_GENERATION,
-                   ModuleType.CONSCIOUSNESS, ModuleType.OUTPUT_GENERATION]:
+        costs = registry.get_code_boosted_costs(code_confidence=0.9, threshold=0.5)
+        for mt in [
+            ModuleType.QUANTUM_SIMULATION,
+            ModuleType.CREATIVE_GENERATION,
+            ModuleType.CONSCIOUSNESS,
+            ModuleType.OUTPUT_GENERATION,
+        ]:
             contract = registry.get(mt)
             if contract:
                 assert costs[mt] == contract.base_cost
 
     def test_custom_boost_factor(self):
         from core.agi.compute_controller import ModuleRegistry, ModuleType
+
         registry = ModuleRegistry()
         costs = registry.get_code_boosted_costs(
             code_confidence=0.9, threshold=0.1, boost_factor=3.0
@@ -595,11 +612,13 @@ class TestModuleRegistryCodeBoosted:
 # Test: AGIConfig synthetic data + code routing flags
 # =============================================================================
 
+
 class TestAGIConfigSyntheticCodeRouting:
     """Tests for synthetic data and code routing config flags."""
 
     def test_synthetic_data_defaults(self):
         from config.agi_config import AGIConfig
+
         cfg = AGIConfig()
         assert cfg.enable_synthetic_data is False
         assert cfg.synthetic_data_difficulty_threshold == 0.6
@@ -608,6 +627,7 @@ class TestAGIConfigSyntheticCodeRouting:
 
     def test_synthetic_data_enabled(self):
         from config.agi_config import AGIConfig
+
         cfg = AGIConfig(
             enable_synthetic_data=True,
             synthetic_data_difficulty_threshold=0.5,
@@ -619,6 +639,7 @@ class TestAGIConfigSyntheticCodeRouting:
 
     def test_synthetic_data_invalid_threshold(self):
         from config.agi_config import AGIConfig
+
         with pytest.raises(AssertionError):
             AGIConfig(
                 enable_synthetic_data=True,
@@ -627,6 +648,7 @@ class TestAGIConfigSyntheticCodeRouting:
 
     def test_synthetic_data_invalid_multiplier(self):
         from config.agi_config import AGIConfig
+
         with pytest.raises(AssertionError):
             AGIConfig(
                 enable_synthetic_data=True,
@@ -635,6 +657,7 @@ class TestAGIConfigSyntheticCodeRouting:
 
     def test_code_routing_defaults(self):
         from config.agi_config import AGIConfig
+
         cfg = AGIConfig()
         assert cfg.enable_code_routing is False
         assert cfg.code_routing_threshold == 0.6
@@ -642,6 +665,7 @@ class TestAGIConfigSyntheticCodeRouting:
 
     def test_code_routing_enabled(self):
         from config.agi_config import AGIConfig
+
         cfg = AGIConfig(
             enable_code_routing=True,
             code_routing_threshold=0.7,
@@ -653,6 +677,7 @@ class TestAGIConfigSyntheticCodeRouting:
 
     def test_code_routing_invalid_threshold(self):
         from config.agi_config import AGIConfig
+
         with pytest.raises(AssertionError):
             AGIConfig(
                 enable_code_routing=True,
@@ -661,6 +686,7 @@ class TestAGIConfigSyntheticCodeRouting:
 
     def test_code_routing_invalid_boost(self):
         from config.agi_config import AGIConfig
+
         with pytest.raises(AssertionError):
             AGIConfig(
                 enable_code_routing=True,
@@ -669,6 +695,7 @@ class TestAGIConfigSyntheticCodeRouting:
 
     def test_print_summary_includes_synthetic_code_routing(self, capsys):
         from config.agi_config import AGIConfig
+
         cfg = AGIConfig(
             enable_synthetic_data=True,
             enable_code_routing=True,
@@ -680,6 +707,7 @@ class TestAGIConfigSyntheticCodeRouting:
 
     def test_config_to_dict_includes_synthetic_code_routing(self):
         from config.agi_config import AGIConfig
+
         cfg = AGIConfig(
             enable_synthetic_data=True,
             enable_code_routing=True,
@@ -695,22 +723,27 @@ class TestAGIConfigSyntheticCodeRouting:
 # Test: Code modality tagging in ShardedDataLoader
 # =============================================================================
 
+
 class TestShardedDataLoaderCodeModality:
     """Tests for code modality detection in shard loading."""
 
     def test_load_shard_with_modality(self, tmp_path):
         """Shard with modality=4 should flag _is_code_shard."""
         from safetensors.numpy import save_file
-        
+
         # Create a shard with code modality
         shard_path = tmp_path / "test.safetensors"
-        save_file({
-            "input_ids": np.ones((8, 16), dtype=np.int32),
-            "targets": np.ones((8, 16), dtype=np.int32),
-            "modality": np.array([4, 4, 4, 4, 1, 1, 1, 1], dtype=np.int32),
-        }, str(shard_path))
+        save_file(
+            {
+                "input_ids": np.ones((8, 16), dtype=np.int32),
+                "targets": np.ones((8, 16), dtype=np.int32),
+                "modality": np.array([4, 4, 4, 4, 1, 1, 1, 1], dtype=np.int32),
+            },
+            str(shard_path),
+        )
 
         from train import ShardedDataLoader
+
         loader = ShardedDataLoader(
             data_dir=str(tmp_path),
             batch_size=4,
@@ -723,14 +756,18 @@ class TestShardedDataLoaderCodeModality:
     def test_load_shard_without_modality(self, tmp_path):
         """Shard without modality tensor should not flag code."""
         from safetensors.numpy import save_file
-        
+
         shard_path = tmp_path / "test.safetensors"
-        save_file({
-            "input_ids": np.ones((8, 16), dtype=np.int32),
-            "targets": np.ones((8, 16), dtype=np.int32),
-        }, str(shard_path))
+        save_file(
+            {
+                "input_ids": np.ones((8, 16), dtype=np.int32),
+                "targets": np.ones((8, 16), dtype=np.int32),
+            },
+            str(shard_path),
+        )
 
         from train import ShardedDataLoader
+
         loader = ShardedDataLoader(
             data_dir=str(tmp_path),
             batch_size=4,
@@ -742,15 +779,19 @@ class TestShardedDataLoaderCodeModality:
     def test_batch_code_confidence(self, tmp_path):
         """Batches from code shard should have code_confidence."""
         from safetensors.numpy import save_file
-        
+
         shard_path = tmp_path / "test.safetensors"
-        save_file({
-            "input_ids": np.ones((8, 16), dtype=np.int32),
-            "targets": np.ones((8, 16), dtype=np.int32),
-            "modality": np.array([4, 4, 4, 4, 4, 4, 4, 4], dtype=np.int32),
-        }, str(shard_path))
+        save_file(
+            {
+                "input_ids": np.ones((8, 16), dtype=np.int32),
+                "targets": np.ones((8, 16), dtype=np.int32),
+                "modality": np.array([4, 4, 4, 4, 4, 4, 4, 4], dtype=np.int32),
+            },
+            str(shard_path),
+        )
 
         from train import ShardedDataLoader
+
         loader = ShardedDataLoader(
             data_dir=str(tmp_path),
             batch_size=4,
@@ -758,7 +799,7 @@ class TestShardedDataLoaderCodeModality:
         )
         shard = loader._load_shard(shard_path)
         batches = loader._create_batches_from_shard(shard)
-        
+
         assert len(batches) > 0
         assert "code_confidence" in batches[0]
         assert batches[0]["code_confidence"] == 1.0
@@ -766,14 +807,18 @@ class TestShardedDataLoaderCodeModality:
     def test_batch_no_code_confidence(self, tmp_path):
         """Batches from non-code shard should have code_confidence=0."""
         from safetensors.numpy import save_file
-        
+
         shard_path = tmp_path / "test.safetensors"
-        save_file({
-            "input_ids": np.ones((8, 16), dtype=np.int32),
-            "targets": np.ones((8, 16), dtype=np.int32),
-        }, str(shard_path))
+        save_file(
+            {
+                "input_ids": np.ones((8, 16), dtype=np.int32),
+                "targets": np.ones((8, 16), dtype=np.int32),
+            },
+            str(shard_path),
+        )
 
         from train import ShardedDataLoader
+
         loader = ShardedDataLoader(
             data_dir=str(tmp_path),
             batch_size=4,
@@ -781,7 +826,7 @@ class TestShardedDataLoaderCodeModality:
         )
         shard = loader._load_shard(shard_path)
         batches = loader._create_batches_from_shard(shard)
-        
+
         assert "code_confidence" in batches[0]
         assert batches[0]["code_confidence"] == 0.0
 
@@ -789,6 +834,7 @@ class TestShardedDataLoaderCodeModality:
 # =============================================================================
 # Test: Integration — self-critique wired into RTDLMAGISystem
 # =============================================================================
+
 
 class TestSelfCritiqueIntegration:
     """Integration test: SelfCritiqueModule in the full model forward pass."""
@@ -856,6 +902,7 @@ class TestSelfCritiqueIntegration:
 # =============================================================================
 # Test: SelfCritiqueModule process reward in compute_agi_loss
 # =============================================================================
+
 
 class TestComputeAGILossProcessReward:
     """Tests for process reward loss in compute_agi_loss."""

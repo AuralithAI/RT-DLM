@@ -14,7 +14,7 @@ full execution-based eval, use the official SWE-bench harness.
 
 import logging
 import random
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from core.benchmarks.base_benchmark import BenchmarkBase, BenchmarkSample
 
@@ -94,9 +94,7 @@ class SWEBenchBenchmark(BenchmarkBase):
             )
             return self._lightweight_score(sample, pred_str)
 
-    def _lightweight_score(
-        self, sample: BenchmarkSample, prediction: str
-    ) -> bool:
+    def _lightweight_score(self, sample: BenchmarkSample, prediction: str) -> bool:
         """Heuristic scoring for SWE-bench.
 
         Checks whether the prediction:
@@ -110,16 +108,12 @@ class SWEBenchBenchmark(BenchmarkBase):
 
         # Check basic patch structure
         has_diff = any(
-            marker in prediction
-            for marker in ["diff --git", "---", "+++", "@@", "+", "-"]
+            marker in prediction for marker in ["diff --git", "---", "+++", "@@", "+", "-"]
         )
 
         # Check file references
         target_files = sample.metadata.get("target_files", [])
-        files_referenced = sum(
-            1 for f in target_files
-            if f in prediction
-        )
+        files_referenced = sum(1 for f in target_files if f in prediction)
 
         # Check for key tokens from gold patch (non-trivial lines)
         gold_lines = [
@@ -134,7 +128,8 @@ class SWEBenchBenchmark(BenchmarkBase):
         ]
         if gold_lines:
             matched_lines = sum(
-                1 for line in gold_lines[:10]  # Check first 10 significant lines
+                1
+                for line in gold_lines[:10]  # Check first 10 significant lines
                 if line.lstrip("+-").strip() in prediction
             )
             token_overlap = matched_lines / min(len(gold_lines), 10)
@@ -204,20 +199,22 @@ class SWEBenchBenchmark(BenchmarkBase):
             # Category is the repo
             category = repo.split("/")[-1] if "/" in repo else repo
 
-            samples.append(BenchmarkSample(
-                sample_id=instance_id,
-                prompt=prompt,
-                choices=None,
-                correct_answer=gold_patch,
-                category=category,
-                metadata={
-                    "repo": repo,
-                    "base_commit": base_commit,
-                    "gold_patch": gold_patch,
-                    "target_files": target_files,
-                    "instance_id": instance_id,
-                },
-            ))
+            samples.append(
+                BenchmarkSample(
+                    sample_id=instance_id,
+                    prompt=prompt,
+                    choices=None,
+                    correct_answer=gold_patch,
+                    category=category,
+                    metadata={
+                        "repo": repo,
+                        "base_commit": base_commit,
+                        "gold_patch": gold_patch,
+                        "target_files": target_files,
+                        "instance_id": instance_id,
+                    },
+                )
+            )
 
         return samples
 
@@ -315,8 +312,7 @@ class SWEBenchBenchmark(BenchmarkBase):
             {
                 "repo": "requests/requests",
                 "issue": (
-                    "Session.send() does not properly handle redirect "
-                    "with fragment in URL."
+                    "Session.send() does not properly handle redirect " "with fragment in URL."
                 ),
                 "patch": (
                     "diff --git a/requests/sessions.py b/requests/sessions.py\n"
@@ -343,19 +339,21 @@ class SWEBenchBenchmark(BenchmarkBase):
                 f"Generate a patch (unified diff format) that resolves this issue:"
             )
 
-            samples.append(BenchmarkSample(
-                sample_id=f"swe_synth_{i}",
-                prompt=prompt,
-                choices=None,
-                correct_answer=issue["patch"],
-                category=issue["repo"].split("/")[-1],
-                metadata={
-                    "synthetic": True,
-                    "repo": issue["repo"],
-                    "gold_patch": issue["patch"],
-                    "target_files": issue["files"],
-                },
-            ))
+            samples.append(
+                BenchmarkSample(
+                    sample_id=f"swe_synth_{i}",
+                    prompt=prompt,
+                    choices=None,
+                    correct_answer=issue["patch"],
+                    category=issue["repo"].split("/")[-1],
+                    metadata={
+                        "synthetic": True,
+                        "repo": issue["repo"],
+                        "gold_patch": issue["patch"],
+                        "target_files": issue["files"],
+                    },
+                )
+            )
 
         logger.info(f"Generated {len(samples)} synthetic SWE-bench samples")
         self._samples = samples

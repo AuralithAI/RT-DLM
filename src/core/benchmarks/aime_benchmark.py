@@ -10,7 +10,7 @@ Target: AIME 2024 and 2025 problem sets.
 
 import logging
 import random
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, List, Optional
 
 from core.benchmarks.base_benchmark import BenchmarkBase, BenchmarkSample
 
@@ -110,8 +110,7 @@ class AIMEBenchmark(BenchmarkBase):
             logger.info(f"Loaded AIME dataset: {len(ds)} problems")
         except Exception as e:
             logger.warning(
-                f"Could not load AIME from HuggingFace: {e}. "
-                f"Using synthetic fallback data."
+                f"Could not load AIME from HuggingFace: {e}. " f"Using synthetic fallback data."
             )
             return self._synthetic_fallback()
 
@@ -122,16 +121,8 @@ class AIMEBenchmark(BenchmarkBase):
                 break
 
             # Try common column names
-            problem = (
-                row.get("problem", "")
-                or row.get("question", "")
-                or row.get("Problem", "")
-            )
-            answer = (
-                row.get("answer", "")
-                or row.get("Answer", "")
-                or row.get("solution", "")
-            )
+            problem = row.get("problem", "") or row.get("question", "") or row.get("Problem", "")
+            answer = row.get("answer", "") or row.get("Answer", "") or row.get("solution", "")
             year = row.get("year", row.get("Year", None))
 
             # Filter by year if specified
@@ -152,18 +143,20 @@ class AIMEBenchmark(BenchmarkBase):
 
             category = f"aime_{year}" if year else "aime"
 
-            samples.append(BenchmarkSample(
-                sample_id=f"aime_{idx}",
-                prompt=prompt,
-                choices=None,  # Open-ended (integer answer)
-                correct_answer=str(answer).strip(),
-                category=category,
-                metadata={
-                    "year": year,
-                    "problem_number": row.get("problem_number", idx + 1),
-                    "index": idx,
-                },
-            ))
+            samples.append(
+                BenchmarkSample(
+                    sample_id=f"aime_{idx}",
+                    prompt=prompt,
+                    choices=None,  # Open-ended (integer answer)
+                    correct_answer=str(answer).strip(),
+                    category=category,
+                    metadata={
+                        "year": year,
+                        "problem_number": row.get("problem_number", idx + 1),
+                        "index": idx,
+                    },
+                )
+            )
 
         logger.info(f"Prepared {len(samples)} AIME problems")
         self._samples = samples
@@ -194,8 +187,7 @@ class AIMEBenchmark(BenchmarkBase):
                 "533",
             ),
             (
-                "If the sum of the first n positive integers is 5050, "
-                "find n.",
+                "If the sum of the first n positive integers is 5050, " "find n.",
                 "100",
             ),
             (
@@ -208,8 +200,7 @@ class AIMEBenchmark(BenchmarkBase):
                 "56",
             ),
             (
-                "Let f(x) = x³ - 3x + 1. How many real roots does "
-                "f have?",
+                "Let f(x) = x³ - 3x + 1. How many real roots does " "f have?",
                 "3",
             ),
             (
@@ -222,8 +213,7 @@ class AIMEBenchmark(BenchmarkBase):
                 "12",
             ),
             (
-                "Find the number of lattice points (x,y) with "
-                "x² + y² ≤ 25.",
+                "Find the number of lattice points (x,y) with " "x² + y² ≤ 25.",
                 "81",
             ),
             (
@@ -260,17 +250,19 @@ class AIMEBenchmark(BenchmarkBase):
                 f"Answer (integer only):"
             )
 
-            samples.append(BenchmarkSample(
-                sample_id=f"aime_synth_{rank}",
-                prompt=prompt,
-                choices=None,
-                correct_answer=answer,
-                category="aime_synthetic",
-                metadata={
-                    "synthetic": True,
-                    "original_index": orig_idx,
-                },
-            ))
+            samples.append(
+                BenchmarkSample(
+                    sample_id=f"aime_synth_{rank}",
+                    prompt=prompt,
+                    choices=None,
+                    correct_answer=answer,
+                    category="aime_synthetic",
+                    metadata={
+                        "synthetic": True,
+                        "original_index": orig_idx,
+                    },
+                )
+            )
 
         logger.info(f"Generated {len(samples)} synthetic AIME problems")
         self._samples = samples

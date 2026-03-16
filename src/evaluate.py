@@ -25,9 +25,7 @@ Hub (requires the `datasets` package).
 
 import argparse
 import logging
-import os
 import sys
-import time
 from pathlib import Path
 
 # ── path setup (same pattern as train.py) ──────────────────────
@@ -50,20 +48,15 @@ logging.basicConfig(
 logger = logging.getLogger("evaluate")
 
 # ── lazy imports (after path is set up) ────────────────────────
-from core.benchmarks.run_eval import (       # noqa: E402
+from core.benchmarks.run_eval import (  # noqa: E402
     BENCHMARK_REGISTRY,
-    THINK_BUDGET_PRESETS,
-    build_model_fn,
-    build_parser as _build_inner_parser,
     run_evaluation,
-    print_rich_summary,
 )
-from config.agi_config import AGIConfig      # noqa: E402
-
 
 # ──────────────────────────────────────────────────────────────
 # CLI
 # ──────────────────────────────────────────────────────────────
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser.
@@ -100,8 +93,7 @@ Examples
         nargs="+",
         default=["gpqa"],
         choices=list(BENCHMARK_REGISTRY.keys()) + ["all"],
-        help="Benchmarks to run.  Use 'all' to run every registered benchmark.  "
-             "(default: gpqa)",
+        help="Benchmarks to run.  Use 'all' to run every registered benchmark.  " "(default: gpqa)",
     )
 
     # ── checkpoint & model ─────────────────────────────────────
@@ -110,7 +102,7 @@ Examples
         type=str,
         default=None,
         help="Path to a model checkpoint directory.  "
-             "If omitted, a randomly-initialised model is used.",
+        "If omitted, a randomly-initialised model is used.",
     )
 
     # ── sampling / budget ──────────────────────────────────────
@@ -125,8 +117,8 @@ Examples
         type=str,
         default=None,
         help="Thinking-token budget.  "
-             "Presets: low (256), medium (1024), high (4096), max (8192), "
-             "or pass an integer.",
+        "Presets: low (256), medium (1024), high (4096), max (8192), "
+        "or pass an integer.",
     )
 
     # ── data source ────────────────────────────────────────────
@@ -134,8 +126,8 @@ Examples
         "--use-huggingface",
         action="store_true",
         help="Download benchmark datasets from HuggingFace Hub.  "
-             "Requires the 'datasets' package.  "
-             "Default: use built-in curated problems (no network).",
+        "Requires the 'datasets' package.  "
+        "Default: use built-in curated problems (no network).",
     )
     parser.add_argument(
         "--data-dir",
@@ -174,7 +166,8 @@ Examples
         help="Random seed (default: 42).",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Print per-sample predictions.",
     )
@@ -185,6 +178,7 @@ Examples
 # ──────────────────────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     """Entry point — parse args, run benchmarks, report results."""
@@ -212,12 +206,8 @@ def main() -> None:
         sys.exit(1)
 
     # ── summary ────────────────────────────────────────────────
-    total_correct = sum(
-        r.num_correct for r in results.values() if hasattr(r, "num_correct")
-    )
-    total_samples = sum(
-        r.num_total for r in results.values() if hasattr(r, "num_total")
-    )
+    total_correct = sum(r.num_correct for r in results.values() if hasattr(r, "num_correct"))
+    total_samples = sum(r.num_total for r in results.values() if hasattr(r, "num_total"))
     overall_acc = total_correct / total_samples if total_samples > 0 else 0.0
 
     logger.info("-" * 60)

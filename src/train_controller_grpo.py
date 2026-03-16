@@ -23,9 +23,7 @@ References:
 """
 
 import argparse
-import json
 import logging
-import os
 import sys
 import time
 from dataclasses import dataclass, field
@@ -54,7 +52,6 @@ from src.core.agi.compute_controller import (
     compute_grpo_advantages,
     compute_grpo_loss,
 )
-from src.core.checkpoint_manager import CheckpointManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,21 +65,24 @@ logger = logging.getLogger(__name__)
 # Trajectory / Rollout data structures
 # =========================================================================
 
+
 @dataclass
 class Trajectory:
     """Single forward-pass trajectory through the controller."""
-    hidden_states: jnp.ndarray        # Final pooled hidden [d_model]
-    log_prob: float                     # Log-probability of the controller's actions
-    reward: float                       # Scalar reward for this trajectory
-    modules_called: List[ModuleType]    # Which modules were selected
-    steps_taken: int                    # How many controller steps ran
-    budget_used: float                  # Fraction of budget consumed
+
+    hidden_states: jnp.ndarray  # Final pooled hidden [d_model]
+    log_prob: float  # Log-probability of the controller's actions
+    reward: float  # Scalar reward for this trajectory
+    modules_called: List[ModuleType]  # Which modules were selected
+    steps_taken: int  # How many controller steps ran
+    budget_used: float  # Fraction of budget consumed
     value_estimate: Optional[float] = None  # Value head prediction
 
 
 @dataclass
 class TrajectoryGroup:
     """Group of K trajectories for a single prompt — for GRPO advantage computation."""
+
     prompt_id: int
     trajectories: List[Trajectory] = field(default_factory=list)
 
@@ -91,10 +91,11 @@ class TrajectoryGroup:
 # Reward computation
 # =========================================================================
 
+
 class RewardComputer:
     """
     Computes per-trajectory rewards for GRPO training.
-    
+
     Reward components:
       +1.0  correct answer (self-consistency voting proxy)
       +0.6  efficiency (budget < 60% used)
@@ -126,7 +127,7 @@ class RewardComputer:
     ) -> float:
         """
         Compute reward for a single trajectory.
-        
+
         When no ground truth is available, uses self-consistency:
         the majority-vote answer across the group serves as a proxy label.
         """
@@ -135,25 +136,26 @@ class RewardComputer:
         # Correctness (via self-consistency against group majority)
         if majority_answer is not None and answer is not None:
             # Cosine similarity between trajectory answer and majority
-            sim = float(jnp.sum(answer * majority_answer) / (
-                jnp.linalg.norm(answer) * jnp.linalg.norm(majority_answer) + 1e-8
-            ))
+            sim = float(
+                jnp.sum(answer * majority_answer)
+                / (jnp.linalg.norm(answer) * jnp.linalg.norm(majority_answer) + 1e-8)
+            )
             if sim > 0.9:
                 reward += self.correctness_weight
                 # Confidence bonus
                 if trajectory.value_estimate is not None:
                     if trajectory.value_estimate > self.confidence_threshold:
                         reward += self.confidence_bonus
-        
+
         # Efficiency: reward using less than threshold of budget
         if trajectory.budget_used < self.efficiency_threshold:
             reward += self.efficiency_weight
-        
+
         # Penalty for excessive module calls (> 3 unique modules is wasteful)
         unique_modules = len(set(trajectory.modules_called))
         if unique_modules > 3:
             reward += self.unnecessary_penalty * (unique_modules - 3)
-        
+
         return reward
 
 
@@ -161,14 +163,15 @@ class RewardComputer:
 # GRPO Trainer
 # =========================================================================
 
+
 class GRPOTrainer:
     """
     GRPO (Group Relative Policy Optimization) Trainer for ComputeController.
-    
+
     Generates diverse controller trajectories via temperature-scaled sampling,
     computes group-relative advantages, and updates the controller policy
     using the PPO clipped surrogate objective.
-    
+
     Args:
         config: AGIConfig with GRPO settings
         num_groups: Number of prompt groups per batch (G)
@@ -278,15 +281,15 @@ class GRPOTrainer:
     ) -> List[TrajectoryGroup]:
         """
         Sample G groups × K trajectories for GRPO.
-        
+
         Each group uses the same prompt (same hidden input), but different
         RNG keys produce diverse controller decisions.
-        
+
         Args:
             params: Haiku parameters
             rng: JAX PRNGKey
             batch_hidden: Input hidden states [batch, seq_len, d_model]
-            
+
         Returns:
             List of TrajectoryGroup, one per prompt in the batch
         """
@@ -296,19 +299,17 @@ class GRPOTrainer:
 
         for prompt_idx in range(num_prompts):
             group = TrajectoryGroup(prompt_id=prompt_idx)
-            prompt_hidden = batch_hidden[prompt_idx: prompt_idx + 1]  # [1, seq, d]
+            prompt_hidden = batch_hidden[prompt_idx : prompt_idx + 1]  # [1, seq, d]
 
             answers = []
             for _ in range(self.group_size):
                 rng, sub_rng = jax.random.split(rng)
-                result = self.controller_fn.apply(
-                    params, sub_rng, prompt_hidden, is_training=True
-                )
+                result = self.controller_fn.apply(params, sub_rng, prompt_hidden, is_training=True)
 
                 traj = Trajectory(
                     hidden_states=result["hidden_pooled"][0],
                     log_prob=0.0,  # Placeholder — computed during loss
-                    reward=0.0,   # Computed below
+                    reward=0.0,  # Computed below
                     modules_called=[],
                     steps_taken=result["trace"].get("final_step", 1),
                     budget_used=result["trace"].get("total_cost", 0.5),
@@ -339,7 +340,7 @@ class GRPOTrainer:
     ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         """
         Extract rewards, values, and compute GRPO advantages from trajectory groups.
-        
+
         Returns:
             advantages: [total_trajectories]
             returns: [total_trajectories]
@@ -376,17 +377,17 @@ class GRPOTrainer:
     ) -> Tuple[Any, Any, Dict[str, float]]:
         """
         Single GRPO training step.
-        
+
         1. Sample trajectories with current policy
         2. Compute group-relative advantages
         3. Compute GRPO loss and update parameters
-        
+
         Args:
             params: Current Haiku parameters
             opt_state: Current optimizer state
             rng: JAX PRNGKey
             batch_hidden: Input hidden states [batch, seq_len, d_model]
-            
+
         Returns:
             updated_params: New parameters
             updated_opt_state: New optimizer state
@@ -429,10 +430,10 @@ class GRPOTrainer:
                 for _ in range(self.group_size):
                     rng_inner, sub = jax.random.split(rng_inner)
                     result = self.controller_fn.apply(
-                        p, sub, batch_hidden[i:i+1], is_training=True
+                        p, sub, batch_hidden[i : i + 1], is_training=True
                     )
                     values_pred.append(result["value"][0, 0])
-            
+
             values_pred = jnp.stack(values_pred[:total_traj])
             v_loss = 0.5 * jnp.mean((values_pred - returns) ** 2)
             return v_loss
@@ -442,9 +443,7 @@ class GRPOTrainer:
         new_params = optax.apply_updates(params, updates)
 
         # Collect metrics
-        mean_reward = float(jnp.mean(jnp.array([
-            t.reward for g in groups for t in g.trajectories
-        ])))
+        mean_reward = float(jnp.mean(jnp.array([t.reward for g in groups for t in g.trajectories])))
         mean_advantage = float(jnp.mean(advantages))
         mean_value = float(jnp.mean(old_values))
 
@@ -458,12 +457,10 @@ class GRPOTrainer:
             "mean_advantage": mean_advantage,
             "mean_value": mean_value,
             "num_trajectories": total_traj,
-            "mean_steps": float(np.mean([
-                t.steps_taken for g in groups for t in g.trajectories
-            ])),
-            "mean_budget_used": float(np.mean([
-                t.budget_used for g in groups for t in g.trajectories
-            ])),
+            "mean_steps": float(np.mean([t.steps_taken for g in groups for t in g.trajectories])),
+            "mean_budget_used": float(
+                np.mean([t.budget_used for g in groups for t in g.trajectories])
+            ),
         }
 
         return new_params, new_opt_state, metrics
@@ -472,6 +469,7 @@ class GRPOTrainer:
 # =========================================================================
 # CLI Entry Point
 # =========================================================================
+
 
 def create_dummy_batch(
     batch_size: int,
@@ -484,9 +482,7 @@ def create_dummy_batch(
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="GRPO Training for ComputeController"
-    )
+    parser = argparse.ArgumentParser(description="GRPO Training for ComputeController")
     parser.add_argument(
         "--checkpoint",
         type=str,
@@ -590,9 +586,7 @@ def main():
         rng, step_rng, batch_rng = jax.random.split(rng, 3)
         batch = create_dummy_batch(args.batch_size, 16, config.d_model, batch_rng)
 
-        params, opt_state, metrics = trainer.grpo_train_step(
-            params, opt_state, step_rng, batch
-        )
+        params, opt_state, metrics = trainer.grpo_train_step(params, opt_state, step_rng, batch)
 
         if metrics["mean_reward"] > best_reward:
             best_reward = metrics["mean_reward"]

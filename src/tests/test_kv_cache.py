@@ -21,14 +21,13 @@ import numpy as np
 from src.config.agi_config import AGIConfig
 from src.core.model.advanced_attention import (
     KVPrefixCache,
-    AttentionConfig,
     estimate_kv_cache_size,
 )
-
 
 # =============================================================================
 # Basic Cache Operations
 # =============================================================================
+
 
 class TestKVPrefixCacheBasic:
     """Tests for basic KV Prefix Cache operations."""
@@ -118,10 +117,8 @@ class TestKVPrefixCacheBasic:
             rk, rv = cache.get("prefix_a", layer=layer)
             assert rk is not None
             # Check the values scale correctly
-            expected = (layer + 1)
-            np.testing.assert_allclose(
-                float(rk.mean()), expected, atol=0.1
-            )
+            expected = layer + 1
+            np.testing.assert_allclose(float(rk.mean()), expected, atol=0.1)
 
     def test_multiple_prefixes(self, cache, sample_kv):
         """Test storing multiple different prefixes."""
@@ -174,6 +171,7 @@ class TestKVPrefixCacheBasic:
 # =============================================================================
 # Cache Eviction Tests
 # =============================================================================
+
 
 class TestKVPrefixCacheEviction:
     """Tests for cache eviction policies."""
@@ -290,6 +288,7 @@ class TestKVPrefixCacheEviction:
 # Cache Management Tests
 # =============================================================================
 
+
 class TestKVPrefixCacheManagement:
     """Tests for cache invalidation, clearing, and stats."""
 
@@ -352,8 +351,7 @@ class TestKVPrefixCacheManagement:
     def test_is_full(self):
         """Test is_full property."""
         cache = KVPrefixCache(
-            num_layers=1, max_prefix_len=4,
-            num_kv_heads=1, head_dim=4, max_entries=2
+            num_layers=1, max_prefix_len=4, num_kv_heads=1, head_dim=4, max_entries=2
         )
         k = jnp.ones((1, 1, 4, 4))
         v = jnp.ones((1, 1, 4, 4))
@@ -367,9 +365,12 @@ class TestKVPrefixCacheManagement:
     def test_float32_dtype(self):
         """Test cache with float32 dtype."""
         cache = KVPrefixCache(
-            num_layers=1, max_prefix_len=8,
-            num_kv_heads=2, head_dim=4,
-            max_entries=4, dtype=jnp.float32,
+            num_layers=1,
+            max_prefix_len=8,
+            num_kv_heads=2,
+            head_dim=4,
+            max_entries=4,
+            dtype=jnp.float32,
         )
 
         k = jnp.ones((1, 2, 4, 4))
@@ -382,8 +383,11 @@ class TestKVPrefixCacheManagement:
     def test_seq_axis_1_format(self):
         """Test with [batch, seq_len, num_kv_heads, head_dim] format."""
         cache = KVPrefixCache(
-            num_layers=1, max_prefix_len=8,
-            num_kv_heads=4, head_dim=8, max_entries=4,
+            num_layers=1,
+            max_prefix_len=8,
+            num_kv_heads=4,
+            head_dim=8,
+            max_entries=4,
         )
 
         # This format has seq as axis 1
@@ -399,6 +403,7 @@ class TestKVPrefixCacheManagement:
 # =============================================================================
 # Integration Tests
 # =============================================================================
+
 
 class TestKVCacheIntegration:
     """Integration tests combining KV cache with config and attention."""
@@ -428,7 +433,7 @@ class TestKVCacheIntegration:
             num_heads=8,
         )
 
-        num_kv_heads = getattr(config, 'num_kv_heads', None) or config.num_heads
+        num_kv_heads = getattr(config, "num_kv_heads", None) or config.num_heads
         head_dim = config.d_model // config.num_heads
 
         cache = KVPrefixCache(
@@ -485,12 +490,8 @@ class TestKVCacheIntegration:
                 assert cached_k is not None
 
                 # New tokens for this request
-                new_k = jax.random.normal(
-                    jax.random.PRNGKey(100 + req_id), (1, 4, 8, 16)
-                )
-                new_v = jax.random.normal(
-                    jax.random.PRNGKey(200 + req_id), (1, 4, 8, 16)
-                )
+                new_k = jax.random.normal(jax.random.PRNGKey(100 + req_id), (1, 4, 8, 16))
+                new_v = jax.random.normal(jax.random.PRNGKey(200 + req_id), (1, 4, 8, 16))
 
                 # Concatenate cached prefix with new tokens
                 full_k = jnp.concatenate([cached_k, new_k], axis=2)

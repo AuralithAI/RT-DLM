@@ -28,10 +28,10 @@ from src.core.agi.compute_controller import (
     ControllerRewardShaper,
 )
 
-
 # =============================================================================
 # GRPOValueHead Tests
 # =============================================================================
+
 
 class TestGRPOValueHead:
     """Tests for the GRPO Value Head module."""
@@ -46,9 +46,11 @@ class TestGRPOValueHead:
 
     def _build_value_head_fn(self, d_model, dropout_rate=0.0):
         """Build a Haiku-transformed GRPOValueHead."""
+
         def _fn(hidden, is_training=True):
             head = GRPOValueHead(d_model=d_model, dropout_rate=dropout_rate)
             return head(hidden, is_training=is_training)
+
         return hk.transform(_fn)
 
     def test_value_head_2d_input(self, d_model, rng):
@@ -141,7 +143,7 @@ class TestGRPOValueHead:
 
         def loss_fn(params):
             values = fn.apply(params, rng, hidden, is_training=True)
-            return jnp.mean(values ** 2)
+            return jnp.mean(values**2)
 
         grads = jax.grad(loss_fn)(params)
         grad_norms = jax.tree.map(lambda g: jnp.linalg.norm(g), grads)
@@ -165,6 +167,7 @@ class TestGRPOValueHead:
 # compute_grpo_advantages Tests
 # =============================================================================
 
+
 class TestGRPOAdvantages:
     """Tests for group-relative advantage computation."""
 
@@ -179,9 +182,7 @@ class TestGRPOAdvantages:
     def test_advantages_sum_to_zero_per_group(self):
         """Test that unnormalized advantages sum to ~0 within each group."""
         rewards = jnp.array([1.0, 0.5, 0.8, 0.2, 0.9, 0.3])
-        advantages, _ = compute_grpo_advantages(
-            rewards, group_size=2, normalize=False
-        )
+        advantages, _ = compute_grpo_advantages(rewards, group_size=2, normalize=False)
 
         # Reshape to groups and check sums
         grouped = advantages.reshape(-1, 2)
@@ -192,9 +193,7 @@ class TestGRPOAdvantages:
     def test_advantages_positive_for_best_in_group(self):
         """Test that the best response in each group gets positive advantage."""
         rewards = jnp.array([0.9, 0.1, 0.3, 0.7])  # 2 groups of 2
-        advantages, _ = compute_grpo_advantages(
-            rewards, group_size=2, normalize=False
-        )
+        advantages, _ = compute_grpo_advantages(rewards, group_size=2, normalize=False)
 
         # Group 1: response 0 should be positive (0.9 > 0.1)
         assert advantages[0] > 0
@@ -206,9 +205,7 @@ class TestGRPOAdvantages:
     def test_normalized_advantages(self):
         """Test that normalized advantages have unit-ish variance per group."""
         rewards = jnp.array([2.0, 1.0, 0.5, -0.5, 3.0, 0.0, 1.0, 2.0])
-        advantages, _ = compute_grpo_advantages(
-            rewards, group_size=4, normalize=True
-        )
+        advantages, _ = compute_grpo_advantages(rewards, group_size=4, normalize=True)
 
         # Normalized advantages should have controlled magnitude
         assert jnp.all(jnp.isfinite(advantages))
@@ -238,9 +235,7 @@ class TestGRPOAdvantages:
     def test_identical_rewards_zero_advantages(self):
         """Test that identical rewards in a group produce zero advantages."""
         rewards = jnp.array([1.0, 1.0, 1.0, 1.0])
-        advantages, _ = compute_grpo_advantages(
-            rewards, group_size=4, normalize=False
-        )
+        advantages, _ = compute_grpo_advantages(rewards, group_size=4, normalize=False)
 
         np.testing.assert_allclose(advantages, 0.0, atol=1e-6)
 
@@ -257,6 +252,7 @@ class TestGRPOAdvantages:
 # =============================================================================
 # compute_grpo_loss Tests
 # =============================================================================
+
 
 class TestGRPOLoss:
     """Tests for the GRPO loss computation."""
@@ -292,8 +288,14 @@ class TestGRPOLoss:
         _, components = compute_grpo_loss(**batch_data)
 
         expected_keys = [
-            "policy_loss", "value_loss", "entropy", "kl_divergence",
-            "total_grpo_loss", "mean_ratio", "mean_advantage", "clip_fraction"
+            "policy_loss",
+            "value_loss",
+            "entropy",
+            "kl_divergence",
+            "total_grpo_loss",
+            "mean_ratio",
+            "mean_advantage",
+            "clip_fraction",
         ]
         for key in expected_keys:
             assert key in components, f"Missing component: {key}"
@@ -320,13 +322,9 @@ class TestGRPOLoss:
         values = jnp.zeros(batch_size)
         returns = jnp.zeros(batch_size)
 
-        _, components = compute_grpo_loss(
-            log_probs, old_log_probs, advantages, values, returns
-        )
+        _, components = compute_grpo_loss(log_probs, old_log_probs, advantages, values, returns)
 
-        np.testing.assert_allclose(
-            float(components["policy_loss"]), 0.0, atol=1e-6
-        )
+        np.testing.assert_allclose(float(components["policy_loss"]), 0.0, atol=1e-6)
 
     def test_clip_fraction_in_range(self, batch_data):
         """Test that clip fraction is between 0 and 1."""
@@ -357,6 +355,7 @@ class TestGRPOLoss:
 
     def test_loss_gradient_flows(self, batch_data):
         """Test that loss is differentiable w.r.t. log_probs and values."""
+
         def loss_fn(log_probs, values):
             total, _ = compute_grpo_loss(
                 log_probs=log_probs,
@@ -367,9 +366,7 @@ class TestGRPOLoss:
             )
             return total
 
-        grads = jax.grad(loss_fn, argnums=(0, 1))(
-            batch_data["log_probs"], batch_data["values"]
-        )
+        grads = jax.grad(loss_fn, argnums=(0, 1))(batch_data["log_probs"], batch_data["values"])
 
         for i, g in enumerate(grads):
             assert jnp.all(jnp.isfinite(g)), f"Non-finite gradient at index {i}"
@@ -383,18 +380,15 @@ class TestGRPOLoss:
         values = jnp.zeros(batch_size)
         returns = jnp.zeros(batch_size)
 
-        _, components = compute_grpo_loss(
-            log_probs, old_log_probs, advantages, values, returns
-        )
+        _, components = compute_grpo_loss(log_probs, old_log_probs, advantages, values, returns)
 
-        np.testing.assert_allclose(
-            float(components["mean_ratio"]), 1.0, atol=1e-5
-        )
+        np.testing.assert_allclose(float(components["mean_ratio"]), 1.0, atol=1e-5)
 
 
 # =============================================================================
 # AGIConfig GRPO Settings Tests
 # =============================================================================
+
 
 class TestAGIConfigGRPO:
     """Tests for GRPO-related AGIConfig settings."""
@@ -476,6 +470,7 @@ class TestAGIConfigGRPO:
 # ControllerRewardShaper Tests
 # =============================================================================
 
+
 class TestControllerRewardShaper:
     """Tests for reward shaping utilities."""
 
@@ -491,14 +486,14 @@ class TestControllerRewardShaper:
             budget_remaining=0.8,
             step=0,
             modules_called=[],
-            module_outputs=[]
+            module_outputs=[],
         )
         output = ModuleOutput(
             hidden_delta=jnp.zeros((1, 64)),
             confidence=jnp.array([[0.7]]),
             uncertainty=jnp.array([[0.3]]),
             actual_cost=0.05,
-            suggests_halt=False
+            suggests_halt=False,
         )
 
         reward = shaper.compute_step_reward(state, output, 0.05)

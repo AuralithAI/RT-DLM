@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from test_model import EmbeddingLayer
 
+
 def test_embedding():
     vocab_size = 32000
     d_model = 512
@@ -21,15 +22,18 @@ def test_embedding():
     """
     This function initializes the EmbeddingLayer and applies it to the input token_ids.
     """
+
     def forward_fn(token_ids):
         embedding_layer = EmbeddingLayer(vocab_size, d_model, max_seq_length)
         return embedding_layer(token_ids, seq_length=token_ids.shape[1])
 
-    model = hk.transform(forward_fn)   # So here we wrap the feedforward function in a Haiku transform.
+    model = hk.transform(
+        forward_fn
+    )  # So here we wrap the feedforward function in a Haiku transform.
 
     # Example inputs
-    inputs = jnp.array([[1, 2, 3], [4, 5, 6]])  
-    rng = jax.random.PRNGKey(42) 
+    inputs = jnp.array([[1, 2, 3], [4, 5, 6]])
+    rng = jax.random.PRNGKey(42)
 
     # Initialize the model
     params = model.init(rng, inputs)

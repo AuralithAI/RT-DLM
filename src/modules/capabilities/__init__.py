@@ -20,13 +20,11 @@ Utility Functions:
 from .comprehension_modules import (
     # Main module
     SemanticParser,
-    
     # Core components
     GraphAttentionLayer,
     ConceptualGraphBuilder,
     KnowledgeExtractor,
     MultiHopReasoner,
-    
     # Utility functions
     create_semantic_parser_fn,
     compute_graph_accuracy,
@@ -36,16 +34,13 @@ from .comprehension_modules import (
 __all__ = [
     # Main module
     "SemanticParser",
-    
     # Core components
     "GraphAttentionLayer",
     "ConceptualGraphBuilder",
     "KnowledgeExtractor",
     "MultiHopReasoner",
-    
     # Utility functions
     "create_semantic_parser_fn",
     "compute_graph_accuracy",
     "compute_knowledge_extraction_loss",
 ]
-

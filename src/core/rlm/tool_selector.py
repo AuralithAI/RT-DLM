@@ -28,33 +28,41 @@ class ToolSelector(hk.Module):
         self.d_model = d_model
         self.num_tools = num_tools
 
-        self.query_encoder = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(d_model),
-            hk.LayerNorm(axis=-1, create_scale=True, create_offset=True),
-        ])
+        self.query_encoder = hk.Sequential(
+            [
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(d_model),
+                hk.LayerNorm(axis=-1, create_scale=True, create_offset=True),
+            ]
+        )
 
-        self.context_encoder = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(d_model),
-            hk.LayerNorm(axis=-1, create_scale=True, create_offset=True),
-        ])
+        self.context_encoder = hk.Sequential(
+            [
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(d_model),
+                hk.LayerNorm(axis=-1, create_scale=True, create_offset=True),
+            ]
+        )
 
-        self.state_encoder = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(d_model),
-        ])
+        self.state_encoder = hk.Sequential(
+            [
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(d_model),
+            ]
+        )
 
-        self.tool_classifier = hk.Sequential([
-            hk.Linear(d_model * 2),
-            jax.nn.silu,
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(num_tools),
-        ])
+        self.tool_classifier = hk.Sequential(
+            [
+                hk.Linear(d_model * 2),
+                jax.nn.silu,
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(num_tools),
+            ]
+        )
 
         self.parameter_heads = {
             "peek_start": hk.Linear(1),
@@ -64,12 +72,14 @@ class ToolSelector(hk.Module):
             "summarize_length": hk.Linear(1),
         }
 
-        self.termination_head = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(1),
-            jax.nn.sigmoid,
-        ])
+        self.termination_head = hk.Sequential(
+            [
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(1),
+                jax.nn.sigmoid,
+            ]
+        )
 
     def __call__(
         self,
@@ -91,9 +101,9 @@ class ToolSelector(hk.Module):
         if tool_history is not None:
             if tool_history.ndim == 3:
                 tool_history = tool_history.mean(axis=1)
-            combined = jnp.concatenate([
-                encoded_query, encoded_context, encoded_state, tool_history
-            ], axis=-1)
+            combined = jnp.concatenate(
+                [encoded_query, encoded_context, encoded_state, tool_history], axis=-1
+            )
             projection = hk.Linear(self.d_model * 2)
             combined = projection(combined)
         else:
@@ -167,7 +177,9 @@ class ToolSelector(hk.Module):
 
         if tool == ToolType.PEEK:
             params["start"] = max(0, int(parameters["peek_start"].squeeze() * 10000))
-            params["length"] = max(100, int(jax.nn.sigmoid(parameters["peek_length"].squeeze()) * 4000))
+            params["length"] = max(
+                100, int(jax.nn.sigmoid(parameters["peek_length"].squeeze()) * 4000)
+            )
 
         elif tool == ToolType.GREP:
             params["regex"] = bool(jax.nn.sigmoid(parameters["grep_regex"].squeeze()) > 0.5)
@@ -179,7 +191,9 @@ class ToolSelector(hk.Module):
             params["strategy"] = strategies[min(strategy_idx, len(strategies) - 1)]
 
         elif tool == ToolType.SUMMARIZE:
-            params["max_tokens"] = max(100, int(jax.nn.sigmoid(parameters["summarize_length"].squeeze()) * 1000))
+            params["max_tokens"] = max(
+                100, int(jax.nn.sigmoid(parameters["summarize_length"].squeeze()) * 1000)
+            )
 
         return params
 
@@ -224,7 +238,9 @@ class ToolSelectorWrapper:
         def forward_and_select(query, context_metadata, recursion_state):
             selector = ToolSelector(self.d_model)
             tool_probs, term_prob, parameters = selector(
-                query, context_metadata, recursion_state,
+                query,
+                context_metadata,
+                recursion_state,
                 temperature=self.config.tool_temperature,
             )
             return tool_probs, term_prob, parameters
@@ -237,8 +253,7 @@ class ToolSelectorWrapper:
         def select_fn(tool_probs, term_prob, parameters):
             selector = ToolSelector(self.d_model)
             return selector.select_tool(
-                tool_probs, term_prob, parameters,
-                self.config.available_tools, deterministic
+                tool_probs, term_prob, parameters, self.config.available_tools, deterministic
             )
 
         return select_fn(tool_probs, term_prob, parameters)

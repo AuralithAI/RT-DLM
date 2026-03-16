@@ -6,17 +6,17 @@ from src.core.ethics.ethical_adaptation import (
     FairnessResult,
     FairnessAwareRewardHead,
     FairnessConstrainedEthicalModel,
-    FairnessMonitor
+    FairnessMonitor,
 )
 from src.core.ethics.feedback_collector import FeedbackCollector
 
 __all__ = [
-    'EthicalRewardModel',
-    'FairnessAnalyzer',
-    'FairnessConfig',
-    'FairnessResult',
-    'FairnessAwareRewardHead',
-    'FairnessConstrainedEthicalModel',
-    'FairnessMonitor',
-    'FeedbackCollector'
+    "EthicalRewardModel",
+    "FairnessAnalyzer",
+    "FairnessConfig",
+    "FairnessResult",
+    "FairnessAwareRewardHead",
+    "FairnessConstrainedEthicalModel",
+    "FairnessMonitor",
+    "FeedbackCollector",
 ]

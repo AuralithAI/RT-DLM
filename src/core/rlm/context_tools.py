@@ -60,9 +60,7 @@ class ContextTools:
 
         content = self._store.peek(context_var, start, length)
         if content is None:
-            result = ToolResult.error_result(
-                ToolType.PEEK, f"Variable '{context_var}' not found"
-            )
+            result = ToolResult.error_result(ToolType.PEEK, f"Variable '{context_var}' not found")
         else:
             metadata = self._store.get_metadata(context_var)
             total_len = metadata.total_length if metadata else 0
@@ -103,7 +101,7 @@ class ContextTools:
                 num_matches=len(matches),
                 truncated=len(matches) >= max_results,
             )
-            result.tokens_used = sum(len(m.get('context', '')) for m in matches) // 4
+            result.tokens_used = sum(len(m.get("context", "")) for m in matches) // 4
         except Exception as e:
             result = ToolResult.error_result(ToolType.GREP, str(e))
 
@@ -120,9 +118,7 @@ class ContextTools:
         start_time = time.time()
 
         try:
-            chunk_names = self._store.partition(
-                context_var, strategy, chunk_size, overlap
-            )
+            chunk_names = self._store.partition(context_var, strategy, chunk_size, overlap)
             result = ToolResult.success_result(
                 ToolType.PARTITION,
                 chunk_names,
@@ -221,16 +217,14 @@ class ContextTools:
 
         var = self._store.get(context_var)
         if var is None:
-            result = ToolResult.error_result(
-                ToolType.FILTER, f"Variable '{context_var}' not found"
-            )
+            result = ToolResult.error_result(ToolType.FILTER, f"Variable '{context_var}' not found")
             self._tool_history.append(result)
             return result
 
         try:
-            lines = var.content.split('\n')
+            lines = var.content.split("\n")
             filtered_lines = [line for line in lines if condition(line)]
-            filtered_content = '\n'.join(filtered_lines)
+            filtered_content = "\n".join(filtered_lines)
 
             if output_var is None:
                 output_var = f"{context_var}_filtered"
@@ -257,7 +251,7 @@ class ContextTools:
 
     def _extractive_summarize(self, content: str, max_tokens: int) -> str:
         max_chars = max_tokens * 4
-        sentences = re.split(r'(?<=[.!?])\s+', content)
+        sentences = re.split(r"(?<=[.!?])\s+", content)
 
         if len(content) <= max_chars:
             return content
@@ -285,12 +279,12 @@ class ContextTools:
             if sent in summary_sentences:
                 original_order.append(sent)
 
-        return ' '.join(original_order)
+        return " ".join(original_order)
 
     def _keyword_score(self, sentence: str, full_content: str) -> float:
-        words = re.findall(r'\b\w+\b', sentence.lower())
-        content_words = re.findall(r'\b\w+\b', full_content.lower())
-        
+        words = re.findall(r"\b\w+\b", sentence.lower())
+        content_words = re.findall(r"\b\w+\b", full_content.lower())
+
         if not words or not content_words:
             return 0.0
 
@@ -325,7 +319,7 @@ class ContextTools:
 
     def get_tool_stats(self) -> Dict[str, Any]:
         stats = {tool.value: {"calls": 0, "successes": 0, "total_time": 0.0} for tool in ToolType}
-        
+
         for result in self._tool_history:
             key = result.tool.value
             stats[key]["calls"] += 1

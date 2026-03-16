@@ -12,11 +12,9 @@ Design:
     - Graceful degradation if MLflow server is unavailable
 """
 
-import json
 import logging
 import time
 from contextlib import contextmanager
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -29,6 +27,7 @@ def _is_mlflow_available() -> bool:
     """Check if MLflow is installed."""
     try:
         import mlflow  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -90,6 +89,7 @@ class MLflowTracker:
         """Initialize MLflow client and experiment."""
         try:
             import mlflow
+
             self._mlflow = mlflow
 
             if self.tracking_uri:
@@ -172,16 +172,14 @@ class MLflowTracker:
         """
         flat = self._flatten_dict(params)
         # MLflow limits param values to 500 chars
-        truncated = {
-            k: str(v)[:500] for k, v in flat.items()
-        }
+        truncated = {k: str(v)[:500] for k, v in flat.items()}
 
         if self.enabled and self._mlflow is not None and self._run is not None:
             try:
                 # Log in batches (MLflow limit: 100 per call)
                 items = list(truncated.items())
                 for i in range(0, len(items), 100):
-                    batch = dict(items[i:i + 100])
+                    batch = dict(items[i : i + 100])
                     self._mlflow.log_params(batch)
             except Exception as e:
                 logger.debug(f"Failed to log params batch: {e}")
@@ -208,12 +206,14 @@ class MLflowTracker:
             logger.debug(f"Skipping NaN/Inf metric: {key}={value}")
             return
 
-        self._metric_buffer.append({
-            "key": key,
-            "value": value,
-            "step": step,
-            "timestamp": int(time.time() * 1000),
-        })
+        self._metric_buffer.append(
+            {
+                "key": key,
+                "value": value,
+                "step": step,
+                "timestamp": int(time.time() * 1000),
+            }
+        )
 
         if len(self._metric_buffer) >= self._buffer_size:
             self._flush_metrics()
@@ -252,7 +252,7 @@ class MLflowTracker:
 
                 # Batch log (max 1000 per call)
                 for i in range(0, len(mlflow_metrics), 1000):
-                    batch = mlflow_metrics[i:i + 1000]
+                    batch = mlflow_metrics[i : i + 1000]
                     client.log_batch(run_id, metrics=batch)
 
             except Exception as e:
@@ -279,13 +279,9 @@ class MLflowTracker:
         if self.enabled and self._mlflow is not None and self._run is not None:
             try:
                 if local_path.is_dir():
-                    self._mlflow.log_artifacts(
-                        str(local_path), artifact_path
-                    )
+                    self._mlflow.log_artifacts(str(local_path), artifact_path)
                 else:
-                    self._mlflow.log_artifact(
-                        str(local_path), artifact_path
-                    )
+                    self._mlflow.log_artifact(str(local_path), artifact_path)
                 logger.info(f"Logged artifact: {local_path}")
             except Exception as e:
                 logger.debug(f"Failed to log artifact {local_path}: {e}")
@@ -379,9 +375,7 @@ class MLflowTracker:
         for k, v in d.items():
             new_key = f"{parent_key}{sep}{k}" if parent_key else k
             if isinstance(v, dict):
-                items.extend(
-                    MLflowTracker._flatten_dict(v, new_key, sep).items()
-                )
+                items.extend(MLflowTracker._flatten_dict(v, new_key, sep).items())
             elif isinstance(v, (list, tuple)):
                 items.append((new_key, str(v)))
             else:

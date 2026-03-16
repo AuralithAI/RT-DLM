@@ -29,7 +29,6 @@ from typing import Any, Dict, List, Optional
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +53,7 @@ def _import_benchmark(dotpath: str):
     """Dynamically import a benchmark class from dotted path."""
     module_path, class_name = dotpath.rsplit(".", 1)
     import importlib
+
     mod = importlib.import_module(module_path)
     return getattr(mod, class_name)
 
@@ -79,11 +79,13 @@ def build_model_fn(
 
     # Create model
     from rtdlm import create_rtdlm_agi
+
     model = create_rtdlm_agi(config, use_state=True)
 
     if checkpoint_path:
         try:
             from core.checkpoint_manager import CheckpointManager
+
             ckpt_mgr = CheckpointManager(checkpoint_dir=checkpoint_path)
             ckpt_data = ckpt_mgr.load_checkpoint()
             params = ckpt_data.get("params", ckpt_data)
@@ -115,15 +117,19 @@ def build_model_fn(
         vocab_size = config.vocab_size
 
         rng, tok_rng = jax.random.split(rng)
-        token_ids = jax.random.randint(
-            tok_rng, (1, seq_len), 0, vocab_size
-        )
+        token_ids = jax.random.randint(tok_rng, (1, seq_len), 0, vocab_size)
 
         inputs = {"text": token_ids}
 
         try:
             rng, model_rng = jax.random.split(rng)
-            output, new_state = model.apply(params, state, model_rng, inputs)
+            output, new_state = model.apply(
+                params,
+                state,
+                model_rng,
+                inputs,
+                think_budget_tokens=think_budget,
+            )
 
             logits = output.get("logits", None)
             if logits is None:
@@ -138,7 +144,7 @@ def build_model_fn(
             last_logits = logits[0, -1, :]
             rng, choice_rng = jax.random.split(rng)
             # Simple: pick from first len(choices) positions
-            choice_scores = last_logits[:len(choices)]
+            choice_scores = last_logits[: len(choices)]
             return int(jnp.argmax(choice_scores))
         else:
             # Open-ended: generate text (simplified)
@@ -153,11 +159,7 @@ def _init_random_params(model, config):
     """Initialize model with random parameters."""
     rng = jax.random.PRNGKey(42)
     seq_len = min(64, config.max_seq_length)
-    dummy_input = {
-        "text": jax.random.randint(
-            rng, (1, seq_len), 0, config.vocab_size
-        )
-    }
+    dummy_input = {"text": jax.random.randint(rng, (1, seq_len), 0, config.vocab_size)}
     rng, init_rng = jax.random.split(rng)
     try:
         params, state = model.init(init_rng, dummy_input)
@@ -209,9 +211,7 @@ def print_rich_summary(results: Dict[str, Any]) -> None:
                 cat_table.add_column("Category", style="cyan")
                 cat_table.add_column("Accuracy", style="green", justify="right")
 
-                for cat, score in sorted(
-                    result.category_scores.items(), key=lambda x: -x[1]
-                ):
+                for cat, score in sorted(result.category_scores.items(), key=lambda x: -x[1]):
                     cat_table.add_row(cat, f"{score:.2%}")
 
                 console.print(cat_table)
@@ -253,9 +253,7 @@ def run_evaluation(args: argparse.Namespace) -> Dict[str, Any]:
             try:
                 think_budget = int(args.think_budget)
             except ValueError:
-                logger.warning(
-                    f"Invalid think-budget: {args.think_budget}. Using None."
-                )
+                logger.warning(f"Invalid think-budget: {args.think_budget}. Using None.")
 
     # Build benchmark suite
     suite = BenchmarkSuite()
@@ -346,13 +344,15 @@ def _log_to_mlflow(
 
     with tracker.start_run(run_name=f"eval_{int(time.time())}", tags=run_tags):
         # Log eval config
-        tracker.log_params({
-            "benchmarks": ",".join(args.benchmarks),
-            "max_samples": args.max_samples or "all",
-            "seed": args.seed,
-            "checkpoint": args.checkpoint or "random_init",
-            "think_budget": think_budget or "none",
-        })
+        tracker.log_params(
+            {
+                "benchmarks": ",".join(args.benchmarks),
+                "max_samples": args.max_samples or "all",
+                "seed": args.seed,
+                "checkpoint": args.checkpoint or "random_init",
+                "think_budget": think_budget or "none",
+            }
+        )
 
         # Log each benchmark result
         for name, result in results.items():
@@ -442,7 +442,7 @@ Examples:
         "--use-huggingface",
         action="store_true",
         help="Download benchmark data from HuggingFace Hub (requires 'datasets' package). "
-             "Default: use built-in curated problems (no network needed).",
+        "Default: use built-in curated problems (no network needed).",
     )
 
     return parser

@@ -22,16 +22,11 @@ from src.train_controller_grpo import (
     TrajectoryGroup,
     create_dummy_batch,
 )
-from src.core.agi.compute_controller import (
-    GRPOValueHead,
-    compute_grpo_advantages,
-    compute_grpo_loss,
-)
-
 
 # =========================================================================
 # Fixtures
 # =========================================================================
+
 
 @pytest.fixture
 def small_config():
@@ -70,6 +65,7 @@ def rng():
 # RewardComputer Tests
 # =========================================================================
 
+
 class TestRewardComputer:
     """Tests for trajectory reward computation."""
 
@@ -102,6 +98,7 @@ class TestRewardComputer:
     def test_unnecessary_module_penalty(self, reward_computer):
         """Using too many modules incurs penalty."""
         from src.core.agi.compute_controller import ModuleType
+
         traj = Trajectory(
             hidden_states=jnp.zeros(64),
             log_prob=0.0,
@@ -188,6 +185,7 @@ class TestRewardComputer:
 # GRPOTrainer Tests
 # =========================================================================
 
+
 class TestGRPOTrainer:
     """Tests for the GRPO training pipeline."""
 
@@ -266,16 +264,11 @@ class TestGRPOTrainer:
         params, opt_state = trainer.init_params(init_rng, dummy)
 
         old_leaves = jax.tree_util.tree_leaves(params)
-        new_params, _, _ = trainer.grpo_train_step(
-            params, opt_state, step_rng, dummy
-        )
+        new_params, _, _ = trainer.grpo_train_step(params, opt_state, step_rng, dummy)
         new_leaves = jax.tree_util.tree_leaves(new_params)
 
         # At least some parameters should have changed
-        changed = sum(
-            1 for o, n in zip(old_leaves, new_leaves)
-            if not jnp.allclose(o, n)
-        )
+        changed = sum(1 for o, n in zip(old_leaves, new_leaves) if not jnp.allclose(o, n))
         assert changed > 0
 
     def test_two_training_steps(self, trainer, rng):
@@ -287,15 +280,14 @@ class TestGRPOTrainer:
         for _ in range(2):
             rng, step_rng, batch_rng = jax.random.split(rng, 3)
             batch = jax.random.normal(batch_rng, (2, 8, 64))
-            params, opt_state, metrics = trainer.grpo_train_step(
-                params, opt_state, step_rng, batch
-            )
+            params, opt_state, metrics = trainer.grpo_train_step(params, opt_state, step_rng, batch)
         assert metrics["mean_reward"] is not None
 
 
 # =========================================================================
 # Dummy Batch Tests
 # =========================================================================
+
 
 class TestDummyBatch:
     """Tests for create_dummy_batch utility."""
@@ -318,6 +310,7 @@ class TestDummyBatch:
 # Wiring Integration Tests
 # =========================================================================
 
+
 class TestRTDLMWiring:
     """Tests that GRPO modules are correctly wired into RTDLMAGISystem."""
 
@@ -326,10 +319,8 @@ class TestRTDLMWiring:
         config = AGIConfig(d_model=64, use_grpo=True, use_compute_controller=True)
 
         def _forward(x):
-            system = __import__(
-                "src.rtdlm", fromlist=["RTDLMAGISystem"]
-            ).RTDLMAGISystem(config)
-            assert hasattr(system, 'grpo_value_head')
+            system = __import__("src.rtdlm", fromlist=["RTDLMAGISystem"]).RTDLMAGISystem(config)
+            assert hasattr(system, "grpo_value_head")
             return system.grpo_value_head(x, is_training=False)
 
         fn = hk.transform_with_state(_forward)
@@ -399,10 +390,8 @@ class TestRTDLMWiring:
         )
 
         def _forward(x):
-            system = __import__(
-                "src.rtdlm", fromlist=["RTDLMAGISystem"]
-            ).RTDLMAGISystem(config)
-            assert hasattr(system, 'self_critique_head')
+            system = __import__("src.rtdlm", fromlist=["RTDLMAGISystem"]).RTDLMAGISystem(config)
+            assert hasattr(system, "self_critique_head")
             result = system.self_critique_head(x)
             return result["quality_score"]
 
@@ -456,13 +445,13 @@ class TestKVCacheWiring:
 
             # With cache (store prefix)
             cache = KVPrefixCache(
-                num_layers=1, max_prefix_len=32,
-                num_kv_heads=2, head_dim=16, max_entries=4,
+                num_layers=1,
+                max_prefix_len=32,
+                num_kv_heads=2,
+                head_dim=16,
+                max_entries=4,
             )
-            out2, _ = gqa(
-                x, is_training=False,
-                kv_cache=cache, layer_id=0, prefix_id="test_prefix"
-            )
+            out2, _ = gqa(x, is_training=False, kv_cache=cache, layer_id=0, prefix_id="test_prefix")
             return out1, out2
 
         fn = hk.transform(_forward)
@@ -480,8 +469,11 @@ class TestKVCacheWiring:
         )
 
         cache = KVPrefixCache(
-            num_layers=1, max_prefix_len=32,
-            num_kv_heads=2, head_dim=16, max_entries=4,
+            num_layers=1,
+            max_prefix_len=32,
+            num_kv_heads=2,
+            head_dim=16,
+            max_entries=4,
         )
 
         def _forward(x, use_cache):
@@ -492,10 +484,7 @@ class TestKVCacheWiring:
                 use_rope=False,
             )
             if use_cache:
-                return gqa(
-                    x, is_training=False,
-                    kv_cache=cache, layer_id=0, prefix_id="prompt_1"
-                )
+                return gqa(x, is_training=False, kv_cache=cache, layer_id=0, prefix_id="prompt_1")
             return gqa(x, is_training=False)
 
         fn = hk.transform(_forward)

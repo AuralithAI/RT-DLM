@@ -52,13 +52,15 @@ class RecursionContext:
 
     def record_tool_call(self, tool: str, params: Dict[str, Any], result: Any) -> None:
         self.tool_calls_used += 1
-        self.trace.append({
-            "depth": self.depth,
-            "tool": tool,
-            "params": params,
-            "success": getattr(result, 'success', True),
-            "timestamp": time.time(),
-        })
+        self.trace.append(
+            {
+                "depth": self.depth,
+                "tool": tool,
+                "params": params,
+                "success": getattr(result, "success", True),
+                "timestamp": time.time(),
+            }
+        )
 
 
 @dataclass
@@ -141,7 +143,7 @@ class RecursiveCallManager:
             )
 
         parent_context.tool_calls_used = child_context.tool_calls_used
-        parent_context.trace.extend(child_context.trace[len(parent_context.trace):])
+        parent_context.trace.extend(child_context.trace[len(parent_context.trace) :])
 
         if self.config.enable_caching:
             self._results_cache[cache_key] = sub_result
@@ -167,13 +169,15 @@ class RecursiveCallManager:
             futures = {}
             for sc in subcalls:
                 if not parent_context.can_recurse():
-                    results.append(SubCallResult(
-                        query=sc["query"],
-                        context_var=sc["context_var"],
-                        result=None,
-                        success=False,
-                        error="Recursion limit reached",
-                    ))
+                    results.append(
+                        SubCallResult(
+                            query=sc["query"],
+                            context_var=sc["context_var"],
+                            result=None,
+                            success=False,
+                            error="Recursion limit reached",
+                        )
+                    )
                     continue
 
                 child_context = parent_context.child_context(sc["query"], sc["context_var"])
@@ -193,17 +197,18 @@ class RecursiveCallManager:
                     results.append(result)
                     with parent_context._lock:
                         parent_context.tool_calls_used = max(
-                            parent_context.tool_calls_used,
-                            child_context.tool_calls_used
+                            parent_context.tool_calls_used, child_context.tool_calls_used
                         )
                 except Exception as e:
-                    results.append(SubCallResult(
-                        query=sc["query"],
-                        context_var=sc["context_var"],
-                        result=None,
-                        success=False,
-                        error=str(e),
-                    ))
+                    results.append(
+                        SubCallResult(
+                            query=sc["query"],
+                            context_var=sc["context_var"],
+                            result=None,
+                            success=False,
+                            error=str(e),
+                        )
+                    )
 
         return results
 
@@ -254,10 +259,12 @@ class RecursiveCallManager:
                 "errors": [r.error for r in failed],
             }
 
-        if self.config.aggregation_strategy == "weighted_mean" and result_embeddings and query_embedding is not None:
-            aggregated: Any = self._weighted_aggregate(
-                query_embedding, result_embeddings
-            )
+        if (
+            self.config.aggregation_strategy == "weighted_mean"
+            and result_embeddings
+            and query_embedding is not None
+        ):
+            aggregated: Any = self._weighted_aggregate(query_embedding, result_embeddings)
         elif self.config.aggregation_strategy == "concat":
             aggregated = self._concat_aggregate(successful)
         else:

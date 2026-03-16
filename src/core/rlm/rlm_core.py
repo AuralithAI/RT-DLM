@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional, Callable, Mapping, Tuple
+import logging
 import time
 import haiku as hk
 import jax
@@ -10,8 +11,11 @@ from src.core.rlm.context_store import ContextStore
 from src.core.rlm.context_tools import ContextTools, ToolResult
 from src.core.rlm.tool_selector import ToolSelector, ToolSelection
 from src.core.rlm.recursive_manager import RecursiveCallManager, RecursionContext
+from src.core.rlm.hierarchical_compressor import HierarchicalCompressor
 
 Params = Mapping[str, Any]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -41,37 +45,47 @@ class RecursiveLanguageModel(hk.Module):
 
         self.tool_selector = ToolSelector(d_model, len(ToolType))
 
-        self.query_encoder = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(d_model),
-            hk.LayerNorm(axis=-1, create_scale=True, create_offset=True),
-        ])
+        self.query_encoder = hk.Sequential(
+            [
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(d_model),
+                hk.LayerNorm(axis=-1, create_scale=True, create_offset=True),
+            ]
+        )
 
-        self.context_metadata_encoder = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(d_model),
-        ])
+        self.context_metadata_encoder = hk.Sequential(
+            [
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(d_model),
+            ]
+        )
 
-        self.recursion_state_encoder = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(d_model),
-        ])
+        self.recursion_state_encoder = hk.Sequential(
+            [
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(d_model),
+            ]
+        )
 
-        self.answer_synthesizer = hk.Sequential([
-            hk.Linear(d_model * 2),
-            jax.nn.silu,
-            hk.Linear(d_model),
-            hk.LayerNorm(axis=-1, create_scale=True, create_offset=True),
-        ])
+        self.answer_synthesizer = hk.Sequential(
+            [
+                hk.Linear(d_model * 2),
+                jax.nn.silu,
+                hk.Linear(d_model),
+                hk.LayerNorm(axis=-1, create_scale=True, create_offset=True),
+            ]
+        )
 
-        self.result_encoder = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(d_model),
-        ])
+        self.result_encoder = hk.Sequential(
+            [
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(d_model),
+            ]
+        )
 
     def __call__(
         self,
@@ -85,19 +99,27 @@ class RecursiveLanguageModel(hk.Module):
 
         encoded_query = self.query_encoder(query_embedding)
 
-        context_features = jnp.array([[
-            float(context_length) / 10000.0,
-            float(context_length > self.config.auto_partition_threshold),
-            float(context_length > self.config.direct_context_threshold),
-        ]])
+        context_features = jnp.array(
+            [
+                [
+                    float(context_length) / 10000.0,
+                    float(context_length > self.config.auto_partition_threshold),
+                    float(context_length > self.config.direct_context_threshold),
+                ]
+            ]
+        )
         context_projection = hk.Linear(self.d_model)
         context_metadata = self.context_metadata_encoder(context_projection(context_features))
 
-        recursion_features = jnp.array([[
-            float(recursion_depth) / self.config.max_recursion_depth,
-            float(tool_calls_used) / self.config.tool_budget,
-            float(recursion_depth >= self.config.max_recursion_depth - 1),
-        ]])
+        recursion_features = jnp.array(
+            [
+                [
+                    float(recursion_depth) / self.config.max_recursion_depth,
+                    float(tool_calls_used) / self.config.tool_budget,
+                    float(recursion_depth >= self.config.max_recursion_depth - 1),
+                ]
+            ]
+        )
         recursion_projection = hk.Linear(self.d_model)
         recursion_state = self.recursion_state_encoder(recursion_projection(recursion_features))
 
@@ -161,6 +183,16 @@ class RLMOrchestrator:
 
         self.recursive_manager = RecursiveCallManager(self.config)
 
+        # Hierarchical compressor (auto-triggered during reasoning)
+        self.compressor = HierarchicalCompressor(
+            context_store=self.context_store,
+            context_tools=self.tools,
+            auto_compress_threshold=self.config.auto_compress_threshold,
+            store_utilisation_threshold=self.config.store_utilisation_threshold,
+            tier1_max_tokens=self.config.tier1_max_tokens,
+            tier2_max_tokens=self.config.tier2_max_tokens,
+        )
+
         self._init_fn = None
         self._apply_fn = None
         self._params: Optional[Params] = None
@@ -187,11 +219,17 @@ class RLMOrchestrator:
             return jnp.zeros((1, self.d_model))
 
         query_embedding = self._embedding_fn(query)
-        query_embedding = jnp.array(query_embedding) if not isinstance(query_embedding, jnp.ndarray) else query_embedding
+        query_embedding = (
+            jnp.array(query_embedding)
+            if not isinstance(query_embedding, jnp.ndarray)
+            else query_embedding
+        )
         return query_embedding[None, :] if query_embedding.ndim == 1 else query_embedding
 
     def _should_use_direct_pass(self, context_len: int) -> bool:
-        return context_len <= self.config.direct_context_threshold and self.config.fallback_to_direct
+        return (
+            context_len <= self.config.direct_context_threshold and self.config.fallback_to_direct
+        )
 
     def solve(
         self,
@@ -249,9 +287,12 @@ class RLMOrchestrator:
             raise ValueError("Model not initialized")
 
         tool_probs, term_prob, parameters, _ = self._apply_fn(
-            params, subkey,
-            query_embedding, context_len,
-            recursion_context.depth, recursion_context.tool_calls_used
+            params,
+            subkey,
+            query_embedding,
+            context_len,
+            recursion_context.depth,
+            recursion_context.tool_calls_used,
         )
         return tool_probs, term_prob, parameters, rng
 
@@ -260,7 +301,7 @@ class RLMOrchestrator:
         tool_result: Any,
         intermediate_results: List[jnp.ndarray],
     ) -> None:
-        if not hasattr(tool_result, 'data') or tool_result.data is None:
+        if not hasattr(tool_result, "data") or tool_result.data is None:
             return
 
         if isinstance(tool_result.data, str) and self._embedding_fn:
@@ -282,6 +323,25 @@ class RLMOrchestrator:
         tool_trace = []
 
         while recursion_context.can_recurse():
+            # Auto-compress if context has grown too large
+            if self.config.enable_hierarchical_compression:
+                comp_result = self.compressor.maybe_compress(context_var)
+                if comp_result is not None and comp_result.success:
+                    logger.debug(
+                        "Auto-compressed '%s' (tier %d, %.1f× ratio)",
+                        context_var,
+                        comp_result.tier,
+                        comp_result.compression_ratio,
+                    )
+                    tool_trace.append(
+                        {
+                            "tool": "auto_compress",
+                            "tier": comp_result.tier,
+                            "compression_ratio": comp_result.compression_ratio,
+                            "summary_var": comp_result.summary_var,
+                        }
+                    )
+
             tool_probs, term_prob, parameters, rng = self._run_tool_selection_step(
                 query_embedding, context_var, params, rng, recursion_context
             )
@@ -301,12 +361,14 @@ class RLMOrchestrator:
                 selection.tool.value, selection.parameters, tool_result
             )
 
-            tool_trace.append({
-                "tool": selection.tool.value,
-                "params": selection.parameters,
-                "confidence": selection.confidence,
-                "success": getattr(tool_result, 'success', True),
-            })
+            tool_trace.append(
+                {
+                    "tool": selection.tool.value,
+                    "params": selection.parameters,
+                    "confidence": selection.confidence,
+                    "success": getattr(tool_result, "success", True),
+                }
+            )
 
             self._process_tool_result(tool_result, intermediate_results)
 
@@ -432,14 +494,13 @@ class RLMOrchestrator:
 
             if chunk_names:
                 subcalls = [{"query": query, "context_var": cn} for cn in chunk_names]
-                return self._execute_recursive_subcalls(
-                    subcalls, recursion_context, params, rng
-                )
+                return self._execute_recursive_subcalls(subcalls, recursion_context, params, rng)
 
         return ToolResult.error_result(tool, f"Unsupported tool: {tool}")
 
     def _extract_search_pattern(self, query: str) -> Tuple[str, bool]:
         import re
+
         quoted = re.findall(r'"([^"]+)"', query)
         if quoted:
             return (quoted[0], False)
@@ -466,19 +527,17 @@ class RLMOrchestrator:
     ) -> Dict[str, Any]:
         rng_keys = jax.random.split(rng, len(subcalls) + 1)
         subcall_rngs = {
-            (sc["query"], sc["context_var"]): rng_keys[i]
-            for i, sc in enumerate(subcalls)
+            (sc["query"], sc["context_var"]): rng_keys[i] for i, sc in enumerate(subcalls)
         }
 
         def solve_subcall(sub_query: str, sub_context_var: str, ctx: RecursionContext) -> Any:
             sub_rng = subcall_rngs.get(
                 (sub_query, sub_context_var),
-                jax.random.fold_in(rng_keys[-1], hash((sub_query, sub_context_var)))
+                jax.random.fold_in(rng_keys[-1], hash((sub_query, sub_context_var))),
             )
             sub_query_emb = self._prepare_query_embedding(sub_query)
             return self._solve_recursive(
-                sub_query, sub_query_emb, sub_context_var,
-                params, sub_rng, ctx
+                sub_query, sub_query_emb, sub_context_var, params, sub_rng, ctx
             )
 
         results = self.recursive_manager.spawn_parallel_subcalls(
@@ -497,4 +556,5 @@ class RLMOrchestrator:
             "context_store": self.context_store.stats(),
             "tool_stats": self.tools.get_tool_stats(),
             "recursive_manager": self.recursive_manager.get_stats(),
+            "compressor": self.compressor.get_stats(),
         }

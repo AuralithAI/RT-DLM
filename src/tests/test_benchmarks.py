@@ -17,12 +17,10 @@ import logging
 import os
 import sys
 import tempfile
-import time
 from pathlib import Path
 from unittest import mock
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -40,7 +38,7 @@ from core.benchmarks.gpqa_benchmark import GPQABenchmark
 from core.benchmarks.aime_benchmark import AIMEBenchmark
 from core.benchmarks.swe_bench import SWEBenchBenchmark
 from core.benchmarks.livecode_bench import LiveCodeBenchmark
-from core.benchmarks.mlflow_tracker import MLflowTracker, _is_mlflow_available
+from core.benchmarks.mlflow_tracker import MLflowTracker
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +46,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def rng():
@@ -57,6 +56,7 @@ def rng():
 @pytest.fixture
 def dummy_model_fn():
     """Model fn that returns random MC answer or string."""
+
     def model_fn(prompt, rng, choices=None, **kwargs):
         if choices is not None:
             # Return random choice index
@@ -64,18 +64,21 @@ def dummy_model_fn():
         else:
             # Return random integer string
             return str(int(jax.random.randint(rng, (), 0, 1000)))
+
     return model_fn
 
 
 @pytest.fixture
 def correct_model_fn():
     """Model fn that always returns the correct answer (for testing scoring)."""
+
     def model_fn(prompt, rng, choices=None, **kwargs):
         # Extract correct answer from prompt metadata
         # For MC: always return 0 (tests set correct=0)
         if choices is not None:
             return 0
         return "42"
+
     return model_fn
 
 
@@ -88,6 +91,7 @@ def tmp_dir():
 # =============================================================================
 # BenchmarkSample Tests
 # =============================================================================
+
 
 class TestBenchmarkSample:
     """Tests for BenchmarkSample dataclass."""
@@ -131,6 +135,7 @@ class TestBenchmarkSample:
 # =============================================================================
 # BenchmarkResult Tests
 # =============================================================================
+
 
 class TestBenchmarkResult:
     """Tests for BenchmarkResult dataclass."""
@@ -206,6 +211,7 @@ class TestBenchmarkResult:
 # BenchmarkBase Tests
 # =============================================================================
 
+
 class _DummyBenchmark(BenchmarkBase):
     """Concrete subclass for testing abstract base."""
 
@@ -225,7 +231,7 @@ class _DummyBenchmark(BenchmarkBase):
             for i in range(10)
         ]
         if self.max_samples is not None:
-            samples = samples[:self.max_samples]
+            samples = samples[: self.max_samples]
         return samples
 
 
@@ -339,6 +345,7 @@ class TestBenchmarkBase:
 # BenchmarkSuite Tests
 # =============================================================================
 
+
 class TestBenchmarkSuite:
     """Tests for BenchmarkSuite orchestrator."""
 
@@ -387,6 +394,7 @@ class TestBenchmarkSuite:
 
     def test_failed_benchmark(self, rng):
         """Suite should handle benchmark failures gracefully."""
+
         def bad_model(prompt, rng, choices=None, **kwargs):
             raise RuntimeError("boom")
 
@@ -400,6 +408,7 @@ class TestBenchmarkSuite:
 # =============================================================================
 # GPQA Benchmark Tests
 # =============================================================================
+
 
 class TestGPQABenchmark:
     """Tests for GPQA Diamond benchmark."""
@@ -464,6 +473,7 @@ class TestGPQABenchmark:
 # =============================================================================
 # AIME Benchmark Tests
 # =============================================================================
+
 
 class TestAIMEBenchmark:
     """Tests for AIME benchmark."""
@@ -532,6 +542,7 @@ class TestAIMEBenchmark:
 # =============================================================================
 # SWE-Bench Tests
 # =============================================================================
+
 
 class TestSWEBenchBenchmark:
     """Tests for SWE-Bench Verified benchmark."""
@@ -603,11 +614,7 @@ class TestSWEBenchBenchmark:
         assert b.score_sample(sample, "") is False
 
     def test_extract_files_from_patch(self):
-        patch = (
-            "diff --git a/src/foo.py b/src/foo.py\n"
-            "--- a/src/foo.py\n"
-            "+++ b/src/foo.py\n"
-        )
+        patch = "diff --git a/src/foo.py b/src/foo.py\n" "--- a/src/foo.py\n" "+++ b/src/foo.py\n"
         files = SWEBenchBenchmark._extract_files_from_patch(patch)
         assert "src/foo.py" in files
 
@@ -621,6 +628,7 @@ class TestSWEBenchBenchmark:
 # =============================================================================
 # LiveCodeBench Tests
 # =============================================================================
+
 
 class TestLiveCodeBenchmark:
     """Tests for LiveCodeBench benchmark."""
@@ -656,11 +664,7 @@ class TestLiveCodeBenchmark:
         )
 
         # Good prediction with code structure
-        good_code = (
-            "n = int(input())\n"
-            "result = n * 2\n"
-            "print(result)\n"
-        )
+        good_code = "n = int(input())\n" "result = n * 2\n" "print(result)\n"
         assert b.score_sample(sample, good_code) is True
 
     def test_lightweight_score_no_code(self):
@@ -687,6 +691,7 @@ class TestLiveCodeBenchmark:
 # =============================================================================
 # MLflowTracker Tests
 # =============================================================================
+
 
 class TestMLflowTracker:
     """Tests for MLflow tracker wrapper."""
@@ -784,6 +789,7 @@ class TestMLflowTracker:
 # AGIConfig Benchmark/MLflow Flag Tests
 # =============================================================================
 
+
 class TestAGIConfigBenchmarkFlags:
     """Tests for new AGIConfig benchmark and MLflow flags."""
 
@@ -858,17 +864,20 @@ class TestAGIConfigBenchmarkFlags:
 # run_eval CLI Parser Tests
 # =============================================================================
 
+
 class TestRunEvalCLI:
     """Tests for the CLI parser in run_eval."""
 
     def test_build_parser(self):
         from core.benchmarks.run_eval import build_parser
+
         parser = build_parser()
         args = parser.parse_args(["--benchmarks", "gpqa", "aime"])
         assert args.benchmarks == ["gpqa", "aime"]
 
     def test_default_args(self):
         from core.benchmarks.run_eval import build_parser
+
         parser = build_parser()
         args = parser.parse_args([])
         assert args.benchmarks == ["gpqa"]
@@ -879,28 +888,36 @@ class TestRunEvalCLI:
 
     def test_think_budget_arg(self):
         from core.benchmarks.run_eval import build_parser
+
         parser = build_parser()
         args = parser.parse_args(["--think-budget", "high"])
         assert args.think_budget == "high"
 
     def test_mlflow_args(self):
         from core.benchmarks.run_eval import build_parser
+
         parser = build_parser()
-        args = parser.parse_args([
-            "--mlflow-uri", "http://localhost:5000",
-            "--mlflow-experiment", "my_exp",
-        ])
+        args = parser.parse_args(
+            [
+                "--mlflow-uri",
+                "http://localhost:5000",
+                "--mlflow-experiment",
+                "my_exp",
+            ]
+        )
         assert args.mlflow_uri == "http://localhost:5000"
         assert args.mlflow_experiment == "my_exp"
 
     def test_all_benchmarks(self):
         from core.benchmarks.run_eval import build_parser
+
         parser = build_parser()
         args = parser.parse_args(["--benchmarks", "all"])
         assert args.benchmarks == ["all"]
 
     def test_think_budget_presets(self):
         from core.benchmarks.run_eval import THINK_BUDGET_PRESETS
+
         assert "low" in THINK_BUDGET_PRESETS
         assert "medium" in THINK_BUDGET_PRESETS
         assert "high" in THINK_BUDGET_PRESETS
@@ -909,6 +926,7 @@ class TestRunEvalCLI:
 
     def test_benchmark_registry(self):
         from core.benchmarks.run_eval import BENCHMARK_REGISTRY
+
         assert "gpqa" in BENCHMARK_REGISTRY
         assert "aime" in BENCHMARK_REGISTRY
         assert "swe" in BENCHMARK_REGISTRY
@@ -918,6 +936,7 @@ class TestRunEvalCLI:
 # =============================================================================
 # Integration Tests
 # =============================================================================
+
 
 class TestBenchmarkIntegration:
     """End-to-end integration tests."""
