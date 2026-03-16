@@ -309,6 +309,21 @@ class AGIConfig:
         self.think_budget_min_tokens = kwargs.get("think_budget_min_tokens", 32)  # Min reasoning tokens
         self.think_budget_difficulty_scale = kwargs.get("think_budget_difficulty_scale", True)  # Scale budget by difficulty
 
+        # --- MLflow Experiment Tracking ---
+        self.mlflow_enabled = kwargs.get("mlflow_enabled", False)  # Enable MLflow tracking
+        self.mlflow_tracking_uri = kwargs.get("mlflow_tracking_uri", None)  # MLflow server URI (None → local ./mlruns)
+        self.mlflow_experiment_name = kwargs.get("mlflow_experiment_name", "rtdlm_training")  # Experiment name
+        self.mlflow_run_name = kwargs.get("mlflow_run_name", None)  # Optional run name
+        self.mlflow_log_interval = kwargs.get("mlflow_log_interval", 10)  # Steps between metric logs
+
+        # --- Benchmark Evaluation ---
+        self.benchmark_enabled = kwargs.get("benchmark_enabled", False)  # Enable benchmark harness
+        self.benchmark_names = kwargs.get("benchmark_names", ["gpqa"])  # Benchmarks to run: gpqa, aime, swe, livecode
+        self.benchmark_max_samples = kwargs.get("benchmark_max_samples", None)  # Max samples per benchmark (None=all)
+        self.benchmark_think_budget = kwargs.get("benchmark_think_budget", "medium")  # Think-budget preset for eval
+        self.benchmark_output_dir = kwargs.get("benchmark_output_dir", "eval_results")  # Output directory for results
+        self.benchmark_eval_interval = kwargs.get("benchmark_eval_interval", 1)  # Run benchmarks every N epochs
+
         # Validate configuration
         self._validate_config()
 
@@ -383,6 +398,23 @@ class AGIConfig:
             assert self.think_budget_max_tokens >= self.think_budget_min_tokens, \
                 "think_budget_max_tokens must be >= think_budget_min_tokens"
             assert self.think_budget_min_tokens >= 1, "think_budget_min_tokens must be at least 1"
+
+        # Validate MLflow settings
+        if self.mlflow_enabled:
+            assert self.mlflow_experiment_name, "mlflow_experiment_name must be non-empty when MLflow is enabled"
+            assert self.mlflow_log_interval >= 1, "mlflow_log_interval must be at least 1"
+
+        # Validate benchmark settings
+        if self.benchmark_enabled:
+            valid_benchmarks = {"gpqa", "aime", "swe", "livecode", "all"}
+            if isinstance(self.benchmark_names, list):
+                for b in self.benchmark_names:
+                    assert b in valid_benchmarks, f"Unknown benchmark: {b}. Must be one of {valid_benchmarks}"
+            assert self.benchmark_eval_interval >= 1, "benchmark_eval_interval must be at least 1"
+            valid_budgets = {"low", "medium", "high", "max"}
+            if isinstance(self.benchmark_think_budget, str):
+                assert self.benchmark_think_budget in valid_budgets, \
+                    f"benchmark_think_budget must be one of {valid_budgets}"
             
     def to_dict(self):
         """Convert config to dictionary"""
@@ -564,5 +596,20 @@ class AGIConfig:
         if self.enable_think_budget:
             print(f"    - Token range: {self.think_budget_min_tokens}-{self.think_budget_max_tokens}")
             print(f"    - Difficulty scaling: {self.think_budget_difficulty_scale}")
+
+        print("\nMLflow Tracking:")
+        print(f"  - Enabled: {self.mlflow_enabled}")
+        if self.mlflow_enabled:
+            print(f"    - Tracking URI: {self.mlflow_tracking_uri or 'local (./mlruns)'}")
+            print(f"    - Experiment: {self.mlflow_experiment_name}")
+            print(f"    - Log interval: {self.mlflow_log_interval}")
+
+        print("\nBenchmark Evaluation:")
+        print(f"  - Enabled: {self.benchmark_enabled}")
+        if self.benchmark_enabled:
+            print(f"    - Benchmarks: {', '.join(self.benchmark_names)}")
+            print(f"    - Think budget: {self.benchmark_think_budget}")
+            print(f"    - Max samples: {self.benchmark_max_samples or 'all'}")
+            print(f"    - Eval interval: every {self.benchmark_eval_interval} epoch(s)")
         print("=" * 60)
 

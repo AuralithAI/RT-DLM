@@ -177,6 +177,21 @@ class AGITrainer:
         if getattr(config, 'enable_fairness_tracking', False):
             self.fairness_analyzer = FairnessAnalyzer(FairnessConfig())
             logger.info("Fairness tracking enabled")
+
+        # MLflow experiment tracking (optional)
+        self.mlflow_tracker = None
+        if getattr(config, 'mlflow_enabled', False):
+            try:
+                from core.benchmarks.mlflow_tracker import MLflowTracker
+                self.mlflow_tracker = MLflowTracker(
+                    experiment_name=getattr(config, 'mlflow_experiment_name', 'rtdlm_training'),
+                    tracking_uri=getattr(config, 'mlflow_tracking_uri', None),
+                    enabled=True,
+                )
+                logger.info("MLflow tracking enabled")
+            except Exception as e:
+                logger.warning(f"Failed to initialize MLflow tracker: {e}")
+                self.mlflow_tracker = None
         
     def configure_retrieval(
         self, 
@@ -1657,44 +1672,76 @@ class AGITrainer:
         best_val_loss = float('inf')
         patience_counter = 0
         max_patience = 5
-        
-        for epoch in range(start_epoch, self.config.num_epochs):
-            logger.info(f"EPOCH {epoch + 1}/{self.config.num_epochs}")
-            epoch_start_time = time.time()
-            
-            # Run training epoch
-            batch_iterator = train_data.iter_epoch() if use_streaming else iter(train_data)
-            epoch_losses = self._run_epoch(batch_iterator, num_batches_estimate)
-            
-            # Log epoch summary
-            epoch_time = time.time() - epoch_start_time
-            avg_epoch_loss = np.mean(epoch_losses) if epoch_losses else float('inf')
-            logger.info(f"  Average Loss: {avg_epoch_loss:.4f}")
-            logger.info(f"  Epoch Time: {epoch_time:.1f}s")
-            
-            # Periodic checkpoint
-            if epoch % 10 == 0 and epoch > 0:
-                self.save_checkpoint(epoch, {"avg_loss": float(avg_epoch_loss)})
-                logger.info(f"Periodic checkpoint saved at epoch {epoch}")
-            
-            # Validation
-            should_validate = (epoch % self.config.eval_interval == 0) or (epoch == self.config.num_epochs - 1)
-            if should_validate:
-                metrics = self._run_validation(val_data, use_streaming)
+
+        # MLflow run context
+        mlflow_ctx = None
+        if self.mlflow_tracker is not None:
+            run_name = getattr(self.config, 'mlflow_run_name', None) or f"train_{int(time.time())}"
+            mlflow_ctx = self.mlflow_tracker.start_run(run_name=run_name)
+            mlflow_ctx.__enter__()
+            self.mlflow_tracker.log_model_config(self.config)
+
+        try:
+            for epoch in range(start_epoch, self.config.num_epochs):
+                logger.info(f"EPOCH {epoch + 1}/{self.config.num_epochs}")
+                epoch_start_time = time.time()
                 
-                self.validation_losses.append(metrics["eval_loss"])
-                self.reasoning_accuracies.append(metrics["reasoning_accuracy"])
-                self.consciousness_coherence.append(metrics["consciousness_coherence"])
+                # Run training epoch
+                batch_iterator = train_data.iter_epoch() if use_streaming else iter(train_data)
+                epoch_losses = self._run_epoch(batch_iterator, num_batches_estimate)
                 
-                logger.info(f"  Validation Loss: {metrics['eval_loss']:.4f}")
-                logger.info(f"  Reasoning Accuracy: {metrics['reasoning_accuracy']:.4f}")
-                logger.info(f"  Consciousness Coherence: {metrics['consciousness_coherence']:.4f}")
+                # Log epoch summary
+                epoch_time = time.time() - epoch_start_time
+                avg_epoch_loss = np.mean(epoch_losses) if epoch_losses else float('inf')
+                logger.info(f"  Average Loss: {avg_epoch_loss:.4f}")
+                logger.info(f"  Epoch Time: {epoch_time:.1f}s")
+
+                # MLflow epoch metrics
+                if self.mlflow_tracker is not None:
+                    self.mlflow_tracker.log_metrics({
+                        "train/loss": float(avg_epoch_loss),
+                        "train/epoch_time_sec": epoch_time,
+                        "train/perplexity": float(self.perplexity_tracker.get_perplexity()),
+                    }, step=epoch)
                 
-                best_val_loss, patience_counter, should_stop = self._check_early_stopping(
-                    metrics["eval_loss"], best_val_loss, patience_counter, max_patience, epoch, metrics
-                )
-                if should_stop:
-                    break
+                # Periodic checkpoint
+                if epoch % 10 == 0 and epoch > 0:
+                    self.save_checkpoint(epoch, {"avg_loss": float(avg_epoch_loss)})
+                    logger.info(f"Periodic checkpoint saved at epoch {epoch}")
+                
+                # Validation
+                should_validate = (epoch % self.config.eval_interval == 0) or (epoch == self.config.num_epochs - 1)
+                if should_validate:
+                    metrics = self._run_validation(val_data, use_streaming)
+                    
+                    self.validation_losses.append(metrics["eval_loss"])
+                    self.reasoning_accuracies.append(metrics["reasoning_accuracy"])
+                    self.consciousness_coherence.append(metrics["consciousness_coherence"])
+                    
+                    logger.info(f"  Validation Loss: {metrics['eval_loss']:.4f}")
+                    logger.info(f"  Reasoning Accuracy: {metrics['reasoning_accuracy']:.4f}")
+                    logger.info(f"  Consciousness Coherence: {metrics['consciousness_coherence']:.4f}")
+
+                    # MLflow validation metrics
+                    if self.mlflow_tracker is not None:
+                        self.mlflow_tracker.log_metrics({
+                            "val/loss": float(metrics["eval_loss"]),
+                            "val/reasoning_accuracy": float(metrics["reasoning_accuracy"]),
+                            "val/consciousness_coherence": float(metrics["consciousness_coherence"]),
+                        }, step=epoch)
+                    
+                    best_val_loss, patience_counter, should_stop = self._check_early_stopping(
+                        metrics["eval_loss"], best_val_loss, patience_counter, max_patience, epoch, metrics
+                    )
+                    if should_stop:
+                        break
+        finally:
+            # End MLflow run
+            if mlflow_ctx is not None:
+                try:
+                    mlflow_ctx.__exit__(None, None, None)
+                except Exception:
+                    pass
         
         logger.info("=" * 60)
         logger.info("RT-DLM Training Completed!")
