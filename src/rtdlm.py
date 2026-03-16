@@ -18,7 +18,6 @@ from src.core.model.model_tms import TMSModel
 from src.modules.multimodal.fusion_module import MultiModalRTDLM
 from src.modules.multimodal.hybrid_audio_module import HybridAudioEncoder
 from src.modules.multimodal.hybrid_video_module import HybridVideoEncoder
-from src.core.reasoning import ReasoningEngine
 from src.core.quantum.quantum_agi_core import QuantumAGICore
 from src.core.quantum.quantum_readiness import (
     QubitAssistedOptimization, 
@@ -44,6 +43,13 @@ from src.core.agi.compute_controller import (
     ModuleOutput,
     ComputeState,
     ControllerLossComputer,
+    GRPOValueHead,
+)
+
+from src.core.reasoning import (
+    ReasoningEngine,
+    VerifyReflectReasoning,
+    SelfCritiqueHead,
 )
 
 class ConsciousnessSimulator(hk.Module):
@@ -1060,6 +1066,31 @@ class RTDLMAGISystem(hk.Module):
                 lambda_budget=config.controller_lambda_budget,
                 lambda_ponder=config.controller_lambda_ponder,
             )
+            
+            # GRPO Value Head — learned baseline for advantage estimation
+            if config.use_grpo:
+                self.grpo_value_head = GRPOValueHead(
+                    d_model=config.d_model,
+                    dropout_rate=config.memory_dropout,
+                    name="grpo_value_head"
+                )
+        
+        # Verify/Reflect reasoning — replaces plain CoT when enabled
+        if config.enable_verify_reflect:
+            self.verify_reflect = VerifyReflectReasoning(
+                d_model=config.d_model,
+                max_reasoning_steps=config.max_reasoning_steps,
+                max_verify_steps=config.max_verify_steps,
+                confidence_threshold=config.verify_confidence_threshold,
+                name="verify_reflect"
+            )
+        
+        # Self-critique head — evaluates and revises output quality
+        if config.enable_self_critique:
+            self.self_critique_head = SelfCritiqueHead(
+                d_model=config.d_model,
+                name="self_critique_head"
+            )
         
         # Final output projection
         self.output_head = hk.Linear(config.vocab_size, name="output_head")
@@ -1178,6 +1209,22 @@ class RTDLMAGISystem(hk.Module):
             "total_compute_cost": execution_trace.get("total_cost", 0.0),
             "steps_taken": execution_trace.get("final_step", 0),
         }
+        
+        # GRPO value estimate for RL training
+        if self.config.use_grpo and hasattr(self, 'grpo_value_head'):
+            value_estimate = self.grpo_value_head(
+                final_state.hidden_pooled, is_training=is_training
+            )
+            output["value_estimate"] = value_estimate
+        
+        # Self-critique on low-confidence outputs
+        if (self.config.enable_self_critique 
+                and hasattr(self, 'self_critique_head') 
+                and is_training):
+            critique_result = self.self_critique_head(final_features.mean(axis=1))
+            output["critique_quality_score"] = critique_result["quality_score"]
+            output["critique_needs_revision"] = critique_result["needs_revision"]
+            output["critique_revision_signal"] = critique_result["revision_signal"]
         
         if return_reasoning:
             output["reasoning_chain"] = [
@@ -1948,6 +1995,14 @@ def compute_agi_loss(logits, targets, aux_outputs=None, config=None):
             total_loss = total_loss + controller_penalties
             loss_components["controller_penalties"] = controller_penalties
             loss_components["controller_total_loss"] = total_loss
+        
+        # Self-critique loss — penalise low-quality outputs
+        if "critique_quality_score" in aux_outputs and config and config.enable_self_critique:
+            critique_quality = aux_outputs["critique_quality_score"]
+            # Loss = -log(quality_score): encourage high quality
+            critique_loss = -jnp.mean(jnp.log(critique_quality + 1e-8))
+            total_loss = total_loss + config.critique_loss_coeff * critique_loss
+            loss_components["self_critique_loss"] = critique_loss
     
     # Store all components in aux_outputs for logging
     if aux_outputs is not None:

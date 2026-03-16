@@ -19,7 +19,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.config.agi_config import AGIConfig
 
 @dataclass
-class TestResult:
+class SingleTestResult:
     """Result of a single test"""
     name: str
     passed: bool
@@ -31,11 +31,11 @@ class RTDLMTestFramework:
     """Production testing framework for RT-DLM AGI system"""
     
     def __init__(self):
-        self.results: List[TestResult] = []
+        self.results: List[SingleTestResult] = []
         self.current_test = ""
         self.start_time = 0
         
-    def run_test(self, name: str, test_func: Callable) -> TestResult:
+    def run_test(self, name: str, test_func: Callable) -> SingleTestResult:
         """Run a single test and capture results"""
         
         print(f"Testing: {name}")
@@ -45,13 +45,13 @@ class RTDLMTestFramework:
         try:
             test_func()
             duration = time.time() - self.start_time
-            result = TestResult(name, True, "PASSED", duration)
+            result = SingleTestResult(name, True, "PASSED", duration)
             print(f"   [PASS] {name}: PASSED ({duration:.2f}s)")
             
         except Exception as e:
             duration = time.time() - self.start_time
             error_msg = str(e)
-            result = TestResult(name, False, f"FAILED: {error_msg}", duration, error_msg)
+            result = SingleTestResult(name, False, f"FAILED: {error_msg}", duration, error_msg)
             print(f"   [FAIL] {name}: FAILED - {error_msg}")
             
         self.results.append(result)

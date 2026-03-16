@@ -269,6 +269,46 @@ class AGIConfig:
         # Controller Strategy
         self.controller_strategy = kwargs.get("controller_strategy", "balanced")  # "fast", "balanced", "thorough", "adaptive"
 
+        # --- GRPO (Group Relative Policy Optimization) ---
+        self.use_grpo = kwargs.get("use_grpo", False)  # Enable GRPO value head & training
+        self.grpo_num_groups = kwargs.get("grpo_num_groups", 4)  # Number of response groups per prompt
+        self.grpo_group_size = kwargs.get("grpo_group_size", 4)  # Responses per group
+        self.grpo_clip_eps = kwargs.get("grpo_clip_eps", 0.2)  # PPO-style clip epsilon
+        self.grpo_kl_coeff = kwargs.get("grpo_kl_coeff", 0.01)  # KL penalty coefficient
+        self.grpo_value_loss_coeff = kwargs.get("grpo_value_loss_coeff", 0.5)  # Value head loss weight
+        self.grpo_entropy_coeff = kwargs.get("grpo_entropy_coeff", 0.01)  # Entropy bonus coefficient
+        self.grpo_gamma = kwargs.get("grpo_gamma", 1.0)  # Discount factor for returns
+        self.grpo_lam = kwargs.get("grpo_lam", 0.95)  # GAE lambda for advantage estimation
+        self.grpo_normalize_advantages = kwargs.get("grpo_normalize_advantages", True)  # Normalize advantages per group
+        self.grpo_reward_model = kwargs.get("grpo_reward_model", "internal")  # "internal", "external", "rule_based"
+
+        # --- Verify / Reflect Loop ---
+        self.enable_verify_reflect = kwargs.get("enable_verify_reflect", False)  # Enable verify/reflect reasoning loop
+        self.max_verify_steps = kwargs.get("max_verify_steps", 3)  # Max verification iterations
+        self.verify_confidence_threshold = kwargs.get("verify_confidence_threshold", 0.85)  # Confidence to accept without reflection
+        self.reflect_temperature = kwargs.get("reflect_temperature", 0.7)  # Temperature for reflection sampling
+        self.verify_reward_bonus = kwargs.get("verify_reward_bonus", 0.1)  # Bonus reward for passing verification
+        self.reflect_penalty = kwargs.get("reflect_penalty", -0.05)  # Penalty for requiring reflection
+
+        # --- KV Prefix Cache ---
+        self.enable_kv_cache = kwargs.get("enable_kv_cache", False)  # Enable KV prefix caching
+        self.kv_cache_prefix_len = kwargs.get("kv_cache_prefix_len", 256)  # Max prefix tokens to cache
+        self.kv_cache_max_batch = kwargs.get("kv_cache_max_batch", 32)  # Max batch size for cache
+        self.kv_cache_eviction = kwargs.get("kv_cache_eviction", "lru")  # Cache eviction: "lru", "fifo", "lfu"
+        self.kv_cache_dtype = kwargs.get("kv_cache_dtype", "bfloat16")  # Cache storage dtype
+
+        # --- Self-Critique ---
+        self.enable_self_critique = kwargs.get("enable_self_critique", False)  # Enable self-critique head
+        self.self_critique_threshold = kwargs.get("self_critique_threshold", 0.6)  # Quality threshold to trigger revision
+        self.max_revisions = kwargs.get("max_revisions", 2)  # Maximum self-revision iterations
+        self.critique_loss_coeff = kwargs.get("critique_loss_coeff", 0.1)  # Weight for critique loss
+
+        # --- Think Budget ---
+        self.enable_think_budget = kwargs.get("enable_think_budget", False)  # Enable adaptive think budget
+        self.think_budget_max_tokens = kwargs.get("think_budget_max_tokens", 1024)  # Max reasoning tokens
+        self.think_budget_min_tokens = kwargs.get("think_budget_min_tokens", 32)  # Min reasoning tokens
+        self.think_budget_difficulty_scale = kwargs.get("think_budget_difficulty_scale", True)  # Scale budget by difficulty
+
         # Validate configuration
         self._validate_config()
 
@@ -308,6 +348,41 @@ class AGIConfig:
             assert 0 < self.controller_halt_threshold <= 1.0, "controller_halt_threshold must be between 0 and 1"
             valid_strategies = ["fast", "balanced", "thorough", "adaptive"]
             assert self.controller_strategy in valid_strategies, f"controller_strategy must be one of {valid_strategies}"
+
+        # Validate GRPO settings
+        if self.use_grpo:
+            assert self.grpo_num_groups >= 1, "grpo_num_groups must be at least 1"
+            assert self.grpo_group_size >= 2, "grpo_group_size must be at least 2"
+            assert 0 < self.grpo_clip_eps < 1.0, "grpo_clip_eps must be between 0 and 1"
+            assert self.grpo_kl_coeff >= 0, "grpo_kl_coeff must be non-negative"
+            assert self.grpo_value_loss_coeff >= 0, "grpo_value_loss_coeff must be non-negative"
+            valid_reward_models = ["internal", "external", "rule_based"]
+            assert self.grpo_reward_model in valid_reward_models, f"grpo_reward_model must be one of {valid_reward_models}"
+
+        # Validate verify/reflect settings
+        if self.enable_verify_reflect:
+            assert self.max_verify_steps >= 1, "max_verify_steps must be at least 1"
+            assert 0 < self.verify_confidence_threshold <= 1.0, "verify_confidence_threshold must be between 0 and 1"
+            assert 0 < self.reflect_temperature <= 2.0, "reflect_temperature must be between 0 and 2"
+
+        # Validate KV cache settings
+        if self.enable_kv_cache:
+            assert self.kv_cache_prefix_len >= 1, "kv_cache_prefix_len must be at least 1"
+            assert self.kv_cache_max_batch >= 1, "kv_cache_max_batch must be at least 1"
+            valid_evictions = ["lru", "fifo", "lfu"]
+            assert self.kv_cache_eviction in valid_evictions, f"kv_cache_eviction must be one of {valid_evictions}"
+
+        # Validate self-critique settings
+        if self.enable_self_critique:
+            assert 0 < self.self_critique_threshold <= 1.0, "self_critique_threshold must be between 0 and 1"
+            assert self.max_revisions >= 1, "max_revisions must be at least 1"
+            assert self.critique_loss_coeff >= 0, "critique_loss_coeff must be non-negative"
+
+        # Validate think budget settings
+        if self.enable_think_budget:
+            assert self.think_budget_max_tokens >= self.think_budget_min_tokens, \
+                "think_budget_max_tokens must be >= think_budget_min_tokens"
+            assert self.think_budget_min_tokens >= 1, "think_budget_min_tokens must be at least 1"
             
     def to_dict(self):
         """Convert config to dictionary"""
@@ -454,5 +529,40 @@ class AGIConfig:
         print(f"  - Learning rate: {self.learning_rate}")
         print(f"  - Clip norm: {self.clip_norm}")
         print(f"  - Epochs: {self.num_epochs}")
+        
+        print("\nGRPO (Group Relative Policy Optimization):")
+        print(f"  - Enabled: {self.use_grpo}")
+        if self.use_grpo:
+            print(f"    - Num groups: {self.grpo_num_groups}")
+            print(f"    - Group size: {self.grpo_group_size}")
+            print(f"    - Clip epsilon: {self.grpo_clip_eps}")
+            print(f"    - KL coefficient: {self.grpo_kl_coeff}")
+            print(f"    - Reward model: {self.grpo_reward_model}")
+        
+        print("\nVerify/Reflect Loop:")
+        print(f"  - Enabled: {self.enable_verify_reflect}")
+        if self.enable_verify_reflect:
+            print(f"    - Max verify steps: {self.max_verify_steps}")
+            print(f"    - Confidence threshold: {self.verify_confidence_threshold}")
+            print(f"    - Reflect temperature: {self.reflect_temperature}")
+        
+        print("\nKV Prefix Cache:")
+        print(f"  - Enabled: {self.enable_kv_cache}")
+        if self.enable_kv_cache:
+            print(f"    - Prefix length: {self.kv_cache_prefix_len}")
+            print(f"    - Max batch: {self.kv_cache_max_batch}")
+            print(f"    - Eviction: {self.kv_cache_eviction}")
+        
+        print("\nSelf-Critique:")
+        print(f"  - Enabled: {self.enable_self_critique}")
+        if self.enable_self_critique:
+            print(f"    - Quality threshold: {self.self_critique_threshold}")
+            print(f"    - Max revisions: {self.max_revisions}")
+        
+        print("\nThink Budget:")
+        print(f"  - Enabled: {self.enable_think_budget}")
+        if self.enable_think_budget:
+            print(f"    - Token range: {self.think_budget_min_tokens}-{self.think_budget_max_tokens}")
+            print(f"    - Difficulty scaling: {self.think_budget_difficulty_scale}")
         print("=" * 60)
 

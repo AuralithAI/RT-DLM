@@ -92,6 +92,11 @@ from .compute_controller import (
     ControllerIntegrationMixin,
     ControlledAGIForward,
     create_controlled_agi_fn,
+    
+    # GRPO
+    GRPOValueHead,
+    compute_grpo_advantages,
+    compute_grpo_loss,
 )
 
 from .module_adapters import (
@@ -145,6 +150,11 @@ __all__ = [
     "ControllerIntegrationMixin",
     "ControlledAGIForward",
     "create_controlled_agi_fn",
+    
+    # GRPO
+    "GRPOValueHead",
+    "compute_grpo_advantages",
+    "compute_grpo_loss",
     
     # Module Adapters
     "ModuleAdapter",

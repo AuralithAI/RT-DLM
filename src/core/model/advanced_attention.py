@@ -250,7 +250,10 @@ class GroupedQueryAttention(hk.Module):
         x: jnp.ndarray,
         mask: Optional[jnp.ndarray] = None,
         is_training: bool = True,
-        position_ids: Optional[jnp.ndarray] = None
+        position_ids: Optional[jnp.ndarray] = None,
+        kv_cache: Optional['KVPrefixCache'] = None,
+        layer_id: int = 0,
+        prefix_id: Optional[str] = None,
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """
         Apply grouped-query attention.
@@ -260,6 +263,9 @@ class GroupedQueryAttention(hk.Module):
             mask: Attention mask [batch, 1, seq_len, seq_len] or [batch, seq_len]
             is_training: Whether in training mode
             position_ids: Optional position indices
+            kv_cache: Optional KVPrefixCache for prefix caching
+            layer_id: Layer index for cache storage/lookup
+            prefix_id: Prefix identifier for cache key
             
         Returns:
             output: [batch, seq_len, d_model]
@@ -308,6 +314,18 @@ class GroupedQueryAttention(hk.Module):
             q = jnp.transpose(q, (0, 2, 1, 3))
             k = jnp.transpose(k, (0, 2, 1, 3))
             v = jnp.transpose(v, (0, 2, 1, 3))
+        
+        # KV Prefix Cache: look up or store cached K/V projections
+        if kv_cache is not None and prefix_id is not None:
+            cached_k, cached_v = kv_cache.get(prefix_id, layer_id)
+            if cached_k is not None and cached_v is not None:
+                # Cache hit — prepend cached K/V to current K/V
+                # cached tensors are [batch, num_kv_heads, prefix_len, head_dim]
+                k = jnp.concatenate([cached_k.astype(k.dtype), k], axis=2)
+                v = jnp.concatenate([cached_v.astype(v.dtype), v], axis=2)
+            else:
+                # Cache miss — store current K/V as prefix for future reuse
+                kv_cache.store(prefix_id, layer_id, k, v)
         
         # Repeat KV heads for grouped attention
         if self.num_queries_per_kv > 1:
@@ -804,3 +822,253 @@ def estimate_kv_cache_size(
         "per_token_mb": (cache_bytes / seq_len) / (1024 ** 2),
         "elements": cache_elements
     }
+
+
+# =============================================================================
+# KV Prefix Cache
+# =============================================================================
+
+class KVPrefixCache:
+    """
+    KV Prefix Cache for efficient inference with shared prompt prefixes.
+    
+    Caches the Key and Value projections for common prompt prefixes
+    (system prompts, few-shot examples, etc.) so they don't need to
+    be recomputed for every new request.
+    
+    Key design choices:
+    - Pure JAX arrays (no mutable state) for compatibility with jax.jit
+    - Per-layer caching: each transformer layer has its own KV cache entry
+    - Supports LRU, FIFO, and LFU eviction policies
+    - Dtype-aware: stores in bfloat16 by default to save memory
+    
+    Usage:
+        cache = KVPrefixCache(num_layers=12, max_prefix_len=256, ...)
+        
+        # During first forward pass with a new prefix:
+        cache.store(prefix_id="system_v1", layer=0, keys=k, values=v)
+        
+        # During subsequent passes with same prefix:
+        cached_k, cached_v = cache.get(prefix_id="system_v1", layer=0)
+        if cached_k is not None:
+            # Concatenate cached prefix KV with new token KV
+            full_k = jnp.concatenate([cached_k, new_k], axis=1)
+            full_v = jnp.concatenate([cached_v, new_v], axis=1)
+    
+    Args:
+        num_layers: Number of transformer layers to cache
+        max_prefix_len: Maximum prefix sequence length
+        num_kv_heads: Number of KV attention heads
+        head_dim: Dimension per attention head
+        max_entries: Maximum number of cached prefixes
+        eviction_policy: Cache eviction strategy ("lru", "fifo", "lfu")
+        dtype: Storage dtype for cached tensors
+    """
+    
+    def __init__(
+        self,
+        num_layers: int,
+        max_prefix_len: int,
+        num_kv_heads: int,
+        head_dim: int,
+        max_entries: int = 32,
+        eviction_policy: str = "lru",
+        dtype: jnp.dtype = jnp.bfloat16,
+    ):
+        self.num_layers = num_layers
+        self.max_prefix_len = max_prefix_len
+        self.num_kv_heads = num_kv_heads
+        self.head_dim = head_dim
+        self.max_entries = max_entries
+        self.eviction_policy = eviction_policy
+        self.dtype = dtype
+        
+        # Cache storage: prefix_id -> {layer_idx: (keys, values, metadata)}
+        self._cache: Dict[str, Dict[int, Tuple[jnp.ndarray, jnp.ndarray]]] = {}
+        # Access tracking for eviction
+        self._access_count: Dict[str, int] = {}
+        self._access_order: list = []  # Most recent at end
+        self._insertion_order: list = []  # Oldest at front
+    
+    @property
+    def size(self) -> int:
+        """Number of cached prefix entries."""
+        return len(self._cache)
+    
+    @property
+    def is_full(self) -> bool:
+        """Whether cache is at capacity."""
+        return len(self._cache) >= self.max_entries
+    
+    def _evict(self) -> None:
+        """Evict one entry based on eviction policy."""
+        if not self._cache:
+            return
+        
+        if self.eviction_policy == "lru":
+            # Remove least recently used
+            victim = self._access_order[0]
+            self._access_order.remove(victim)
+        elif self.eviction_policy == "fifo":
+            # Remove oldest inserted
+            victim = self._insertion_order[0]
+            self._insertion_order.remove(victim)
+        elif self.eviction_policy == "lfu":
+            # Remove least frequently used
+            victim = min(self._access_count.keys(), key=lambda k: self._access_count[k])
+        else:
+            # Default to LRU
+            victim = self._access_order[0]
+            self._access_order.remove(victim)
+        
+        del self._cache[victim]
+        self._access_count.pop(victim, None)
+        if victim in self._insertion_order:
+            self._insertion_order.remove(victim)
+        if victim in self._access_order:
+            self._access_order.remove(victim)
+    
+    def _touch(self, prefix_id: str) -> None:
+        """Update access tracking for a cache entry."""
+        self._access_count[prefix_id] = self._access_count.get(prefix_id, 0) + 1
+        if prefix_id in self._access_order:
+            self._access_order.remove(prefix_id)
+        self._access_order.append(prefix_id)
+    
+    def store(
+        self,
+        prefix_id: str,
+        layer: int,
+        keys: jnp.ndarray,
+        values: jnp.ndarray,
+    ) -> None:
+        """
+        Store KV projections for a prefix at a specific layer.
+        
+        Args:
+            prefix_id: Unique identifier for the prefix
+            layer: Transformer layer index
+            keys: Key projections [batch, seq_len, num_kv_heads, head_dim]
+                  or [batch, num_kv_heads, seq_len, head_dim]
+            values: Value projections (same shape as keys)
+        """
+        # Truncate to max prefix length
+        seq_axis = 2 if keys.ndim == 4 and keys.shape[1] == self.num_kv_heads else 1
+        if keys.shape[seq_axis] > self.max_prefix_len:
+            if seq_axis == 1:
+                keys = keys[:, :self.max_prefix_len]
+                values = values[:, :self.max_prefix_len]
+            else:
+                keys = keys[:, :, :self.max_prefix_len]
+                values = values[:, :, :self.max_prefix_len]
+        
+        # Convert to storage dtype
+        keys = keys.astype(self.dtype)
+        values = values.astype(self.dtype)
+        
+        # Evict if at capacity and this is a new entry
+        if prefix_id not in self._cache and self.is_full:
+            self._evict()
+        
+        # Store
+        if prefix_id not in self._cache:
+            self._cache[prefix_id] = {}
+            self._insertion_order.append(prefix_id)
+        
+        self._cache[prefix_id][layer] = (keys, values)
+        self._touch(prefix_id)
+    
+    def get(
+        self,
+        prefix_id: str,
+        layer: int,
+    ) -> Tuple[Optional[jnp.ndarray], Optional[jnp.ndarray]]:
+        """
+        Retrieve cached KV projections for a prefix at a specific layer.
+        
+        Args:
+            prefix_id: Unique identifier for the prefix
+            layer: Transformer layer index
+            
+        Returns:
+            (keys, values) if cached, (None, None) otherwise
+        """
+        if prefix_id not in self._cache:
+            return None, None
+        
+        if layer not in self._cache[prefix_id]:
+            return None, None
+        
+        self._touch(prefix_id)
+        keys, values = self._cache[prefix_id][layer]
+        return keys, values
+    
+    def has(self, prefix_id: str, layer: Optional[int] = None) -> bool:
+        """
+        Check if a prefix is cached.
+        
+        Args:
+            prefix_id: Unique identifier for the prefix
+            layer: If specified, check for a specific layer
+            
+        Returns:
+            True if the prefix (and optionally layer) is cached
+        """
+        if prefix_id not in self._cache:
+            return False
+        if layer is not None:
+            return layer in self._cache[prefix_id]
+        return True
+    
+    def invalidate(self, prefix_id: str) -> bool:
+        """
+        Remove a specific prefix from the cache.
+        
+        Args:
+            prefix_id: Unique identifier for the prefix to remove
+            
+        Returns:
+            True if the entry was found and removed
+        """
+        if prefix_id not in self._cache:
+            return False
+        
+        del self._cache[prefix_id]
+        self._access_count.pop(prefix_id, None)
+        if prefix_id in self._access_order:
+            self._access_order.remove(prefix_id)
+        if prefix_id in self._insertion_order:
+            self._insertion_order.remove(prefix_id)
+        return True
+    
+    def clear(self) -> None:
+        """Clear all cached entries."""
+        self._cache.clear()
+        self._access_count.clear()
+        self._access_order.clear()
+        self._insertion_order.clear()
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """
+        Get cache statistics.
+        
+        Returns:
+            Dictionary with cache stats including size, hit rates, memory usage
+        """
+        total_elements = 0
+        for prefix_id, layers in self._cache.items():
+            for layer_idx, (k, v) in layers.items():
+                total_elements += k.size + v.size
+        
+        bytes_per_element = 2 if self.dtype == jnp.bfloat16 else 4
+        memory_bytes = total_elements * bytes_per_element
+        
+        return {
+            "num_entries": len(self._cache),
+            "max_entries": self.max_entries,
+            "utilization": len(self._cache) / self.max_entries if self.max_entries > 0 else 0,
+            "total_elements": total_elements,
+            "memory_mb": memory_bytes / (1024 ** 2),
+            "eviction_policy": self.eviction_policy,
+            "access_counts": dict(self._access_count),
+        }

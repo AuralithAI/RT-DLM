@@ -278,6 +278,371 @@ class ChainOfThoughtReasoning(hk.Module):
             "hop_embeddings": semantic_result["reasoning"]["hop_embeddings"] if semantic_result["reasoning"] else None
         }
 
+
+# =============================================================================
+# Verify/Reflect Loop
+# =============================================================================
+
+class VerificationHead(hk.Module):
+    """
+    Verification head that evaluates whether a reasoning output is correct.
+    
+    Takes a candidate answer and its reasoning chain, produces a verification
+    score indicating confidence that the answer is correct. Used as the
+    'verify' step in the verify/reflect loop.
+    
+    Architecture:
+        [answer, thought_summary, query] → Linear(3*d, d) → SiLU
+            → LayerNorm → Linear(d, d//2) → SiLU → Linear(d//2, 1) → sigmoid
+    """
+    
+    def __init__(self, d_model: int, name: Optional[str] = None):
+        super().__init__(name=name)
+        self.d_model = d_model
+        
+        self.verify_net = hk.Sequential([
+            hk.Linear(d_model, name="verify_fc1"),
+            jax.nn.silu,
+            hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name="verify_ln"),
+            hk.Linear(d_model // 2, name="verify_fc2"),
+            jax.nn.silu,
+            hk.Linear(1, name="verify_out"),
+            jax.nn.sigmoid
+        ], name="verify_net")
+        
+        self.input_proj = hk.Linear(d_model, name="verify_input_proj")
+    
+    def __call__(
+        self,
+        answer: jnp.ndarray,
+        thought_summary: jnp.ndarray,
+        query_summary: jnp.ndarray
+    ) -> jnp.ndarray:
+        """
+        Verify a candidate answer.
+        
+        Args:
+            answer: Candidate answer [batch, d_model]
+            thought_summary: Summary of reasoning chain [batch, d_model]
+            query_summary: Original query summary [batch, d_model]
+            
+        Returns:
+            verification_score: Confidence the answer is correct [batch, 1]
+        """
+        combined = jnp.concatenate([answer, thought_summary, query_summary], axis=-1)
+        projected = self.input_proj(combined)
+        return self.verify_net(projected)
+
+
+class ReflectionModule(hk.Module):
+    """
+    Reflection module that generates corrective signals when verification fails.
+    
+    When the VerificationHead produces a low score, the ReflectionModule
+    analyzes what went wrong and produces a correction delta to refine
+    the answer. This implements the 'reflect' step.
+    
+    Architecture:
+        [answer, thought_summary, verification_score] → Linear(2d+1, d) → SiLU
+            → LayerNorm → Linear(d, d) → tanh (correction bounded to [-1, 1])
+    """
+    
+    def __init__(self, d_model: int, name: Optional[str] = None):
+        super().__init__(name=name)
+        self.d_model = d_model
+        
+        self.reflect_net = hk.Sequential([
+            hk.Linear(d_model, name="reflect_fc1"),
+            jax.nn.silu,
+            hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name="reflect_ln"),
+            hk.Linear(d_model, name="reflect_fc2"),
+            jax.nn.tanh  # Bounded correction
+        ], name="reflect_net")
+        
+        self.input_proj = hk.Linear(d_model, name="reflect_input_proj")
+        
+        # Reflection gate: controls how much correction to apply
+        self.gate = hk.Sequential([
+            hk.Linear(d_model // 2, name="gate_fc1"),
+            jax.nn.silu,
+            hk.Linear(d_model, name="gate_fc2"),
+            jax.nn.sigmoid
+        ], name="reflect_gate")
+    
+    def __call__(
+        self,
+        answer: jnp.ndarray,
+        thought_summary: jnp.ndarray,
+        verification_score: jnp.ndarray,
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """
+        Generate reflection-based correction.
+        
+        Args:
+            answer: Current candidate answer [batch, d_model]
+            thought_summary: Reasoning chain summary [batch, d_model]
+            verification_score: How confident the verifier is [batch, 1]
+            
+        Returns:
+            corrected_answer: Answer with reflection correction applied [batch, d_model]
+            correction_delta: The raw correction signal [batch, d_model]
+        """
+        # Expand verification score to d_model for concatenation
+        score_expanded = jnp.broadcast_to(verification_score, (answer.shape[0], self.d_model))
+        
+        combined = jnp.concatenate([answer, thought_summary, score_expanded], axis=-1)
+        projected = self.input_proj(combined)
+        
+        # Generate correction
+        correction = self.reflect_net(projected)
+        
+        # Gate the correction (apply more correction when verification is low)
+        gate_input = jnp.concatenate([answer, correction], axis=-1)
+        gate_proj = hk.Linear(self.d_model // 2, name="gate_proj")(gate_input)
+        gate_value = self.gate(gate_proj)
+        
+        # Scale correction by inverse of verification confidence
+        # Low verification → more correction
+        correction_scale = 1.0 - verification_score
+        scaled_correction = correction * gate_value * correction_scale
+        
+        corrected_answer = answer + scaled_correction
+        
+        return corrected_answer, scaled_correction
+
+
+class VerifyReflectReasoning(hk.Module):
+    """
+    Iterative Verify/Reflect reasoning loop.
+    
+    Wraps ChainOfThoughtReasoning with a verification and reflection cycle:
+    1. Generate initial answer via CoT reasoning
+    2. Verify: Check if answer meets confidence threshold
+    3. If verification fails: Reflect and generate correction
+    4. Repeat until verified or max_verify_steps reached
+    
+    This enables the model to catch and correct its own mistakes,
+    similar to how humans re-check their work.
+    
+    Args:
+        d_model: Model dimension
+        max_reasoning_steps: Steps for initial CoT reasoning
+        max_verify_steps: Maximum verify/reflect iterations
+        confidence_threshold: Verification score to accept answer
+        use_semantic_graph: Whether to use graph-based reasoning
+    """
+    
+    def __init__(
+        self,
+        d_model: int,
+        max_reasoning_steps: int = 10,
+        max_verify_steps: int = 3,
+        confidence_threshold: float = 0.85,
+        use_semantic_graph: bool = True,
+        name: Optional[str] = None
+    ):
+        super().__init__(name=name)
+        self.d_model = d_model
+        self.max_verify_steps = max_verify_steps
+        self.confidence_threshold = confidence_threshold
+        
+        # Core reasoning engine
+        self.chain_of_thought = ChainOfThoughtReasoning(
+            d_model, max_reasoning_steps, use_semantic_graph, name="cot"
+        )
+        
+        # Verify/Reflect components
+        self.verifier = VerificationHead(d_model, name="verifier")
+        self.reflector = ReflectionModule(d_model, name="reflector")
+    
+    def __call__(
+        self,
+        query: jnp.ndarray,
+        context: jnp.ndarray,
+        max_steps: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Perform reasoning with verify/reflect loop.
+        
+        Args:
+            query: Question to reason about [batch, seq_len, d_model] or [batch, d_model]
+            context: Available knowledge [batch, context_len, d_model]
+            max_steps: Override max reasoning steps for CoT
+            
+        Returns:
+            Dictionary containing:
+                - final_answer: Best answer after verification [batch, d_model]
+                - reasoning_chain: CoT reasoning steps
+                - confidences: Step confidences from CoT
+                - verification_scores: Scores from each verify step
+                - num_reflections: Number of reflection corrections applied
+                - thought_summary: Summary of reasoning chain
+                - reflection_deltas: Correction vectors applied
+        """
+        # Ensure query is 3D
+        if query.ndim == 2:
+            query_3d = query[:, None, :]
+        else:
+            query_3d = query
+        
+        # Step 1: Initial reasoning
+        cot_result = self.chain_of_thought(query_3d, context, max_steps)
+        
+        current_answer = cot_result["final_answer"]
+        thought_summary = cot_result["thought_summary"]
+        query_summary = query_3d.mean(axis=1)  # [batch, d_model]
+        
+        verification_scores = []
+        reflection_deltas = []
+        num_reflections = 0
+        # Track whether we've already accepted the answer
+        accepted = jnp.array(False)
+        
+        # Step 2-4: Verify/Reflect loop
+        # Always run all steps to keep the computation graph static
+        # (required for jax.grad compatibility), but conditionally apply updates.
+        for _ in range(self.max_verify_steps):
+            # Verify current answer
+            v_score = self.verifier(current_answer, thought_summary, query_summary)
+            verification_scores.append(v_score)
+            
+            # Check if verification passes (JAX-traceable comparison)
+            passes = v_score.mean() >= self.confidence_threshold
+            accepted = accepted | passes
+            
+            # Reflect and correct (always compute, conditionally apply)
+            corrected, delta = self.reflector(current_answer, thought_summary, v_score)
+            reflection_deltas.append(delta)
+            
+            # Only apply correction if not yet accepted
+            # jnp.where is differentiable and trace-safe
+            should_apply = ~accepted
+            apply_mask = jnp.where(should_apply, 1.0, 0.0)
+            
+            current_answer = current_answer + apply_mask * (corrected - current_answer)
+            num_reflections += int(jnp.where(should_apply, 1, 0))
+            
+            # Update thought summary with reflection
+            delta_mean = delta.mean(axis=-1, keepdims=True)
+            thought_update = jnp.broadcast_to(delta_mean, thought_summary.shape) * 0.1
+            thought_summary = thought_summary + apply_mask * thought_update
+        
+        return {
+            "final_answer": current_answer,
+            "reasoning_chain": cot_result["reasoning_chain"],
+            "confidences": cot_result["confidences"],
+            "attention_maps": cot_result.get("attention_maps", []),
+            "thought_summary": thought_summary,
+            "verification_scores": verification_scores,
+            "num_reflections": num_reflections,
+            "reflection_deltas": reflection_deltas,
+        }
+
+
+class SelfCritiqueHead(hk.Module):
+    """
+    Self-critique head for output quality assessment and iterative revision.
+    
+    Evaluates the quality of generated output and produces a critique signal.
+    If quality is below threshold, triggers re-generation with the critique
+    as additional context, enabling iterative self-improvement.
+    
+    Architecture:
+        hidden_state → Linear(d, d//2) → SiLU → LayerNorm
+                     → Linear(d//2, 2) → [quality_score, revision_signal]
+    
+    The quality_score (sigmoid) indicates output quality [0, 1].
+    The revision_signal (tanh) provides directional feedback [-1, 1].
+    """
+    
+    def __init__(
+        self,
+        d_model: int,
+        quality_threshold: float = 0.6,
+        max_revisions: int = 2,
+        name: Optional[str] = None
+    ):
+        super().__init__(name=name)
+        self.d_model = d_model
+        self.quality_threshold = quality_threshold
+        self.max_revisions = max_revisions
+        
+        self.critique_net = hk.Sequential([
+            hk.Linear(d_model // 2, name="critique_fc1"),
+            jax.nn.silu,
+            hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name="critique_ln"),
+        ], name="critique_backbone")
+        
+        # Separate heads for quality and revision
+        self.quality_head = hk.Sequential([
+            hk.Linear(1, name="quality_out"),
+            jax.nn.sigmoid
+        ], name="quality_head")
+        
+        self.revision_head = hk.Sequential([
+            hk.Linear(d_model, name="revision_out"),
+            jax.nn.tanh
+        ], name="revision_head")
+    
+    def __call__(
+        self,
+        hidden_state: jnp.ndarray,
+        is_training: bool = True
+    ) -> Dict[str, jnp.ndarray]:
+        """
+        Evaluate output quality and generate revision signal.
+        
+        Args:
+            hidden_state: Output hidden state [batch, d_model] or [batch, seq, d_model]
+            is_training: Whether in training mode
+            
+        Returns:
+            Dictionary with:
+                - quality_score: Output quality [batch, 1]
+                - revision_signal: Directional revision feedback [batch, d_model]
+                - needs_revision: Boolean mask [batch, 1]
+        """
+        # Pool if sequence input
+        if hidden_state.ndim == 3:
+            hidden_state = hidden_state.mean(axis=1)
+        
+        features = self.critique_net(hidden_state)
+        quality_score = self.quality_head(features)
+        revision_signal = self.revision_head(features)
+        
+        needs_revision = quality_score < self.quality_threshold
+        
+        return {
+            "quality_score": quality_score,
+            "revision_signal": revision_signal,
+            "needs_revision": needs_revision,
+        }
+    
+    def revise(
+        self,
+        hidden_state: jnp.ndarray,
+        revision_signal: jnp.ndarray,
+        iteration: int = 0
+    ) -> jnp.ndarray:
+        """
+        Apply revision signal to hidden state.
+        
+        Uses decaying strength for subsequent revisions to prevent
+        oscillation.
+        
+        Args:
+            hidden_state: Current hidden state [batch, d_model]
+            revision_signal: Correction direction [batch, d_model]
+            iteration: Current revision iteration (0-indexed)
+            
+        Returns:
+            revised_state: Corrected hidden state [batch, d_model]
+        """
+        # Decay strength with each revision to prevent oscillation
+        decay = 0.5 ** iteration
+        return hidden_state + decay * revision_signal
+
+
 class MetaLearningController(hk.Module):
     """Meta-learning controller for few-shot adaptation"""
     
@@ -446,11 +811,24 @@ class ReasoningEngine(hk.Module):
         super().__init__(name=name)
         self.config = config
         
-        # Core reasoning components
-        self.chain_of_thought = ChainOfThoughtReasoning(
-            config.d_model, 
-            max_reasoning_steps=config.max_reasoning_steps
-        )
+        # Verify/Reflect reasoning — replaces plain CoT when enabled
+        self._verify_reflect_enabled = getattr(config, 'enable_verify_reflect', False)
+        
+        if self._verify_reflect_enabled:
+            self.chain_of_thought = VerifyReflectReasoning(
+                config.d_model,
+                max_reasoning_steps=config.max_reasoning_steps,
+                max_verify_steps=getattr(config, 'max_verify_steps', 3),
+                confidence_threshold=getattr(config, 'verify_confidence_threshold', 0.85),
+                name="verify_reflect_cot"
+            )
+        else:
+            # Core reasoning components
+            self.chain_of_thought = ChainOfThoughtReasoning(
+                config.d_model, 
+                max_reasoning_steps=config.max_reasoning_steps
+            )
+        
         self.meta_controller = MetaLearningController(config.d_model)
         self.self_improvement = SelfImprovementModule(config.d_model)
         
@@ -508,14 +886,22 @@ class ReasoningEngine(hk.Module):
             jnp.concatenate([reasoning_features, meta_features, improvement_features], axis=-1)
         )
         
-        return {
+        result = {
             "reasoning_output": integrated_reasoning,
             "chain_of_thought": reasoning_result,
             "meta_learning": meta_result,
             "self_improvement": improvement_result,
             "reasoning_chain": reasoning_result["reasoning_chain"],
-            "confidence_scores": reasoning_result["confidences"]
+            "confidence_scores": reasoning_result["confidences"],
         }
+        
+        # Include verify/reflect metadata when enabled
+        if self._verify_reflect_enabled:
+            result["verification_scores"] = reasoning_result.get("verification_scores", [])
+            result["num_reflections"] = reasoning_result.get("num_reflections", 0)
+            result["reflection_deltas"] = reasoning_result.get("reflection_deltas", [])
+        
+        return result
 
     def recursive_context_reasoning(
         self,

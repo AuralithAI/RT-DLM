@@ -1248,6 +1248,214 @@ class ControllerRewardShaper:
 
 
 # =============================================================================
+# GRPO (Group Relative Policy Optimization)
+# =============================================================================
+
+class GRPOValueHead(hk.Module):
+    """
+    Value head for Group Relative Policy Optimization (GRPO).
+    
+    Estimates the expected return (value) from the current hidden state,
+    enabling advantage-based policy updates. The value head is a lightweight
+    2-layer MLP that shares the backbone representation.
+    
+    Architecture:
+        hidden_state → Linear(d_model, d_model//2) → SiLU → LayerNorm
+                     → Linear(d_model//2, 1) → scalar value
+    
+    GRPO key ideas:
+    - Generate G groups of K responses per prompt
+    - Rank responses within each group by reward
+    - Compute advantages relative to group baseline (mean reward)
+    - Update policy using clipped surrogate objective
+    - Value head provides learned baseline for variance reduction
+    
+    References:
+        - DeepSeek-R1: Incentivizing Reasoning in LLMs via GRPO
+        - Schulman et al., Proximal Policy Optimization Algorithms
+    """
+    
+    def __init__(
+        self,
+        d_model: int,
+        dropout_rate: float = 0.0,
+        name: Optional[str] = None
+    ):
+        super().__init__(name=name)
+        self.d_model = d_model
+        self.dropout_rate = dropout_rate
+    
+    def __call__(
+        self,
+        hidden_state: jnp.ndarray,
+        is_training: bool = True
+    ) -> jnp.ndarray:
+        """
+        Estimate value from hidden state.
+        
+        Args:
+            hidden_state: Pooled hidden representation [batch, d_model]
+                          or sequence hidden [batch, seq_len, d_model]
+            is_training: Whether in training mode (for dropout)
+            
+        Returns:
+            values: Scalar value estimates [batch, 1]
+        """
+        # Pool if sequence input
+        if hidden_state.ndim == 3:
+            hidden_state = hidden_state.mean(axis=1)
+        
+        # 2-layer MLP: d_model → d_model//2 → 1
+        x = hk.Linear(self.d_model // 2, name="value_fc1")(hidden_state)
+        x = jax.nn.silu(x)
+        x = hk.LayerNorm(
+            axis=-1, create_scale=True, create_offset=True, name="value_ln"
+        )(x)
+        
+        if is_training and self.dropout_rate > 0:
+            x = hk.dropout(hk.next_rng_key(), self.dropout_rate, x)
+        
+        values = hk.Linear(1, name="value_out")(x)
+        
+        return values
+
+
+def compute_grpo_advantages(
+    rewards: jnp.ndarray,
+    group_size: int,
+    normalize: bool = True,
+    gamma: float = 1.0,
+    lam: float = 0.95,
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """
+    Compute group-relative advantages for GRPO.
+    
+    For each group of responses to the same prompt, advantages are
+    computed relative to the group's mean reward, providing a
+    within-group ranking signal.
+    
+    Args:
+        rewards: Reward values [total_responses] where total_responses = num_prompts * group_size
+        group_size: Number of responses per prompt group
+        normalize: Whether to normalize advantages within each group
+        gamma: Discount factor (1.0 for single-step rewards)
+        lam: GAE lambda (unused for single-step, kept for compatibility)
+        
+    Returns:
+        advantages: Group-relative advantages [total_responses]
+        returns: Target returns for value head [total_responses]
+    """
+    num_prompts = rewards.shape[0] // group_size
+    
+    # Reshape into groups: [num_prompts, group_size]
+    grouped_rewards = rewards.reshape(num_prompts, group_size)
+    
+    # Group baseline: mean reward per prompt
+    group_means = grouped_rewards.mean(axis=1, keepdims=True)
+    group_stds = grouped_rewards.std(axis=1, keepdims=True) + 1e-8
+    
+    # Advantages = reward - group_baseline
+    advantages = grouped_rewards - group_means
+    
+    # Normalize within group if requested
+    if normalize:
+        advantages = advantages / group_stds
+    
+    # Returns are the raw rewards (for value head regression)
+    returns = grouped_rewards
+    
+    # Flatten back
+    advantages = advantages.reshape(-1)
+    returns = returns.reshape(-1)
+    
+    return advantages, returns
+
+
+def compute_grpo_loss(
+    log_probs: jnp.ndarray,
+    old_log_probs: jnp.ndarray,
+    advantages: jnp.ndarray,
+    values: jnp.ndarray,
+    returns: jnp.ndarray,
+    clip_eps: float = 0.2,
+    value_loss_coeff: float = 0.5,
+    entropy_coeff: float = 0.01,
+    kl_coeff: float = 0.01,
+) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
+    """
+    Compute the full GRPO loss with clipped surrogate, value, and entropy terms.
+    
+    Loss = -L_clip + c_v * L_value - c_e * H[π] + c_kl * KL[π || π_old]
+    
+    where:
+        L_clip = min(ratio * A, clip(ratio, 1-ε, 1+ε) * A)
+        L_value = 0.5 * (V - R)²
+        H[π] = -Σ π log π  (entropy bonus for exploration)
+        KL[π || π_old] = Σ π_old (log π_old - log π)  (stay close to reference)
+    
+    Args:
+        log_probs: Log probabilities under current policy [batch]
+        old_log_probs: Log probabilities under old/reference policy [batch]
+        advantages: Group-relative advantages [batch]
+        values: Value head predictions [batch]
+        returns: Target returns for value regression [batch]
+        clip_eps: PPO clipping epsilon
+        value_loss_coeff: Weight for value loss
+        entropy_coeff: Weight for entropy bonus
+        kl_coeff: Weight for KL penalty
+        
+    Returns:
+        total_loss: Combined scalar loss
+        loss_components: Dictionary with individual loss terms
+    """
+    # Ensure shapes match
+    advantages = jnp.squeeze(advantages)
+    values = jnp.squeeze(values)
+    returns = jnp.squeeze(returns)
+    
+    # Probability ratio: π(a|s) / π_old(a|s)
+    ratio = jnp.exp(log_probs - old_log_probs)
+    
+    # Clipped surrogate objective
+    surr1 = ratio * advantages
+    surr2 = jnp.clip(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * advantages
+    policy_loss = -jnp.mean(jnp.minimum(surr1, surr2))
+    
+    # Value loss: MSE between predicted values and target returns
+    value_loss = 0.5 * jnp.mean((values - returns) ** 2)
+    
+    # Entropy bonus: encourage exploration
+    # Approximate entropy from log_probs
+    entropy = -jnp.mean(log_probs)
+    
+    # KL divergence penalty: stay close to reference policy
+    kl_div = jnp.mean(jnp.exp(old_log_probs) * (old_log_probs - log_probs))
+    
+    # Total loss
+    total_loss = (
+        policy_loss
+        + value_loss_coeff * value_loss
+        - entropy_coeff * entropy
+        + kl_coeff * kl_div
+    )
+    
+    loss_components = {
+        "policy_loss": policy_loss,
+        "value_loss": value_loss,
+        "entropy": entropy,
+        "kl_divergence": kl_div,
+        "total_grpo_loss": total_loss,
+        "mean_ratio": jnp.mean(ratio),
+        "mean_advantage": jnp.mean(advantages),
+        "clip_fraction": jnp.mean(
+            jnp.abs(ratio - 1.0) > clip_eps
+        ),
+    }
+    
+    return total_loss, loss_components
+
+
+# =============================================================================
 # AGI System Integration
 # =============================================================================
 

@@ -8,7 +8,7 @@ import jax
 import os
 from typing import Dict, Any
 
-class TestConfig:
+class HardwareTestConfig:
     """Configuration class for tests based on available hardware"""
     
     def __init__(self):
@@ -112,5 +112,5 @@ class TestConfig:
             print(f"  {key}: {value}")
 
 # Global test configuration instance
-test_config = TestConfig()
+test_config = HardwareTestConfig()
 
