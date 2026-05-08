@@ -1,0 +1,66 @@
+# CI test requirements -- CPU-only, minimal footprint for GitHub-hosted runners.
+# Excludes: tensorflow, torch, qiskit, qiskit-aer, ray, gradio, moviepy, wandb,
+# fastapi, sphinx (~8 GB of wheels) which are not imported anywhere in src/.
+# Keep this file in sync with requirements.txt for the deps that ARE imported.
+
+# Core JAX/Flax/Optax stack -- CPU build pinned in workflow with jax[cpu]
+dm_haiku==0.0.13
+optax==0.2.3
+
+# Numerical
+numpy>=1.26,<2.1
+scipy>=1.11.0,<1.15.0
+scikit-learn==1.6.1
+
+# Retrieval / vector store
+faiss-cpu==1.10.0
+
+# Serialization & security
+safetensors>=0.4.0
+cryptography>=42.0.0
+
+# Fairness (imported in src/core/ethics)
+fairlearn>=0.10.0
+
+# Visualization (imported in src/train.py)
+matplotlib==3.10.0
+rich==13.9.4
+
+# NLP utilities (imported in src/modules)
+nltk==3.9.1
+
+# Hyperparameter search (imported in src/core)
+optuna==4.2.1
+
+# Image / audio (imported in src/modules/multimodal)
+Pillow>=8.0,<11.0
+opencv-python==4.10.0.84
+librosa==0.10.2
+soundfile==0.12.1
+
+# Graph reasoning
+networkx==3.4.2
+
+# Logging
+loguru==0.7.3
+psutil==6.1.1
+
+# Config
+omegaconf==2.3.0
+hydra-core==1.3.2
+
+# HF tooling (transformers tokenizers used in benchmarks/data utils)
+transformers==4.47.1
+
+# Experiment tracking (gated import; install for completeness)
+mlflow-skinny>=2.10.0
+
+# HTTP client
+requests==2.32.3
+pydantic==2.10.6
+
+# Test runners
+pytest==8.3.4
+pytest-cov
+pytest-xdist
+pytest-timeout

@@ -67,17 +67,24 @@ jobs:
 
       - name: Install dependencies and safety
         run: |
+          # Free disk first -- requirements.txt + cuda wheels exhaust runner space
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL || true
           pip install safety
-          # Install project dependencies so safety can check them
+          # safety can scan requirements files directly without installing them.
+          # Avoid installing the heavy GPU stack (~10 GB of nvidia-* + torch + tf wheels).
           if [ -f requirements.txt ]; then
-            pip install -r requirements.txt || true
+            safety check -r requirements.txt --output json > safety-report.json || true
           fi
 
       - name: Check for vulnerabilities
         run: |
-          # Check installed packages in the environment
-          safety check --output json > safety-report.json || true
-          cat safety-report.json
+          # Report was already written by the install step (safety check -r).
+          if [ -f safety-report.json ]; then
+            cat safety-report.json
+          else
+            echo "No safety report produced (requirements.txt missing?)"
+          fi
         continue-on-error: true
 
       - name: Upload safety report
