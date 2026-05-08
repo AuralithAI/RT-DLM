@@ -3,7 +3,11 @@
 # fastapi, sphinx (~8 GB of wheels) which are not imported anywhere in src/.
 # Keep this file in sync with requirements.txt for the deps that ARE imported.
 
-# Core JAX/Flax/Optax stack -- CPU build pinned in workflow with jax[cpu]
+# Core JAX/Flax/Optax stack -- CPU build pinned in workflow with jax[cpu]==0.4.35
+# NOTE: dm_haiku 0.0.13 imports jax.core.JaxprEqn which was removed in JAX 0.6 --
+# do NOT bump JAX without also bumping haiku.
+jax==0.4.35
+jaxlib==0.4.35
 dm_haiku==0.0.13
 optax==0.2.3
 
