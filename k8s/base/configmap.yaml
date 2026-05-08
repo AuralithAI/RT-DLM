@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rtdlm-config
+  namespace: rtdlm
+data:
+  MODEL_PRESET: "medium"
+  HIDDEN_DIM: "1024"
+  NUM_LAYERS: "12"
+  NUM_HEADS: "16"
+  BATCH_SIZE: "32"
+  LEARNING_RATE: "1e-4"
+  EPOCHS: "100"
+  WARMUP_STEPS: "1000"
+  WEIGHT_DECAY: "0.01"
+  GRADIENT_CLIP: "1.0"
+  CHECKPOINT_INTERVAL: "1000"
+  CHECKPOINT_KEEP: "5"
+  LOG_LEVEL: "INFO"
+  XLA_PYTHON_CLIENT_PREALLOCATE: "false"
+  XLA_PYTHON_CLIENT_MEM_FRACTION: "0.90"
+  NCCL_DEBUG: "INFO"
+  NCCL_IB_DISABLE: "0"
+  NCCL_SOCKET_IFNAME: "eth0"
+  NCCL_P2P_LEVEL: "NVL"

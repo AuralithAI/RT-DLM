@@ -1,0 +1,12 @@
+{{- if .Values.priorityClass.enabled }}
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: {{ .Values.priorityClass.name }}
+  labels:
+    {{- include "rtdlm.training.labels" . | nindent 4 }}
+value: {{ .Values.priorityClass.value }}
+globalDefault: false
+preemptionPolicy: {{ .Values.priorityClass.preemptionPolicy | default "PreemptLowerPriority" }}
+description: "Priority class for RT-DLM GPU training workloads."
+{{- end }}

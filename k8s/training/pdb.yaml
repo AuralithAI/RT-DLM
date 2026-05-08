@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rtdlm-training-pdb
+  namespace: rtdlm
+spec:
+  minAvailable: "100%"
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: distributed-trainer
+  unhealthyPodEvictionPolicy: AlwaysAllow

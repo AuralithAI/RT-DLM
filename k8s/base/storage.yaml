@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rtdlm-checkpoints
+  namespace: rtdlm
+spec:
+  accessModes: ["ReadWriteMany"]
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rtdlm-logs
+  namespace: rtdlm
+spec:
+  accessModes: ["ReadWriteMany"]
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rtdlm-data
+  namespace: rtdlm
+spec:
+  accessModes: ["ReadOnlyMany"]
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 500Gi
