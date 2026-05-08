@@ -153,6 +153,40 @@ class AGIConfig:
         # Multi-resolution vision
         self.enable_multi_res_vision = kwargs.get("enable_multi_res_vision", False)
         self.vision_patch_sizes = kwargs.get("vision_patch_sizes", [8, 16, 32])
+        self.vision_in_channels = kwargs.get("vision_in_channels", 3)
+
+        # Video spatiotemporal config
+        self.video_patch_size = kwargs.get("video_patch_size", 16)
+        self.video_motion_window = kwargs.get("video_motion_window", 4)
+
+        # Extended modality flags
+        self.enable_document_modality = kwargs.get("enable_document_modality", False)
+        self.enable_pointcloud_modality = kwargs.get("enable_pointcloud_modality", False)
+        self.enable_biosignal_modality = kwargs.get("enable_biosignal_modality", False)
+        self.enable_tactile_modality = kwargs.get("enable_tactile_modality", False)
+        self.enable_action_modality = kwargs.get("enable_action_modality", False)
+        self.action_num_axes = kwargs.get("action_num_axes", 15)
+        self.action_num_bins = kwargs.get("action_num_bins", 256)
+
+        # VQ-VAE image tokenization
+        self.enable_image_vq = kwargs.get("enable_image_vq", False)
+        self.image_vq_codes = kwargs.get("image_vq_codes", 8192)
+        self.image_vq_code_dim = kwargs.get("image_vq_code_dim", 256)
+        self.image_vq_downsample = kwargs.get("image_vq_downsample", 16)
+
+        # Spectrogram decoder (audio reconstruction head)
+        self.enable_spectrogram_decoder = kwargs.get("enable_spectrogram_decoder", False)
+        self.spectrogram_n_mels = kwargs.get("spectrogram_n_mels", 128)
+
+        # Streaming video buffer
+        self.streaming_video_max_frames = kwargs.get("streaming_video_max_frames", 32)
+        self.streaming_compressed_size = kwargs.get("streaming_compressed_size", 64)
+
+        # Cross-modal alignment losses
+        self.contrastive_loss_weight = kwargs.get("contrastive_loss_weight", 0.1)
+        self.modality_sync_loss_weight = kwargs.get("modality_sync_loss_weight", 0.05)
+        self.modality_sync_tolerance = kwargs.get("modality_sync_tolerance", 0.05)
+        self.contrastive_temperature = kwargs.get("contrastive_temperature", 0.07)
 
         # --- Ethical AI Parameters ---
         self.ethics_enabled = kwargs.get("ethics_enabled", True)  # Enable ethical reasoning

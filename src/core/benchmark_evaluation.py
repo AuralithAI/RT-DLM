@@ -868,4 +868,104 @@ __all__ = [
     "PerplexityTracker",
     # Main evaluator
     "BenchmarkEvaluator",
+    "MultimodalEvaluator",
+    "ModalityInterferenceReport",
 ]
+
+
+# =============================================================================
+# Multimodal Evaluator
+# =============================================================================
+
+
+@dataclass
+class ModalityInterferenceReport:
+    """Result of solo vs joint modality evaluation."""
+
+    per_modality_solo: Dict[str, float] = field(default_factory=dict)
+    per_modality_joint: Dict[str, float] = field(default_factory=dict)
+    interference: Dict[str, float] = field(default_factory=dict)
+    aggregate_interference: float = 0.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+class MultimodalEvaluator:
+    """Evaluates multimodal models per-modality and jointly, detects interference.
+
+    Each `task` is a callable: (params, rng, inputs) -> {"score": float, "n": int}.
+    `inputs_solo` and `inputs_joint` are dicts keyed by modality.
+    """
+
+    def __init__(self, model_apply_fn: Callable):
+        self.model_apply_fn = model_apply_fn
+        self._task_results: Dict[str, BenchmarkResult] = {}
+
+    def evaluate_modality(
+        self,
+        params: Any,
+        modality: str,
+        task_fn: Callable,
+        samples: List[Dict[str, Any]],
+        rng: jnp.ndarray,
+        joint: bool = False,
+    ) -> BenchmarkResult:
+        start = time.time()
+        correct = 0.0
+        total = 0
+        for sample in samples:
+            rng, step = jax.random.split(rng)
+            out = task_fn(self.model_apply_fn, params, step, sample)
+            correct += float(out.get("score", 0.0))
+            total += int(out.get("n", 1))
+        elapsed = time.time() - start
+        name = f"{modality}{'_joint' if joint else '_solo'}"
+        return BenchmarkResult(
+            benchmark_name=name,
+            accuracy=correct / max(total, 1),
+            num_correct=int(correct),
+            num_total=total,
+            total_time_sec=elapsed,
+            samples_per_sec=total / elapsed if elapsed > 0 else 0.0,
+        )
+
+    def evaluate_with_interference(
+        self,
+        params: Any,
+        rng: jnp.ndarray,
+        modality_tasks: Dict[str, Callable],
+        solo_samples: Dict[str, List[Dict[str, Any]]],
+        joint_samples: Dict[str, List[Dict[str, Any]]],
+    ) -> ModalityInterferenceReport:
+        report = ModalityInterferenceReport()
+        for mod, task_fn in modality_tasks.items():
+            rng, r1, r2 = jax.random.split(rng, 3)
+            solo = self.evaluate_modality(params, mod, task_fn, solo_samples[mod], r1, joint=False)
+            joint = self.evaluate_modality(params, mod, task_fn, joint_samples[mod], r2, joint=True)
+            report.per_modality_solo[mod] = solo.accuracy
+            report.per_modality_joint[mod] = joint.accuracy
+            report.interference[mod] = max(0.0, solo.accuracy - joint.accuracy)
+        report.aggregate_interference = (
+            sum(report.interference.values()) / len(report.interference)
+            if report.interference
+            else 0.0
+        )
+        return report
+
+    def run_benchmark_suite(
+        self,
+        params: Any,
+        rng: jnp.ndarray,
+        suite: Dict[str, Tuple[Callable, List[Dict[str, Any]]]],
+    ) -> Dict[str, BenchmarkResult]:
+        results: Dict[str, BenchmarkResult] = {}
+        for name, (task_fn, samples) in suite.items():
+            rng, sub = jax.random.split(rng)
+            modality, _, _suffix = name.partition(":")
+            results[name] = self.evaluate_modality(
+                params, modality, task_fn, samples, sub, joint=False
+            )
+        self._task_results.update(results)
+        return results
+

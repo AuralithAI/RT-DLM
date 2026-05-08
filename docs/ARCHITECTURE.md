@@ -554,6 +554,14 @@ rtdlm.py
 ├── modules/multimodal/fusion_module.py
 ├── modules/multimodal/hybrid_audio_module.py
 ├── modules/multimodal/hybrid_video_module.py
+├── modules/multimodal/document_encoder.py         # Document + table + chart
+├── modules/multimodal/point_cloud_encoder.py      # PointNet++ style
+├── modules/multimodal/biosignal_encoder.py        # EEG/ECG/EMG
+├── modules/multimodal/tactile_encoder.py
+├── modules/multimodal/action_encoder.py           # Discretized control
+├── modules/multimodal/streaming_video_buffer.py   # Long-form video buffer
+├── modules/multimodal/spectrogram_decoder.py      # Audio reconstruction head
+├── modules/multimodal/vqvae_image_tokenizer.py    # Discrete image codes
 ├── core/reasoning.py
 ├── core/sampling.py                               # Token sampling (dev utility)
 ├── core/evaluation.py                             # Evaluation metrics & logging

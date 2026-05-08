@@ -1,10 +1,110 @@
 import haiku as hk
 import jax
 import jax.numpy as jnp
+import numpy as np
 from typing import Dict, Optional, Any
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _hann_window(window_size: int) -> jnp.ndarray:
+    n = jnp.arange(window_size, dtype=jnp.float32)
+    return 0.5 - 0.5 * jnp.cos(2.0 * jnp.pi * n / (window_size - 1))
+
+
+def stft(
+    waveform: jnp.ndarray,
+    n_fft: int = 512,
+    hop_length: int = 160,
+    win_length: int = 400,
+) -> jnp.ndarray:
+    """JAX-native STFT. Input [batch, time] -> magnitude [batch, frames, n_fft//2+1]."""
+    _, time_len = waveform.shape
+    if time_len < win_length:
+        pad = win_length - time_len
+        waveform = jnp.pad(waveform, ((0, 0), (0, pad)))
+        time_len = win_length
+
+    num_frames = 1 + (time_len - win_length) // hop_length
+    window = _hann_window(win_length)
+    if win_length < n_fft:
+        window = jnp.pad(window, (0, n_fft - win_length))
+
+    frame_idx = jnp.arange(num_frames) * hop_length
+    sample_idx = jnp.arange(n_fft if win_length < n_fft else win_length)
+    indices = frame_idx[:, None] + sample_idx[None, :]
+    indices = jnp.clip(indices, 0, time_len - 1)
+
+    frames = waveform[:, indices]
+    frames = frames * window[None, None, :]
+    spec = jnp.fft.rfft(frames, n=n_fft, axis=-1)
+    return jnp.abs(spec)
+
+
+def _mel_filterbank(
+    n_mels: int = 128,
+    n_fft: int = 512,
+    sample_rate: int = 16000,
+    fmin: float = 0.0,
+    fmax: Optional[float] = None,
+) -> np.ndarray:
+    """Standard slaney-style mel filterbank, returns [n_mels, n_fft//2+1]."""
+    if fmax is None:
+        fmax = sample_rate / 2.0
+
+    def _hz_to_mel(hz):
+        return 2595.0 * np.log10(1.0 + hz / 700.0)
+
+    def _mel_to_hz(mel):
+        return 700.0 * (10.0 ** (mel / 2595.0) - 1.0)
+
+    mel_min = _hz_to_mel(fmin)
+    mel_max = _hz_to_mel(fmax)
+    mel_points = np.linspace(mel_min, mel_max, n_mels + 2)
+    hz_points = _mel_to_hz(mel_points)
+
+    n_freqs = n_fft // 2 + 1
+    fft_freqs = np.linspace(0, sample_rate / 2.0, n_freqs)
+
+    filterbank = np.zeros((n_mels, n_freqs), dtype=np.float32)
+    for i in range(n_mels):
+        left, center, right = hz_points[i], hz_points[i + 1], hz_points[i + 2]
+        for j, f in enumerate(fft_freqs):
+            if left <= f <= center:
+                filterbank[i, j] = (f - left) / max(center - left, 1e-8)
+            elif center < f <= right:
+                filterbank[i, j] = (right - f) / max(right - center, 1e-8)
+    return filterbank
+
+
+class LearnableFilterbank(hk.Module):
+    """Mel-initialized filterbank refined by a learned residual; out: [batch, frames, n_mels]."""
+
+    def __init__(
+        self,
+        n_mels: int = 128,
+        n_fft: int = 512,
+        sample_rate: int = 16000,
+        name: Optional[str] = None,
+    ):
+        super().__init__(name=name)
+        self.n_mels = n_mels
+        self.n_fft = n_fft
+        self.sample_rate = sample_rate
+        self._init_fb = _mel_filterbank(n_mels, n_fft, sample_rate)
+
+    def __call__(self, magnitude: jnp.ndarray) -> jnp.ndarray:
+        n_freqs = self.n_fft // 2 + 1
+        fb_init = jnp.asarray(self._init_fb)
+        residual = hk.get_parameter(
+            "fb_residual",
+            shape=[self.n_mels, n_freqs],
+            init=hk.initializers.TruncatedNormal(stddev=0.01),
+        )
+        fb = jnp.maximum(fb_init + residual, 0.0)
+        mel = jnp.einsum("btf,mf->btm", magnitude, fb)
+        return jnp.log(mel + 1e-6)
 
 
 class HybridAudioEncoder(hk.Module):
@@ -14,6 +114,17 @@ class HybridAudioEncoder(hk.Module):
         super().__init__(name=name)
         self.d_model = d_model
         self.sample_rate = sample_rate
+        self.n_fft = 512
+        self.hop_length = 160
+        self.win_length = 400
+        self.n_mels = 128
+
+        self.filterbank = LearnableFilterbank(
+            n_mels=self.n_mels,
+            n_fft=self.n_fft,
+            sample_rate=sample_rate,
+            name="learnable_filterbank",
+        )
 
         # Traditional signal processing backbone
         self.signal_processor = SignalProcessingBackbone(d_model)
@@ -132,21 +243,9 @@ class HybridAudioEncoder(hk.Module):
         }
 
     def _waveform_to_features(self, waveform: jnp.ndarray) -> jnp.ndarray:
-        """Convert waveform to spectral features"""
-        # Simple spectrogram computation (in practice, use proper STFT)
-        # This is a placeholder - in real implementation, use librosa or JAX-based STFT
-        batch_size, time_steps = waveform.shape
-
-        # Create mock spectrogram features
-        freq_bins = 128
-        time_frames = time_steps // 256  # Typical hop length
-
-        # Simulate spectral features
-        features = (
-            jax.random.normal(jax.random.PRNGKey(42), (batch_size, time_frames, freq_bins)) * 0.1
-        )
-
-        return features
+        """STFT magnitude -> learnable log-mel filterbank."""
+        magnitude = stft(waveform, self.n_fft, self.hop_length, self.win_length)
+        return self.filterbank(magnitude)
 
 
 class SignalProcessingBackbone(hk.Module):

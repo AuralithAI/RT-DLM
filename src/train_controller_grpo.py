@@ -111,6 +111,8 @@ class RewardComputer:
         unnecessary_penalty: float = -0.25,
         efficiency_threshold: float = 0.6,
         confidence_threshold: float = 0.8,
+        process_reward_weight: float = 0.5,
+        outcome_reward_weight: float = 0.5,
     ):
         self.correctness_weight = correctness_weight
         self.efficiency_weight = efficiency_weight
@@ -118,43 +120,43 @@ class RewardComputer:
         self.unnecessary_penalty = unnecessary_penalty
         self.efficiency_threshold = efficiency_threshold
         self.confidence_threshold = confidence_threshold
+        self.process_reward_weight = process_reward_weight
+        self.outcome_reward_weight = outcome_reward_weight
 
     def compute_reward(
         self,
         trajectory: Trajectory,
         majority_answer: Optional[jnp.ndarray] = None,
         answer: Optional[jnp.ndarray] = None,
+        step_rewards: Optional[List[float]] = None,
     ) -> float:
-        """
-        Compute reward for a single trajectory.
-
-        When no ground truth is available, uses self-consistency:
-        the majority-vote answer across the group serves as a proxy label.
-        """
+        """Compute outcome+process blended reward for a single trajectory."""
         reward = 0.0
 
-        # Correctness (via self-consistency against group majority)
         if majority_answer is not None and answer is not None:
-            # Cosine similarity between trajectory answer and majority
             sim = float(
                 jnp.sum(answer * majority_answer)
                 / (jnp.linalg.norm(answer) * jnp.linalg.norm(majority_answer) + 1e-8)
             )
             if sim > 0.9:
                 reward += self.correctness_weight
-                # Confidence bonus
                 if trajectory.value_estimate is not None:
                     if trajectory.value_estimate > self.confidence_threshold:
                         reward += self.confidence_bonus
 
-        # Efficiency: reward using less than threshold of budget
         if trajectory.budget_used < self.efficiency_threshold:
             reward += self.efficiency_weight
 
-        # Penalty for excessive module calls (> 3 unique modules is wasteful)
         unique_modules = len(set(trajectory.modules_called))
         if unique_modules > 3:
             reward += self.unnecessary_penalty * (unique_modules - 3)
+
+        if step_rewards is not None and len(step_rewards) > 0:
+            mean_step = float(sum(step_rewards) / len(step_rewards))
+            reward = (
+                self.outcome_reward_weight * reward
+                + self.process_reward_weight * mean_step
+            )
 
         return reward
 
