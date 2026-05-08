@@ -184,9 +184,7 @@ class TestScientificDiscoveryEngine(unittest.TestCase):
         research_question = jnp.ones((BATCH_SIZE, SEQ_LEN, D_MODEL))
 
         params = transformed.init(self.rng, knowledge_base, observations, research_question)
-        result = transformed.apply(
-            params, self.rng, knowledge_base, observations, research_question
-        )
+        result = transformed.apply(params, self.rng, knowledge_base, observations, research_question)
 
         self.assertIn("hypothesis", result)
 
@@ -671,9 +669,7 @@ class TestContinualLearning(unittest.TestCase):
         self.assertEqual(result_task2["features"].shape, (BATCH_SIZE, SEQ_LEN, D_MODEL))
 
         # Create simulated "task 2 trained" params (slightly modified)
-        params_task2 = jax.tree_util.tree_map(
-            lambda x: x + jax.random.normal(rng2, x.shape) * 0.01, params_task1
-        )
+        params_task2 = jax.tree_util.tree_map(lambda x: x + jax.random.normal(rng2, x.shape) * 0.01, params_task1)
 
         # Fisher matrix from task 1 (simulate importance estimation)
         fisher_task1 = jax.tree_util.tree_map(
@@ -736,9 +732,7 @@ class TestMultiAgentCrisisResponse(unittest.TestCase):
         from src.modules.hybrid_architecture.hybrid_integrator import MultiAgentConsensus
 
         def forward_fn(x):
-            consensus = MultiAgentConsensus(
-                d_model=D_MODEL, num_agents=4, spawn_threshold=0.5, name="test_consensus"
-            )
+            consensus = MultiAgentConsensus(d_model=D_MODEL, num_agents=4, spawn_threshold=0.5, name="test_consensus")
             return consensus(x, auto_spawn=False)
 
         init_fn, apply_fn = hk.transform_with_state(forward_fn)
@@ -928,9 +922,7 @@ class TestMultiAgentCrisisResponse(unittest.TestCase):
 
         inputs = jax.random.normal(self.rng, (BATCH_SIZE, D_MODEL))
         params, state = init_fn(self.rng, inputs)
-        (base_result, spawned_result, base_spawned, spawned_spawned), _ = apply_fn(
-            params, state, self.rng, inputs
-        )
+        (base_result, spawned_result, base_spawned, spawned_spawned), _ = apply_fn(params, state, self.rng, inputs)
 
         # Check spawned flags
         self.assertFalse(base_spawned)

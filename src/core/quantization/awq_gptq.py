@@ -12,6 +12,7 @@ import numpy as np
 @dataclass
 class AWQConfig:
     """Configuration for activation-aware weight quantization."""
+
     bits: int = 4
     group_size: int = 128
     zero_point: bool = True
@@ -21,6 +22,7 @@ class AWQConfig:
 @dataclass
 class GPTQConfig:
     """Configuration for GPTQ ordered weight quantization."""
+
     bits: int = 4
     block_size: int = 128
     percdamp: float = 0.01
@@ -30,6 +32,7 @@ class GPTQConfig:
 @dataclass
 class QuantTensor:
     """Quantized weight bundle: codes + scales + zero points + metadata."""
+
     codes: np.ndarray
     scales: np.ndarray
     zeros: Optional[np.ndarray]
@@ -54,9 +57,7 @@ def _grouped_minmax(weight: np.ndarray, group_size: int) -> Tuple[np.ndarray, np
     return grouped.min(axis=-1), grouped.max(axis=-1)
 
 
-def awq_calibrate_scales(
-    weight: np.ndarray, activation_stats: np.ndarray, alpha: float = 0.5
-) -> np.ndarray:
+def awq_calibrate_scales(weight: np.ndarray, activation_stats: np.ndarray, alpha: float = 0.5) -> np.ndarray:
     """Per-channel AWQ scaling factor sqrt(|act|^alpha / |w|^(1-alpha))."""
     a = np.maximum(np.abs(activation_stats), 1e-5)
     w = np.maximum(np.abs(weight).mean(axis=0), 1e-5)
@@ -82,14 +83,14 @@ def awq_quantize_layer(
     if pad:
         flat = np.pad(flat, ((0, 0), (0, pad)), constant_values=0.0)
     grouped = flat.reshape(flat.shape[0], -1, config.group_size)
-    codes = np.clip(
-        np.round(grouped / scale[:, :, None]) + zero[:, :, None], qmin, qmax
-    ).astype(np.int32)
+    codes = np.clip(np.round(grouped / scale[:, :, None]) + zero[:, :, None], qmin, qmax).astype(np.int32)
     return QuantTensor(
         codes=codes,
-        scales=(scale / scale_act[: scale.shape[1]][None, :].repeat(scale.shape[0], axis=0))
-        if scale.shape[1] == scale_act.shape[0]
-        else scale,
+        scales=(
+            (scale / scale_act[: scale.shape[1]][None, :].repeat(scale.shape[0], axis=0))
+            if scale.shape[1] == scale_act.shape[0]
+            else scale
+        ),
         zeros=zero.astype(np.int32) if config.zero_point else None,
         bits=config.bits,
         group_size=config.group_size,
@@ -186,6 +187,7 @@ _GGUF_VERSION = 3
 @dataclass
 class GGUFTensor:
     """Single tensor entry in a GGUF blob."""
+
     name: str
     array: np.ndarray
     quant_type: int = 0
@@ -194,6 +196,7 @@ class GGUFTensor:
 @dataclass
 class GGUFFile:
     """In-memory GGUF container."""
+
     tensors: List[GGUFTensor] = field(default_factory=list)
     metadata: Dict[str, object] = field(default_factory=dict)
 
@@ -235,9 +238,7 @@ def quantize_params_awq(
     for name, w in params.items():
         if w.ndim != 2 or name not in activation_stats:
             continue
-        out[name] = awq_quantize_layer(
-            np.asarray(w), np.asarray(activation_stats[name]), config
-        )
+        out[name] = awq_quantize_layer(np.asarray(w), np.asarray(activation_stats[name]), config)
     return out
 
 

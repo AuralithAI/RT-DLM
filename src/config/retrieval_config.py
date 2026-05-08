@@ -227,9 +227,7 @@ class RetrievalConfig:
         """Validate configuration parameters."""
         assert self.top_k > 0, "top_k must be positive"
         assert 0 <= self.min_score_threshold <= 1, "min_score_threshold must be in [0, 1]"
-        assert (
-            abs(self.sparse_weight + self.dense_weight - 1.0) < 1e-6
-        ), "sparse_weight + dense_weight must equal 1.0"
+        assert abs(self.sparse_weight + self.dense_weight - 1.0) < 1e-6, "sparse_weight + dense_weight must equal 1.0"
         assert self.chunk_size > 0, "chunk_size must be positive"
         assert self.chunk_overlap >= 0, "chunk_overlap must be non-negative"
         assert self.chunk_overlap < self.chunk_size, "chunk_overlap must be less than chunk_size"

@@ -115,18 +115,14 @@ class GraphAttentionLayer(hk.Module):
         adj_mask = adjacency_matrix[:, None, :, :]
 
         # Mask non-connected nodes with large negative value
-        attention_scores = jnp.where(
-            adj_mask > 0, attention_scores, jnp.full_like(attention_scores, -1e9)
-        )
+        attention_scores = jnp.where(adj_mask > 0, attention_scores, jnp.full_like(attention_scores, -1e9))
 
         # Softmax over neighbors
         attention_weights = jax.nn.softmax(attention_scores, axis=-1)
 
         # Apply dropout during training
         if is_training and self.dropout_rate > 0:
-            dropout_mask = hk.dropout(
-                hk.next_rng_key(), self.dropout_rate, jnp.ones_like(attention_weights)
-            )
+            dropout_mask = hk.dropout(hk.next_rng_key(), self.dropout_rate, jnp.ones_like(attention_weights))
             attention_weights = attention_weights * dropout_mask
 
         # Aggregate neighbor features: [batch, num_heads, num_nodes, head_dim]
@@ -173,9 +169,7 @@ class ConceptualGraphBuilder(hk.Module):
         self.max_nodes = max_nodes
         self.edge_threshold = edge_threshold
 
-    def __call__(
-        self, text_embeddings: jnp.ndarray, mask: Optional[jnp.ndarray] = None
-    ) -> ConceptualGraph:
+    def __call__(self, text_embeddings: jnp.ndarray, mask: Optional[jnp.ndarray] = None) -> ConceptualGraph:
         """
         Build conceptual graph from text embeddings.
 
@@ -222,9 +216,7 @@ class ConceptualGraphBuilder(hk.Module):
         else:
             # Pad to max_nodes
             pad_size = self.max_nodes - seq_len
-            node_features = jnp.pad(
-                concepts, ((0, 0), (0, pad_size), (0, 0)), mode="constant", constant_values=0
-            )
+            node_features = jnp.pad(concepts, ((0, 0), (0, pad_size), (0, 0)), mode="constant", constant_values=0)
 
         # Build adjacency matrix using edge prediction
         adjacency_matrix = self._build_adjacency(node_features)
@@ -275,9 +267,7 @@ class ConceptualGraphBuilder(hk.Module):
 
         return adjacency_matrix
 
-    def _classify_edges(
-        self, node_features: jnp.ndarray, adjacency_matrix: jnp.ndarray
-    ) -> jnp.ndarray:
+    def _classify_edges(self, node_features: jnp.ndarray, adjacency_matrix: jnp.ndarray) -> jnp.ndarray:
         """
         Classify edge types for existing edges.
 
@@ -302,9 +292,7 @@ class ConceptualGraphBuilder(hk.Module):
         edge_features = heads_expanded + tails_expanded  # Simple additive composition
 
         # Classify edges
-        edge_logits = edge_type_scorer(
-            edge_features
-        )  # [batch, num_nodes, num_nodes, num_edge_types]
+        edge_logits = edge_type_scorer(edge_features)  # [batch, num_nodes, num_nodes, num_edge_types]
         edge_types = jnp.argmax(edge_logits, axis=-1)  # [batch, num_nodes, num_nodes]
 
         # Mask non-edges
@@ -351,9 +339,7 @@ class KnowledgeExtractor(hk.Module):
         _, num_nodes, _ = node_features.shape
 
         # Entity importance scoring
-        entity_scorer = hk.Sequential(
-            [hk.Linear(self.d_model), jax.nn.silu, hk.Linear(1)], name="entity_scorer"
-        )
+        entity_scorer = hk.Sequential([hk.Linear(self.d_model), jax.nn.silu, hk.Linear(1)], name="entity_scorer")
 
         entity_scores = entity_scorer(node_features).squeeze(-1)  # [batch, num_nodes]
         entity_weights = jax.nn.softmax(entity_scores, axis=-1)  # [batch, num_nodes]
@@ -422,17 +408,13 @@ class MultiHopReasoner(hk.Module):
         name: Module name
     """
 
-    def __init__(
-        self, d_model: int, num_hops: int = 3, num_heads: int = 4, name: Optional[str] = None
-    ):
+    def __init__(self, d_model: int, num_hops: int = 3, num_heads: int = 4, name: Optional[str] = None):
         super().__init__(name=name)
         self.d_model = d_model
         self.num_hops = num_hops
         self.num_heads = num_heads
 
-    def __call__(
-        self, query: jnp.ndarray, graph: ConceptualGraph, is_training: bool = True
-    ) -> Dict[str, Any]:
+    def __call__(self, query: jnp.ndarray, graph: ConceptualGraph, is_training: bool = True) -> Dict[str, Any]:
         """
         Perform multi-hop reasoning from query over graph.
 
@@ -461,9 +443,7 @@ class MultiHopReasoner(hk.Module):
 
         for hop in range(self.num_hops):
             # Create GAT layer for this hop
-            gat_layer = GraphAttentionLayer(
-                self.d_model, num_heads=self.num_heads, name=f"gat_hop_{hop}"
-            )
+            gat_layer = GraphAttentionLayer(self.d_model, num_heads=self.num_heads, name=f"gat_hop_{hop}")
 
             # Update node features with current state context
             state_expanded = current_state[:, None, :]  # [batch, 1, d_model]
@@ -471,15 +451,11 @@ class MultiHopReasoner(hk.Module):
 
             # Combine nodes with state via gating
             gate_proj = hk.Linear(self.d_model, name=f"gate_hop_{hop}")
-            gate = jax.nn.sigmoid(
-                gate_proj(jnp.concatenate([node_features, state_broadcast], axis=-1))
-            )
+            gate = jax.nn.sigmoid(gate_proj(jnp.concatenate([node_features, state_broadcast], axis=-1)))
             gated_features = node_features * gate
 
             # Apply GAT
-            updated_nodes, attention_weights = gat_layer(
-                gated_features, adjacency_matrix, is_training
-            )
+            updated_nodes, attention_weights = gat_layer(gated_features, adjacency_matrix, is_training)
 
             # Query-guided attention to select relevant nodes
             query_attention = hk.MultiHeadAttention(
@@ -510,9 +486,7 @@ class MultiHopReasoner(hk.Module):
 
             hop_embeddings.append(hop_embedding)
             path_attentions.append(attention_weights)
-            reasoning_trace.append(
-                {"hop": hop, "state": current_state, "attention": attention_weights}
-            )
+            reasoning_trace.append({"hop": hop, "state": current_state, "attention": attention_weights})
 
         # Final answer synthesis
         answer_synthesizer = hk.Sequential(
@@ -529,9 +503,7 @@ class MultiHopReasoner(hk.Module):
         all_hops = jnp.stack(hop_embeddings, axis=1)  # [batch, num_hops, d_model]
         hop_summary = all_hops.mean(axis=1)  # [batch, d_model]
 
-        answer_embedding = answer_synthesizer(
-            jnp.concatenate([current_state, hop_summary], axis=-1)
-        )
+        answer_embedding = answer_synthesizer(jnp.concatenate([current_state, hop_summary], axis=-1))
 
         return {
             "answer_embedding": answer_embedding,
@@ -577,9 +549,7 @@ class SemanticParser(hk.Module):
         self.num_heads = num_heads
         self.edge_threshold = edge_threshold
 
-    def build_graph(
-        self, text_input: jnp.ndarray, mask: Optional[jnp.ndarray] = None
-    ) -> ConceptualGraph:
+    def build_graph(self, text_input: jnp.ndarray, mask: Optional[jnp.ndarray] = None) -> ConceptualGraph:
         """
         Build conceptual graph from text input.
 
@@ -664,9 +634,7 @@ class SemanticParser(hk.Module):
         gat_layer2 = GraphAttentionLayer(self.d_model, num_heads=self.num_heads, name="gat_layer_2")
 
         # Message passing through GNN
-        enriched_nodes, attention1 = gat_layer1(
-            graph.node_features, graph.adjacency_matrix, is_training
-        )
+        enriched_nodes, attention1 = gat_layer1(graph.node_features, graph.adjacency_matrix, is_training)
         enriched_nodes, attention2 = gat_layer2(enriched_nodes, graph.adjacency_matrix, is_training)
 
         # Update graph with enriched features

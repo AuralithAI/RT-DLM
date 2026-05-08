@@ -441,9 +441,7 @@ class TestAGISystemTrainingMode(unittest.TestCase):
         )
 
         # Outputs should be identical
-        np.testing.assert_array_almost_equal(
-            np.array(output1["logits"]), np.array(output2["logits"]), decimal=5
-        )
+        np.testing.assert_array_almost_equal(np.array(output1["logits"]), np.array(output2["logits"]), decimal=5)
 
 
 class TestConsciousnessSimulator(unittest.TestCase):
@@ -541,9 +539,7 @@ class TestCreativeGenerationEngine(unittest.TestCase):
         import haiku as hk
         from src.rtdlm import CreativeGenerationEngine
 
-        def forward(
-            content_context, style_reference=None, creativity_level=0.7, previous_content=None
-        ):
+        def forward(content_context, style_reference=None, creativity_level=0.7, previous_content=None):
             engine = CreativeGenerationEngine(d_model=D_MODEL)
             return engine(content_context, style_reference, creativity_level, previous_content)
 

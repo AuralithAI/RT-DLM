@@ -102,9 +102,7 @@ class TestPersistentLTMStorage(unittest.TestCase):
         # Store memories with varying importance
         for importance in [0.1, 0.3, 0.5, 0.7, 0.9]:
             embedding = np.random.randn(self.d_model).astype(np.float32)
-            self.storage.store_ltm(
-                embedding, importance_score=importance, context=f"imp_{importance}"
-            )
+            self.storage.store_ltm(embedding, importance_score=importance, context=f"imp_{importance}")
 
         # Query with min_importance filter
         query = np.random.randn(self.d_model).astype(np.float32)
@@ -366,9 +364,7 @@ class TestPersistenceEdgeCases(unittest.TestCase):
         embedding = np.random.randn(self.d_model).astype(np.float32)
         metadata = {"tags": ["日本語", "中文", "한국어", "🎉"], "description": "Unicode test: αβγδ"}
 
-        memory_id = storage.store_ltm(
-            embedding, metadata=metadata, importance_score=0.8, context="unicode_test"
-        )
+        memory_id = storage.store_ltm(embedding, metadata=metadata, importance_score=0.8, context="unicode_test")
         self.assertIsNotNone(memory_id)
 
         # Save and reload
@@ -420,14 +416,10 @@ class TestSecurityFeatures(unittest.TestCase):
 
     def test_pii_scrubbing_email(self):
         """Test that email addresses are scrubbed from context."""
-        storage = PersistentLTMStorage(
-            d_model=self.d_model, storage_dir=self.test_dir, enable_pii_scrubbing=True
-        )
+        storage = PersistentLTMStorage(d_model=self.d_model, storage_dir=self.test_dir, enable_pii_scrubbing=True)
 
         embedding = np.random.randn(self.d_model).astype(np.float32)
-        storage.store_ltm(
-            embedding, context="Contact john.doe@example.com for more info", importance_score=0.8
-        )
+        storage.store_ltm(embedding, context="Contact john.doe@example.com for more info", importance_score=0.8)
 
         # Retrieve and check context is scrubbed
         results = storage.retrieve_ltm(embedding, k=1)
@@ -438,9 +430,7 @@ class TestSecurityFeatures(unittest.TestCase):
 
     def test_pii_scrubbing_phone(self):
         """Test that phone numbers are scrubbed from context."""
-        storage = PersistentLTMStorage(
-            d_model=self.d_model, storage_dir=self.test_dir, enable_pii_scrubbing=True
-        )
+        storage = PersistentLTMStorage(d_model=self.d_model, storage_dir=self.test_dir, enable_pii_scrubbing=True)
 
         embedding = np.random.randn(self.d_model).astype(np.float32)
         storage.store_ltm(embedding, context="Call me at 555-123-4567", importance_score=0.8)
@@ -452,9 +442,7 @@ class TestSecurityFeatures(unittest.TestCase):
 
     def test_pii_scrubbing_ssn(self):
         """Test that SSNs are scrubbed from context."""
-        storage = PersistentLTMStorage(
-            d_model=self.d_model, storage_dir=self.test_dir, enable_pii_scrubbing=True
-        )
+        storage = PersistentLTMStorage(d_model=self.d_model, storage_dir=self.test_dir, enable_pii_scrubbing=True)
 
         embedding = np.random.randn(self.d_model).astype(np.float32)
         storage.store_ltm(embedding, context="SSN is 123-45-6789", importance_score=0.8)
@@ -466,9 +454,7 @@ class TestSecurityFeatures(unittest.TestCase):
 
     def test_pii_scrubbing_metadata(self):
         """Test that PII is scrubbed from metadata dictionary."""
-        storage = PersistentLTMStorage(
-            d_model=self.d_model, storage_dir=self.test_dir, enable_pii_scrubbing=True
-        )
+        storage = PersistentLTMStorage(d_model=self.d_model, storage_dir=self.test_dir, enable_pii_scrubbing=True)
 
         embedding = np.random.randn(self.d_model).astype(np.float32)
         storage.store_ltm(
@@ -552,9 +538,7 @@ class TestSecurityFeatures(unittest.TestCase):
         encryption_key = "persistent_secret_key"
 
         # Create and store
-        storage1 = PersistentLTMStorage(
-            d_model=self.d_model, storage_dir=self.test_dir, encryption_key=encryption_key
-        )
+        storage1 = PersistentLTMStorage(d_model=self.d_model, storage_dir=self.test_dir, encryption_key=encryption_key)
 
         embedding = np.random.randn(self.d_model).astype(np.float32)
         storage1.store_ltm(embedding, context="Encrypted persistent data", importance_score=0.9)
@@ -563,9 +547,7 @@ class TestSecurityFeatures(unittest.TestCase):
         # Simulate restart with new instance
         del storage1
 
-        storage2 = PersistentLTMStorage(
-            d_model=self.d_model, storage_dir=self.test_dir, encryption_key=encryption_key
-        )
+        storage2 = PersistentLTMStorage(d_model=self.d_model, storage_dir=self.test_dir, encryption_key=encryption_key)
         storage2.load()
 
         # Verify can decrypt
@@ -575,9 +557,7 @@ class TestSecurityFeatures(unittest.TestCase):
     def test_wrong_encryption_key_fails_gracefully(self):
         """Test that wrong key returns encrypted data, not crash."""
         # Store with one key
-        storage1 = PersistentLTMStorage(
-            d_model=self.d_model, storage_dir=self.test_dir, encryption_key="correct_key"
-        )
+        storage1 = PersistentLTMStorage(d_model=self.d_model, storage_dir=self.test_dir, encryption_key="correct_key")
 
         embedding = np.random.randn(self.d_model).astype(np.float32)
         storage1.store_ltm(embedding, context="Secret message", importance_score=0.9)
@@ -585,9 +565,7 @@ class TestSecurityFeatures(unittest.TestCase):
         del storage1
 
         # Try to read with wrong key - should not crash
-        storage2 = PersistentLTMStorage(
-            d_model=self.d_model, storage_dir=self.test_dir, encryption_key="wrong_key"
-        )
+        storage2 = PersistentLTMStorage(d_model=self.d_model, storage_dir=self.test_dir, encryption_key="wrong_key")
         storage2.load()
 
         # Should not crash, but context won't be correctly decrypted
@@ -598,9 +576,7 @@ class TestSecurityFeatures(unittest.TestCase):
 
     def test_pii_scrubbing_disabled(self):
         """Test that PII is preserved when scrubbing is disabled."""
-        storage = PersistentLTMStorage(
-            d_model=self.d_model, storage_dir=self.test_dir, enable_pii_scrubbing=False
-        )
+        storage = PersistentLTMStorage(d_model=self.d_model, storage_dir=self.test_dir, enable_pii_scrubbing=False)
 
         embedding = np.random.randn(self.d_model).astype(np.float32)
         email = "test@example.com"

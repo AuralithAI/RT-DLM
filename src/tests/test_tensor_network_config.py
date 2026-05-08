@@ -25,9 +25,7 @@ class TestTensorNetworkConfig(unittest.TestCase):
         """Test custom TensorNetworkConfig values."""
         from src.config.tensor_network_config import TensorNetworkConfig
 
-        config = TensorNetworkConfig(
-            num_qubits=32, bond_dimension=128, network_type="ttn", truncation_threshold=1e-8
-        )
+        config = TensorNetworkConfig(num_qubits=32, bond_dimension=128, network_type="ttn", truncation_threshold=1e-8)
 
         self.assertEqual(config.num_qubits, 32)
         self.assertEqual(config.bond_dimension, 128)

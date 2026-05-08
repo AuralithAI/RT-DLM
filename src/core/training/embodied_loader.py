@@ -11,6 +11,7 @@ import numpy as np
 @dataclass
 class EmbodiedSample:
     """One step of robot trajectory data."""
+
     images: Optional[jnp.ndarray] = None
     proprio: Optional[jnp.ndarray] = None
     actions: Optional[jnp.ndarray] = None
@@ -74,6 +75,7 @@ class EmbodiedDataLoader:
 @dataclass
 class MixerSpec:
     """A named loader plus its sampling probability."""
+
     name: str
     loader: Iterable[Dict[str, jnp.ndarray]]
     weight: float
@@ -108,9 +110,7 @@ class MixedModalityBatcher:
         return {"source": self.specs[choice].name, "batch": batch}
 
 
-def action_token_loss(
-    predicted_logits: jnp.ndarray, target_bins: jnp.ndarray
-) -> jnp.ndarray:
+def action_token_loss(predicted_logits: jnp.ndarray, target_bins: jnp.ndarray) -> jnp.ndarray:
     """Per-axis cross-entropy on discretized action tokens."""
     log_p = jax.nn.log_softmax(predicted_logits, axis=-1)
     one_hot = jax.nn.one_hot(target_bins, predicted_logits.shape[-1])

@@ -150,9 +150,7 @@ class ComponentFusion(hk.Module):
 
         # Average off-diagonal similarity (coherence)
         mask = 1.0 - jnp.eye(num_comps)[None, :, :]
-        coherence = jnp.sum(similarity_matrix * mask, axis=(1, 2)) / (
-            num_comps * (num_comps - 1) + 1e-8
-        )
+        coherence = jnp.sum(similarity_matrix * mask, axis=(1, 2)) / (num_comps * (num_comps - 1) + 1e-8)
 
         fusion_info = {
             "attention_weights": attention_weights,
@@ -177,9 +175,7 @@ class StageTracker(hk.Module):
         name: Module name
     """
 
-    def __init__(
-        self, d_model: int, thresholds: Optional[StageThresholds] = None, name: Optional[str] = None
-    ):
+    def __init__(self, d_model: int, thresholds: Optional[StageThresholds] = None, name: Optional[str] = None):
         super().__init__(name=name)
         self.d_model = d_model
         self.thresholds = thresholds or StageThresholds()
@@ -280,12 +276,8 @@ class StageTracker(hk.Module):
         consciousness_score = self._adjust_score_with_output(
             consciousness_score, consciousness_output, "meta_awareness"
         )
-        reasoning_score = self._adjust_score_with_output(
-            reasoning_score, reasoning_output, "confidence_scores"
-        )
-        creativity_score = self._adjust_score_with_output(
-            creativity_score, creativity_output, "novelty_score"
-        )
+        reasoning_score = self._adjust_score_with_output(reasoning_score, reasoning_output, "confidence_scores")
+        creativity_score = self._adjust_score_with_output(creativity_score, creativity_output, "novelty_score")
 
         # Determine stage
         score = float(overall_score[0]) if overall_score.ndim > 0 else float(overall_score)
@@ -338,9 +330,7 @@ class EthicalAlignmentModule(hk.Module):
             "autonomy",
         ]
 
-    def __call__(
-        self, decision_representation: jnp.ndarray, context: Optional[jnp.ndarray] = None
-    ) -> Dict[str, Any]:
+    def __call__(self, decision_representation: jnp.ndarray, context: Optional[jnp.ndarray] = None) -> Dict[str, Any]:
         """
         Evaluate ethical alignment of a decision.
 
@@ -463,9 +453,7 @@ class AGISystemAbstraction(hk.Module):
             components.update(additional_outputs)
 
         # Apply component fusion
-        fusion = ComponentFusion(
-            d_model=self.d_model, num_components=len(components), name="component_fusion"
-        )
+        fusion = ComponentFusion(d_model=self.d_model, num_components=len(components), name="component_fusion")
 
         unified, fusion_info = fusion(components)
 
@@ -491,13 +479,9 @@ class AGISystemAbstraction(hk.Module):
             stage: Current stage (0-6)
             stage_info: Detailed stage information
         """
-        tracker = StageTracker(
-            d_model=self.d_model, thresholds=self.stage_thresholds, name="stage_tracker"
-        )
+        tracker = StageTracker(d_model=self.d_model, thresholds=self.stage_thresholds, name="stage_tracker")
 
-        return tracker(
-            unified_representation, consciousness_output, reasoning_output, creativity_output
-        )
+        return tracker(unified_representation, consciousness_output, reasoning_output, creativity_output)
 
     def evaluate_ethics(
         self, decision_representation: jnp.ndarray, context: Optional[jnp.ndarray] = None
@@ -549,9 +533,7 @@ class AGISystemAbstraction(hk.Module):
             improvement_rate = 0.0
 
         # Create improvement signal embedding
-        signal_generator = hk.Sequential(
-            [hk.Linear(self.d_model), jax.nn.tanh], name="improvement_signal"
-        )
+        signal_generator = hk.Sequential([hk.Linear(self.d_model), jax.nn.tanh], name="improvement_signal")
 
         # Create input from metrics
         metrics_input = jnp.array(
@@ -602,14 +584,10 @@ class AGISystemAbstraction(hk.Module):
             Dictionary with unified output, stage info, ethics, etc.
         """
         # Unify components
-        unified, fusion_info = self.unify_components(
-            consciousness_output, reasoning_output, creativity_output
-        )
+        unified, fusion_info = self.unify_components(consciousness_output, reasoning_output, creativity_output)
 
         # Track stage
-        stage, stage_info = self.track_stage(
-            unified, consciousness_dict, reasoning_dict, creativity_dict
-        )
+        stage, stage_info = self.track_stage(unified, consciousness_dict, reasoning_dict, creativity_dict)
 
         # Evaluate ethics
         ethics_info = self.evaluate_ethics(unified, context)

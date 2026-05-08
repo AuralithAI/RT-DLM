@@ -15,15 +15,12 @@ class _VectorQuantizer(hk.Module):
 
     def __call__(self, z: jnp.ndarray) -> Dict[str, jnp.ndarray]:
         codebook = hk.get_parameter(
-            "codebook", [self.num_codes, self.code_dim],
+            "codebook",
+            [self.num_codes, self.code_dim],
             init=hk.initializers.TruncatedNormal(0.02),
         )
         flat = z.reshape(-1, self.code_dim)
-        d = (
-            jnp.sum(flat ** 2, axis=-1, keepdims=True)
-            - 2.0 * flat @ codebook.T
-            + jnp.sum(codebook ** 2, axis=-1)[None, :]
-        )
+        d = jnp.sum(flat**2, axis=-1, keepdims=True) - 2.0 * flat @ codebook.T + jnp.sum(codebook**2, axis=-1)[None, :]
         idx = jnp.argmin(d, axis=-1)
         quantized = codebook[idx].reshape(z.shape)
         codebook_loss = jnp.mean((jax.lax.stop_gradient(z) - quantized) ** 2)

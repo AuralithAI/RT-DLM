@@ -219,7 +219,9 @@ class TestSetEmbeddingFunction(unittest.TestCase):
 
         trainer = AGITrainer(config)
 
-        custom_fn = lambda texts: np.zeros((len(texts), D_MODEL))
+        def custom_fn(texts):
+            return np.zeros((len(texts), D_MODEL))
+
         trainer.set_embedding_function(custom_fn)
 
         self.assertEqual(trainer._embedding_fn, custom_fn)
@@ -241,7 +243,9 @@ class TestSetEmbeddingFunction(unittest.TestCase):
         trainer = AGITrainer(config)
         trainer.configure_retrieval(RetrievalConfig.for_training())
 
-        custom_fn = lambda texts: np.zeros((len(texts), D_MODEL))
+        def custom_fn(texts):
+            return np.zeros((len(texts), D_MODEL))
+
         trainer.set_embedding_function(custom_fn)
 
         self.assertEqual(trainer._embedding_fn, custom_fn)
@@ -370,9 +374,7 @@ class TestUpdateRetrievalEmbeddings(unittest.TestCase):
         trainer = AGITrainer(config)
 
         # Configure retrieval with documents
-        trainer.configure_retrieval(
-            RetrievalConfig.for_training(), documents=["Document one", "Document two"]
-        )
+        trainer.configure_retrieval(RetrievalConfig.for_training(), documents=["Document one", "Document two"])
 
         # Initialize model
         sample_batch = {

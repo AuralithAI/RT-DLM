@@ -151,11 +151,7 @@ class ModuleAdapter(hk.Module):
             uncertainty=uncertainty,
             actual_cost=actual_cost,
             evidence=evidence
-            or {
-                "raw_output_keys": (
-                    list(raw_output.keys()) if isinstance(raw_output, dict) else ["tensor"]
-                )
-            },
+            or {"raw_output_keys": (list(raw_output.keys()) if isinstance(raw_output, dict) else ["tensor"])},
             suggests_halt=suggests_halt,
         )
 
@@ -167,9 +163,7 @@ class MemoryRetrievalAdapter(ModuleAdapter):
     Wraps HierarchicalMemoryFusion or similar memory modules.
     """
 
-    def __init__(
-        self, d_model: int, memory_module: Optional[hk.Module] = None, name: str = "memory_adapter"
-    ):
+    def __init__(self, d_model: int, memory_module: Optional[hk.Module] = None, name: str = "memory_adapter"):
         super().__init__(d_model, ModuleType.MEMORY_RETRIEVAL, name)
         self.memory_module = memory_module
 
@@ -339,9 +333,7 @@ class SymbolicReasoningAdapter(ModuleAdapter):
         self.symbolic_module = symbolic_module
 
         # Fallback: differentiable rule application
-        self.rule_encoder = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.silu, hk.Linear(d_model)], name="rule_encoder"
-        )
+        self.rule_encoder = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(d_model)], name="rule_encoder")
 
         self.rule_applier = hk.Sequential(
             [hk.Linear(d_model * 2), jax.nn.silu, hk.Linear(d_model), jax.nn.tanh],
@@ -383,9 +375,7 @@ class ProbabilisticAdapter(ModuleAdapter):
         self.probabilistic_module = probabilistic_module
 
         # Fallback: dropout-based uncertainty
-        self.mean_network = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.silu, hk.Linear(d_model)], name="mean_network"
-        )
+        self.mean_network = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(d_model)], name="mean_network")
 
         self.variance_network = hk.Sequential(
             [
@@ -464,9 +454,7 @@ class MoERoutingAdapter(ModuleAdapter):
         # Fallback: simple gated experts
         self.gate = hk.Linear(num_experts, name="expert_gate")
         self.experts = [
-            hk.Sequential(
-                [hk.Linear(d_model * 2), jax.nn.silu, hk.Linear(d_model)], name=f"expert_{i}"
-            )
+            hk.Sequential([hk.Linear(d_model * 2), jax.nn.silu, hk.Linear(d_model)], name=f"expert_{i}")
             for i in range(num_experts)
         ]
 
@@ -627,13 +615,9 @@ def create_module_executors(
     existing_modules = existing_modules or {}
 
     # Create adapters
-    memory_adapter = MemoryRetrievalAdapter(
-        d_model=d_model, memory_module=existing_modules.get("memory_fusion")
-    )
+    memory_adapter = MemoryRetrievalAdapter(d_model=d_model, memory_module=existing_modules.get("memory_fusion"))
 
-    graph_adapter = GraphReasoningAdapter(
-        d_model=d_model, graph_module=existing_modules.get("graph_reasoner")
-    )
+    graph_adapter = GraphReasoningAdapter(d_model=d_model, graph_module=existing_modules.get("graph_reasoner"))
 
     symbolic_adapter = SymbolicReasoningAdapter(
         d_model=d_model, symbolic_module=existing_modules.get("symbolic_reasoning")

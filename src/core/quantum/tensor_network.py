@@ -90,9 +90,7 @@ class MatrixProductState:
         new_tensor = jnp.einsum("lpb,op->lob", tensor, gate)
         self.tensors[site] = new_tensor
 
-    def apply_two_qubit_gate(
-        self, gate: jnp.ndarray, site1: int, site2: int, truncation_threshold: float = 1e-10
-    ):
+    def apply_two_qubit_gate(self, gate: jnp.ndarray, site1: int, site2: int, truncation_threshold: float = 1e-10):
         """
         Apply two-qubit gate between adjacent sites.
 
@@ -231,9 +229,7 @@ class MatrixProductState:
             probs = []
             for outcome in range(2):
                 # Contract with left boundary and select outcome
-                contracted = jnp.einsum(
-                    "ab,bor->ao", left_boundary, tensor[:, outcome : outcome + 1, :]
-                )
+                contracted = jnp.einsum("ab,bor->ao", left_boundary, tensor[:, outcome : outcome + 1, :])
                 prob = jnp.sum(jnp.abs(contracted) ** 2)
                 probs.append(float(prob))
 
@@ -247,9 +243,7 @@ class MatrixProductState:
             samples.append(outcome)
 
             # Update left boundary
-            left_boundary = jnp.einsum(
-                "ab,bor->ao", left_boundary, tensor[:, outcome : outcome + 1, :]
-            )
+            left_boundary = jnp.einsum("ab,bor->ao", left_boundary, tensor[:, outcome : outcome + 1, :])
 
         return jnp.array(samples)
 
@@ -403,9 +397,7 @@ class TensorNetworkQuantumSimulator:
             self.state.apply_single_qubit_gate(gate, qubits[0])
         elif len(qubits) == 2:
             if isinstance(self.state, MatrixProductState):
-                self.state.apply_two_qubit_gate(
-                    gate, qubits[0], qubits[1], self.config.truncation_threshold
-                )
+                self.state.apply_two_qubit_gate(gate, qubits[0], qubits[1], self.config.truncation_threshold)
             else:
                 raise NotImplementedError("Two-qubit gates not yet supported for TTN")
         else:
@@ -418,9 +410,7 @@ class TensorNetworkQuantumSimulator:
 
     def apply_cnot(self, control: int, target: int):
         """Apply CNOT gate"""
-        CNOT = jnp.array(
-            [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=jnp.complex64
-        )
+        CNOT = jnp.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=jnp.complex64)
 
         # For MPS, need to swap to make adjacent if necessary
         if isinstance(self.state, MatrixProductState):
@@ -434,13 +424,9 @@ class TensorNetworkQuantumSimulator:
 
     def _apply_long_range_cnot(self, control: int, target: int):
         """Apply CNOT between non-adjacent qubits using SWAP network"""
-        SWAP = jnp.array(
-            [[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=jnp.complex64
-        )
+        SWAP = jnp.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=jnp.complex64)
 
-        CNOT = jnp.array(
-            [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=jnp.complex64
-        )
+        CNOT = jnp.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=jnp.complex64)
 
         # Move control next to target
         direction = 1 if target > control else -1

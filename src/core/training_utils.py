@@ -253,9 +253,7 @@ def create_distributed_config(config) -> DistributedTrainingConfig:
     )
 
 
-def shard_batch_for_devices(
-    batch: Dict[str, jnp.ndarray], num_devices: int
-) -> Dict[str, jnp.ndarray]:
+def shard_batch_for_devices(batch: Dict[str, jnp.ndarray], num_devices: int) -> Dict[str, jnp.ndarray]:
     """
     Shard a batch across multiple devices for data parallelism.
 
@@ -372,17 +370,13 @@ class GradientAccumulator:
         if self.accumulated_grads is None:
             self.accumulated_grads = grads
         else:
-            self.accumulated_grads = jax.tree_util.tree_map(
-                lambda a, b: a + b, self.accumulated_grads, grads
-            )
+            self.accumulated_grads = jax.tree_util.tree_map(lambda a, b: a + b, self.accumulated_grads, grads)
 
         self.current_step += 1
 
         if self.current_step >= self.accumulation_steps:
             # Average gradients and return
-            averaged_grads = jax.tree_util.tree_map(
-                lambda g: g / self.accumulation_steps, self.accumulated_grads
-            )
+            averaged_grads = jax.tree_util.tree_map(lambda g: g / self.accumulation_steps, self.accumulated_grads)
             self.reset()
             return True, averaged_grads
 
@@ -588,7 +582,5 @@ class TrainingOptimizations:
             lines.append(f"    - Devices: {self.distributed.num_devices}")
             lines.append(f"    - Data parallel: {self.distributed.data_parallel}")
             lines.append(f"    - Model parallel: {self.distributed.model_parallel}")
-            lines.append(
-                f"    - Gradient accumulation: {self.distributed.gradient_accumulation_steps}"
-            )
+            lines.append(f"    - Gradient accumulation: {self.distributed.gradient_accumulation_steps}")
         return "\n".join(lines)

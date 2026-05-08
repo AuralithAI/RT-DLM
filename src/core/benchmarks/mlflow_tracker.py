@@ -81,8 +81,7 @@ class MLflowTracker:
             self._setup_mlflow()
         elif enabled and not _is_mlflow_available():
             logger.warning(
-                "MLflow not installed. Install with: pip install mlflow>=2.10.0. "
-                "Falling back to local logging only."
+                "MLflow not installed. Install with: pip install mlflow>=2.10.0. " "Falling back to local logging only."
             )
 
     def _setup_mlflow(self) -> None:
@@ -324,10 +323,7 @@ class MLflowTracker:
             self.log_metric(f"{metric_prefix}/category/{safe_cat}", score)
 
         self._flush_metrics()
-        logger.info(
-            f"Logged benchmark result: {bench_name} "
-            f"(accuracy={result_dict.get('accuracy', 0.0):.2%})"
-        )
+        logger.info(f"Logged benchmark result: {bench_name} " f"(accuracy={result_dict.get('accuracy', 0.0):.2%})")
 
     def log_model_config(self, config: Any) -> None:
         """Log AGIConfig as MLflow parameters.

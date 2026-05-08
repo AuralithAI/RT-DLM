@@ -82,9 +82,7 @@ class ModelParallelConfig:
         print("=" * 50)
         print(f"  Devices available: {self.num_devices}")
         print(f"  Tensor parallel: {self.tensor_parallel} (size: {self.tensor_parallel_size})")
-        print(
-            f"  Pipeline parallel: {self.pipeline_parallel} (size: {self.pipeline_parallel_size})"
-        )
+        print(f"  Pipeline parallel: {self.pipeline_parallel} (size: {self.pipeline_parallel_size})")
         print(f"  Activation checkpointing: {self.activation_checkpointing}")
         print(f"  CPU offloading: {self.offload_to_cpu}")
         print("=" * 50)

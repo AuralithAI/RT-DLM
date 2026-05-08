@@ -69,7 +69,5 @@ def test_merge_dispatcher_slerp_two():
     """SLERP via dispatcher should yield correct shapes."""
     a = _make_params(0)
     b = _make_params(1)
-    out = merge_checkpoints(
-        a, {"a": a, "b": b}, {"a": 1.0, "b": 1.0}, method="slerp"
-    )
+    out = merge_checkpoints(a, {"a": a, "b": b}, {"a": 1.0, "b": 1.0}, method="slerp")
     assert out["layer1"]["w"].shape == (4, 4)

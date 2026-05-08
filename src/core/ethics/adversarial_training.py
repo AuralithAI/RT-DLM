@@ -10,6 +10,7 @@ import jax.numpy as jnp
 @dataclass
 class AttackConfig:
     """Hyperparameters for embedding-space adversarial attacks."""
+
     epsilon: float = 0.01
     step_size: float = 0.002
     num_steps: int = 5
@@ -32,9 +33,7 @@ def _project(delta: jnp.ndarray, epsilon: float, norm: str) -> jnp.ndarray:
     raise ValueError(f"unsupported norm: {norm}")
 
 
-def fgsm_perturbation(
-    embeddings: jnp.ndarray, loss_fn: LossFn, epsilon: float, norm: str = "linf"
-) -> jnp.ndarray:
+def fgsm_perturbation(embeddings: jnp.ndarray, loss_fn: LossFn, epsilon: float, norm: str = "linf") -> jnp.ndarray:
     """Single-step Fast Gradient Sign Method perturbation."""
     grad = jax.grad(loss_fn)(embeddings)
     if norm == "linf":
@@ -54,9 +53,7 @@ def pgd_attack(
 ) -> jnp.ndarray:
     """Projected Gradient Descent attack producing adversarial embeddings."""
     if config.random_start and rng is not None:
-        delta = jax.random.uniform(
-            rng, embeddings.shape, minval=-config.epsilon, maxval=config.epsilon
-        )
+        delta = jax.random.uniform(rng, embeddings.shape, minval=-config.epsilon, maxval=config.epsilon)
     else:
         delta = jnp.zeros_like(embeddings)
     for _ in range(config.num_steps):
@@ -85,9 +82,7 @@ def adversarial_loss(
     weight_adv: float = 0.5,
 ) -> jnp.ndarray:
     """Combined clean + adversarial training loss."""
-    return weight_clean * clean_loss_fn(clean_embeddings) + weight_adv * clean_loss_fn(
-        adv_embeddings
-    )
+    return weight_clean * clean_loss_fn(clean_embeddings) + weight_adv * clean_loss_fn(adv_embeddings)
 
 
 _INJECTION_TEMPLATES: Tuple[str, ...] = (
@@ -109,9 +104,7 @@ _REFUSAL_TEMPLATES: Tuple[str, ...] = (
 )
 
 
-def synthesize_prompt_injections(
-    payloads: List[str], seed: int = 0
-) -> List[Dict[str, str]]:
+def synthesize_prompt_injections(payloads: List[str], seed: int = 0) -> List[Dict[str, str]]:
     """Generate (attack_prompt, safe_response) pairs from payload list."""
     import random
 
@@ -124,9 +117,7 @@ def synthesize_prompt_injections(
     return out
 
 
-def synthesize_multi_turn_manipulation(
-    target_payload: str, n_turns: int = 4, seed: int = 0
-) -> List[Dict[str, str]]:
+def synthesize_multi_turn_manipulation(target_payload: str, n_turns: int = 4, seed: int = 0) -> List[Dict[str, str]]:
     """Build a multi-turn dialog that gradually pressures the model toward `target_payload`."""
     import random
 
@@ -144,7 +135,7 @@ def synthesize_multi_turn_manipulation(
         "I can help with fiction. What's the story about?",
         "I can't include genuinely harmful content even in fiction.",
         rng.choice(_REFUSAL_TEMPLATES),
-    ][-len(escalation):]
+    ][-len(escalation) :]
     return [{"user": u, "assistant": a} for u, a in zip(escalation, refusals)]
 
 

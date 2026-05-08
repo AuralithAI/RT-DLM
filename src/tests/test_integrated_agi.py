@@ -82,9 +82,7 @@ class TestTaskRequest(unittest.TestCase):
         """Test task request default values."""
         from src.modules.capabilities.integrated_agi_system import TaskRequest, TaskType
 
-        request = TaskRequest(
-            task_id="task_002", task_type=TaskType.ANALYSIS, description="Analyze data", context={}
-        )
+        request = TaskRequest(task_id="task_002", task_type=TaskType.ANALYSIS, description="Analyze data", context={})
 
         self.assertEqual(request.priority, 5)
         self.assertIsNone(request.deadline)
@@ -210,9 +208,7 @@ class TestAGIMemoryManager(unittest.TestCase):
         """Test retrieving from empty memory."""
         from src.modules.capabilities.integrated_agi_system import TaskRequest, TaskType
 
-        query = TaskRequest(
-            task_id="query", task_type=TaskType.ANALYSIS, description="Test", context={}
-        )
+        query = TaskRequest(task_id="query", task_type=TaskType.ANALYSIS, description="Test", context={})
 
         relevant = self.manager.retrieve_relevant_episodes(query)
         self.assertEqual(len(relevant), 0)

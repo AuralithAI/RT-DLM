@@ -71,17 +71,13 @@ class TestDeviceMesh:
 
     def test_mesh_with_tensor_parallel(self):
         """Test mesh with tensor parallelism enabled"""
-        config = ModelParallelConfig(
-            tensor_parallel_size=1, pipeline_parallel_size=1, tensor_parallel=True
-        )
+        config = ModelParallelConfig(tensor_parallel_size=1, pipeline_parallel_size=1, tensor_parallel=True)
         mesh = DeviceMesh(config)
         assert mesh.tensor_axis == "tensor"
 
     def test_mesh_without_tensor_parallel(self):
         """Test mesh without tensor parallelism"""
-        config = ModelParallelConfig(
-            tensor_parallel_size=1, pipeline_parallel_size=1, tensor_parallel=False
-        )
+        config = ModelParallelConfig(tensor_parallel_size=1, pipeline_parallel_size=1, tensor_parallel=False)
         mesh = DeviceMesh(config)
         assert mesh.tensor_axis is None
 
@@ -114,9 +110,7 @@ class TestTensorParallelLinear:
         mesh = DeviceMesh(config)
 
         def forward(x):
-            layer = TensorParallelLinear(
-                output_size=128, mesh=mesh, parallel_mode="column", name="tp_linear"
-            )
+            layer = TensorParallelLinear(output_size=128, mesh=mesh, parallel_mode="column", name="tp_linear")
             return layer(x)
 
         model = hk.without_apply_rng(hk.transform(forward))
@@ -178,9 +172,7 @@ class TestPipelineParallel:
         """Test creating pipeline stage"""
 
         def forward(x):
-            stage = PipelineStage(
-                d_model=64, num_heads=4, d_ff=256, num_layers_in_stage=2, stage_id=0, name="stage_0"
-            )
+            stage = PipelineStage(d_model=64, num_heads=4, d_ff=256, num_layers_in_stage=2, stage_id=0, name="stage_0")
             return stage(x)
 
         model = hk.without_apply_rng(hk.transform(forward))
@@ -234,9 +226,7 @@ class TestModelParallelTransformer:
             num_layers = 2
 
         def forward(input_ids):
-            transformer = ModelParallelTransformer(
-                config=TransformerConfig(), mesh=mesh, name="mp_transformer"
-            )
+            transformer = ModelParallelTransformer(config=TransformerConfig(), mesh=mesh, name="mp_transformer")
             return transformer(input_ids)
 
         model = hk.without_apply_rng(hk.transform(forward))

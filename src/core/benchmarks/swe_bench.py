@@ -107,9 +107,7 @@ class SWEBenchBenchmark(BenchmarkBase):
             return False
 
         # Check basic patch structure
-        has_diff = any(
-            marker in prediction for marker in ["diff --git", "---", "+++", "@@", "+", "-"]
-        )
+        has_diff = any(marker in prediction for marker in ["diff --git", "---", "+++", "@@", "+", "-"])
 
         # Check file references
         target_files = sample.metadata.get("target_files", [])
@@ -159,10 +157,7 @@ class SWEBenchBenchmark(BenchmarkBase):
             )
             logger.info(f"Loaded SWE-bench Verified: {len(ds)} samples")
         except Exception as e:
-            logger.warning(
-                f"Could not load SWE-bench from HuggingFace: {e}. "
-                f"Using synthetic fallback data."
-            )
+            logger.warning(f"Could not load SWE-bench from HuggingFace: {e}. " f"Using synthetic fallback data.")
             return self._synthetic_fallback()
 
         samples = self._parse_dataset(ds)
@@ -275,10 +270,7 @@ class SWEBenchBenchmark(BenchmarkBase):
             },
             {
                 "repo": "matplotlib/matplotlib",
-                "issue": (
-                    "plt.savefig() with bbox_inches='tight' raises ValueError "
-                    "when figure has no axes."
-                ),
+                "issue": ("plt.savefig() with bbox_inches='tight' raises ValueError " "when figure has no axes."),
                 "patch": (
                     "diff --git a/lib/matplotlib/figure.py b/lib/matplotlib/figure.py\n"
                     "--- a/lib/matplotlib/figure.py\n"
@@ -293,8 +285,7 @@ class SWEBenchBenchmark(BenchmarkBase):
             {
                 "repo": "flask/flask",
                 "issue": (
-                    "Blueprint.teardown_request handler not called when "
-                    "exception occurs during request processing."
+                    "Blueprint.teardown_request handler not called when " "exception occurs during request processing."
                 ),
                 "patch": (
                     "diff --git a/src/flask/app.py b/src/flask/app.py\n"
@@ -311,9 +302,7 @@ class SWEBenchBenchmark(BenchmarkBase):
             },
             {
                 "repo": "requests/requests",
-                "issue": (
-                    "Session.send() does not properly handle redirect " "with fragment in URL."
-                ),
+                "issue": ("Session.send() does not properly handle redirect " "with fragment in URL."),
                 "patch": (
                     "diff --git a/requests/sessions.py b/requests/sessions.py\n"
                     "--- a/requests/sessions.py\n"

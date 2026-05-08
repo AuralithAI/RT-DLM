@@ -273,9 +273,7 @@ class TestKnowledgeRetrievalShapes:
 
         if knowledge_seq_len != core_seq_len:
             knowledge_pooled = jnp.mean(knowledge_features, axis=1, keepdims=True)
-            knowledge_aligned = jnp.broadcast_to(
-                knowledge_pooled, (batch_size, core_seq_len, d_model)
-            )
+            knowledge_aligned = jnp.broadcast_to(knowledge_pooled, (batch_size, core_seq_len, d_model))
         else:
             knowledge_aligned = knowledge_features
 
@@ -358,9 +356,7 @@ class TestConsciousnessComponentShapes:
         consciousness_state = jax.random.normal(rng_key, (batch_size, d_model))
 
         consciousness_expanded = consciousness_state[:, None, :]
-        consciousness_broadcast = jnp.broadcast_to(
-            consciousness_expanded, (batch_size, seq_len, d_model)
-        )
+        consciousness_broadcast = jnp.broadcast_to(consciousness_expanded, (batch_size, seq_len, d_model))
 
         integrated = core_features + 0.1 * consciousness_broadcast
         assert integrated.shape == (batch_size, seq_len, d_model)

@@ -89,8 +89,7 @@ class LiveCodeBenchmark(BenchmarkBase):
             return self._lightweight_score(sample, pred_str)
         else:
             logger.warning(
-                "Full execution-based scoring not implemented. "
-                "Use lightweight mode or an external code runner."
+                "Full execution-based scoring not implemented. " "Use lightweight mode or an external code runner."
             )
             return self._lightweight_score(sample, pred_str)
 
@@ -140,11 +139,7 @@ class LiveCodeBenchmark(BenchmarkBase):
             return has_input
 
         # Fallback: at least has non-trivial code
-        code_lines = [
-            line
-            for line in prediction.split("\n")
-            if line.strip() and not line.strip().startswith("#")
-        ]
+        code_lines = [line for line in prediction.split("\n") if line.strip() and not line.strip().startswith("#")]
         return len(code_lines) >= 3
 
     def load_data(self) -> List[BenchmarkSample]:
@@ -167,10 +162,7 @@ class LiveCodeBenchmark(BenchmarkBase):
             )
             logger.info(f"Loaded LiveCodeBench: {len(ds)} problems")
         except Exception as e:
-            logger.warning(
-                f"Could not load LiveCodeBench from HuggingFace: {e}. "
-                f"Using synthetic fallback data."
-            )
+            logger.warning(f"Could not load LiveCodeBench from HuggingFace: {e}. " f"Using synthetic fallback data.")
             return self._synthetic_fallback()
 
         samples = self._parse_dataset(ds)
@@ -186,11 +178,7 @@ class LiveCodeBenchmark(BenchmarkBase):
             if self.max_samples is not None and idx >= self.max_samples:
                 break
 
-            problem = (
-                row.get("question_content", "")
-                or row.get("problem_description", "")
-                or row.get("question", "")
-            )
+            problem = row.get("question_content", "") or row.get("problem_description", "") or row.get("question", "")
             solution = row.get("solution", "") or row.get("reference_solution", "")
 
             difficulty = row.get("difficulty", row.get("question_difficulty", "unknown"))

@@ -65,9 +65,7 @@ class TestRingAttention:
         """Test Ring Attention with different sequence lengths."""
 
         def forward(x):
-            ring_attn = RingAttentionBlock(
-                num_heads=4, head_dim=32, block_size=32, use_rope=True, max_seq_length=512
-            )
+            ring_attn = RingAttentionBlock(num_heads=4, head_dim=32, block_size=32, use_rope=True, max_seq_length=512)
             return ring_attn(x, is_training=True)
 
         forward_fn = hk.transform(forward)
@@ -83,9 +81,7 @@ class TestRingAttention:
         """Test that Ring Attention respects causal masking."""
 
         def forward(x):
-            ring_attn = RingAttentionBlock(
-                num_heads=2, head_dim=16, block_size=8, use_rope=False, max_seq_length=64
-            )
+            ring_attn = RingAttentionBlock(num_heads=2, head_dim=16, block_size=8, use_rope=False, max_seq_length=64)
             return ring_attn(x, is_training=False)
 
         forward_fn = hk.transform(forward)
@@ -264,9 +260,7 @@ class TestInfiniteContextAttention:
         """Test infinite context with longer sequence."""
 
         def forward(x):
-            infinite_attn = InfiniteContextAttention(
-                d_model=32, num_heads=2, chunk_size=64, global_context_size=32
-            )
+            infinite_attn = InfiniteContextAttention(d_model=32, num_heads=2, chunk_size=64, global_context_size=32)
             return infinite_attn(x, is_training=True)
 
         forward_fn = hk.transform(forward)
@@ -286,9 +280,7 @@ class TestInfiniteContextAttention:
         """Test that global context is maintained across chunks."""
 
         def forward(x):
-            infinite_attn = InfiniteContextAttention(
-                d_model=32, num_heads=2, chunk_size=32, global_context_size=64
-            )
+            infinite_attn = InfiniteContextAttention(d_model=32, num_heads=2, chunk_size=32, global_context_size=64)
             return infinite_attn(x, is_training=False)
 
         forward_fn = hk.transform(forward)

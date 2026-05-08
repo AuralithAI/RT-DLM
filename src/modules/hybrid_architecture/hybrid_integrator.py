@@ -44,9 +44,7 @@ class HybridArchitectureIntegrator(hk.Module):
         # Adaptive weighting based on input characteristics
         self.adaptive_weighter = AdaptiveWeightingModule(d_model)
 
-    def __call__(
-        self, inputs: Dict[str, jnp.ndarray], task_type: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def __call__(self, inputs: Dict[str, jnp.ndarray], task_type: Optional[str] = None) -> Dict[str, Any]:
         """
         Process inputs through hybrid architecture
 
@@ -99,9 +97,7 @@ class HybridArchitectureIntegrator(hk.Module):
             "confidence": self._calculate_confidence(ensemble_output, final_weights),
         }
 
-    def _calculate_confidence(
-        self, ensemble_output: jnp.ndarray, weights: jnp.ndarray
-    ) -> jnp.ndarray:
+    def _calculate_confidence(self, ensemble_output: jnp.ndarray, weights: jnp.ndarray) -> jnp.ndarray:
         """Calculate ensemble confidence based on agreement between models"""
         # Simple confidence measure based on weight distribution
         weight_entropy = -jnp.sum(weights * jnp.log(weights + 1e-8), axis=-1)
@@ -283,14 +279,10 @@ class NaiveBayesLike(hk.Module):
         self.d_model = d_model
 
         # Feature likelihood estimators
-        self.likelihood_estimator = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.softmax], name="likelihood_estimator"
-        )
+        self.likelihood_estimator = hk.Sequential([hk.Linear(d_model), jax.nn.softmax], name="likelihood_estimator")
 
         # Prior probability estimator
-        self.prior_estimator = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.softmax], name="prior_estimator"
-        )
+        self.prior_estimator = hk.Sequential([hk.Linear(d_model), jax.nn.softmax], name="prior_estimator")
 
         # Posterior calculator
         self.posterior_calculator = hk.Linear(d_model, name="posterior_calculator")
@@ -459,9 +451,7 @@ class CNNBranch(hk.Module):
         )
 
         # Second layer convolutions
-        self.conv_final = hk.Conv1D(
-            output_channels=d_model, kernel_shape=3, padding="SAME", name="conv_final"
-        )
+        self.conv_final = hk.Conv1D(output_channels=d_model, kernel_shape=3, padding="SAME", name="conv_final")
 
         # Projection layer for dimension matching
         self.projection = hk.Linear(d_model, name="cnn_projection")
@@ -512,9 +502,7 @@ class CNNBranch(hk.Module):
             multi_scale = multi_scale[..., : self.d_model]
 
         # Apply final conv layer with vectorized processing
-        conv_output = self._apply_conv_vectorized(
-            lambda x: jax.nn.relu(self.conv_final(x)), multi_scale
-        )
+        conv_output = self._apply_conv_vectorized(lambda x: jax.nn.relu(self.conv_final(x)), multi_scale)
 
         # Vectorized pooling: use both max and mean pooling
         max_pooled = jnp.max(conv_output, axis=1)  # [batch, d_model]
@@ -579,17 +567,11 @@ class TransformerBranch(hk.Module):
         )
 
         # Feed-forward network
-        self.ffn = hk.Sequential(
-            [hk.Linear(d_model * 4), jax.nn.gelu, hk.Linear(d_model)], name="ffn"
-        )
+        self.ffn = hk.Sequential([hk.Linear(d_model * 4), jax.nn.gelu, hk.Linear(d_model)], name="ffn")
 
         # Layer normalization
-        self.layer_norm1 = hk.LayerNorm(
-            axis=-1, create_scale=True, create_offset=True, name="layer_norm1"
-        )
-        self.layer_norm2 = hk.LayerNorm(
-            axis=-1, create_scale=True, create_offset=True, name="layer_norm2"
-        )
+        self.layer_norm1 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name="layer_norm1")
+        self.layer_norm2 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name="layer_norm2")
 
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
         """Apply Transformer processing"""
@@ -657,17 +639,13 @@ class RuleBasedEngine(hk.Module):
         # Rule condition matchers
         self.rule_conditions = []
         for i in range(num_rules):
-            condition = hk.Sequential(
-                [hk.Linear(d_model), jax.nn.sigmoid], name=f"rule_condition_{i}"
-            )
+            condition = hk.Sequential([hk.Linear(d_model), jax.nn.sigmoid], name=f"rule_condition_{i}")
             self.rule_conditions.append(condition)
 
         # Rule actions
         self.rule_actions = []
         for i in range(num_rules):
-            action = hk.Sequential(
-                [hk.Linear(d_model), jax.nn.silu, hk.Linear(d_model)], name=f"rule_action_{i}"
-            )
+            action = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(d_model)], name=f"rule_action_{i}")
             self.rule_actions.append(action)
 
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
@@ -728,11 +706,7 @@ class LogicReasoningEngine(hk.Module):
 
         # Preserve input shape - only aggregate if 2D input
         if inputs.ndim == 2:
-            return (
-                jnp.mean(conclusions, axis=0, keepdims=True)
-                if conclusions.ndim == 1
-                else conclusions
-            )
+            return jnp.mean(conclusions, axis=0, keepdims=True) if conclusions.ndim == 1 else conclusions
         else:
             # Keep sequence dimension for 3D inputs
             return conclusions
@@ -805,9 +779,7 @@ class ProbabilisticBackbone(hk.Module):
         variational_output = self.variational_inference(inputs)
 
         # Combine probabilistic approaches
-        combined = jnp.concatenate(
-            [bayesian_output, uncertainty_output, variational_output], axis=-1
-        )
+        combined = jnp.concatenate([bayesian_output, uncertainty_output, variational_output], axis=-1)
         ensemble_output = self.probabilistic_ensemble(combined)
 
         return ensemble_output
@@ -896,9 +868,7 @@ class VariationalInferenceModule(hk.Module):
         )
 
         # Decoder (generative model)
-        self.decoder = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.silu, hk.Linear(d_model)], name="decoder"
-        )
+        self.decoder = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(d_model)], name="decoder")
 
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
         """Variational inference"""
@@ -1135,9 +1105,7 @@ class KnowledgeDistillationModule(hk.Module):
             name="knowledge_extractor",
         )
 
-    def __call__(
-        self, ensemble_output: jnp.ndarray, teacher_outputs: List[jnp.ndarray]
-    ) -> jnp.ndarray:
+    def __call__(self, ensemble_output: jnp.ndarray, teacher_outputs: List[jnp.ndarray]) -> jnp.ndarray:
         """Distill knowledge from ensemble to student network"""
         # Normalize all teacher outputs to 2D [batch, d_model] before concatenation
         normalized_teachers = []
@@ -1347,8 +1315,7 @@ class MultiAgentConsensus(hk.Module):
 
         # Create specialist agents
         self.agents = [
-            SpecialistAgent(d_model, spec, name=f"agent_{i}")
-            for i, spec in enumerate(specializations[:num_agents])
+            SpecialistAgent(d_model, spec, name=f"agent_{i}") for i, spec in enumerate(specializations[:num_agents])
         ]
 
         # Consensus mechanism
@@ -1390,9 +1357,7 @@ class MultiAgentConsensus(hk.Module):
         """
         return compute_task_complexity(inputs)
 
-    def spawn_agent(
-        self, task_complexity: float, specialization: Optional[str] = None
-    ) -> Optional[SpecialistAgent]:
+    def spawn_agent(self, task_complexity: float, specialization: Optional[str] = None) -> Optional[SpecialistAgent]:
         """
         Spawn a new specialist agent based on task complexity.
 
@@ -1463,9 +1428,7 @@ class MultiAgentConsensus(hk.Module):
         for i, spec in enumerate(priority_specs[:num_agents]):
             # Each agent gets slightly different weight scale
             adjusted_complexity = complexity + (i * 0.05)
-            agent = self.spawn_agent(
-                task_complexity=min(adjusted_complexity, 1.0), specialization=spec
-            )
+            agent = self.spawn_agent(task_complexity=min(adjusted_complexity, 1.0), specialization=spec)
             if agent is not None:
                 spawned.append(agent)
 
@@ -1481,15 +1444,11 @@ class MultiAgentConsensus(hk.Module):
         self._spawned_agents = []
         return count
 
-    def _process_agent_parallel(
-        self, agent: SpecialistAgent, inputs: jnp.ndarray
-    ) -> Dict[str, jnp.ndarray]:
+    def _process_agent_parallel(self, agent: SpecialistAgent, inputs: jnp.ndarray) -> Dict[str, jnp.ndarray]:
         """Process a single agent - used for vmap."""
         return agent.process(inputs)
 
-    def __call__(
-        self, inputs: jnp.ndarray, auto_spawn: bool = True, crisis_mode: bool = False
-    ) -> Dict[str, Any]:
+    def __call__(self, inputs: jnp.ndarray, auto_spawn: bool = True, crisis_mode: bool = False) -> Dict[str, Any]:
         """Run multi-agent loop and compute consensus.
 
         Supports dynamic agent spawning based on task complexity and
@@ -1546,9 +1505,7 @@ class MultiAgentConsensus(hk.Module):
 
         # Compute consensus using mean (weighted by confidence)
         # Normalize confidences to weights
-        confidence_weights = jax.nn.softmax(
-            stacked_confidences.squeeze(-1), axis=0
-        )  # [num_agents, batch]
+        confidence_weights = jax.nn.softmax(stacked_confidences.squeeze(-1), axis=0)  # [num_agents, batch]
 
         # Weighted mean consensus
         if stacked_responses.ndim == 3:
@@ -1582,9 +1539,7 @@ class MultiAgentConsensus(hk.Module):
             # Get spawned agent responses
             spawned_indices = slice(self.num_agents, num_active)
             spawned_responses = stacked_responses[spawned_indices]
-            spawned_pooled = jnp.mean(
-                spawned_responses, axis=(0, 1) if spawned_responses.ndim == 3 else (0, 1, 2)
-            )
+            spawned_pooled = jnp.mean(spawned_responses, axis=(0, 1) if spawned_responses.ndim == 3 else (0, 1, 2))
 
             # Fuse spawned agent contributions
             fused_spawned = self.spawned_fusion(spawned_pooled)

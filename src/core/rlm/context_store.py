@@ -69,8 +69,7 @@ class ContextStore:
         expired = [
             name
             for name, var in self._variables.items()
-            if (current_time - var.metadata.last_accessed) > self._cache_ttl
-            and var.metadata.parent_var is None
+            if (current_time - var.metadata.last_accessed) > self._cache_ttl and var.metadata.parent_var is None
         ]
         for name in expired:
             self.delete(name)
@@ -101,9 +100,7 @@ class ContextStore:
         if self._embedding_fn is not None:
             try:
                 embedding = self._embedding_fn(content)
-                metadata.embedding_dim = (
-                    embedding.shape[-1] if hasattr(embedding, "shape") else None
-                )
+                metadata.embedding_dim = embedding.shape[-1] if hasattr(embedding, "shape") else None
             except Exception as e:
                 logger.debug(f"Embedding generation failed for variable '{name}': {e}")
 
@@ -156,11 +153,7 @@ class ContextStore:
         return var.metadata if var else None
 
     def _get_existing_chunk_names(self, parent_name: str) -> List[str]:
-        return [
-            name
-            for name in self._variables.keys()
-            if self._variables[name].metadata.parent_var == parent_name
-        ]
+        return [name for name in self._variables.keys() if self._variables[name].metadata.parent_var == parent_name]
 
     def partition(
         self,
@@ -233,10 +226,15 @@ class ContextStore:
                 compiled = re.compile(pattern, re.IGNORECASE)
             except re.error:
                 return []
-            match_fn = lambda line: compiled.search(line) is not None
+
+            def match_fn(line):
+                return compiled.search(line) is not None
+
         else:
             pattern_lower = pattern.lower()
-            match_fn = lambda line: pattern_lower in line.lower()
+
+            def match_fn(line):
+                return pattern_lower in line.lower()
 
         for i, line in enumerate(lines):
             if match_fn(line):
@@ -279,10 +277,7 @@ class ContextStore:
         }
 
     def _evict_if_needed(self, new_size: int) -> None:
-        while (
-            len(self._variables) >= self._max_variables
-            or self._total_size + new_size > self._max_total_size
-        ):
+        while len(self._variables) >= self._max_variables or self._total_size + new_size > self._max_total_size:
             if not self._access_order:
                 break
             oldest = self._access_order[0]

@@ -4,18 +4,14 @@ import jax.numpy as jnp
 from typing import Dict, Optional, List
 
 
-def sinusoidal_timestamp_embedding(
-    timestamps: jnp.ndarray, dim: int, max_period: float = 10000.0
-) -> jnp.ndarray:
+def sinusoidal_timestamp_embedding(timestamps: jnp.ndarray, dim: int, max_period: float = 10000.0) -> jnp.ndarray:
     """Continuous-time sinusoidal embedding. timestamps [...,] -> [..., dim]."""
     half = dim // 2
     freqs = jnp.exp(-jnp.log(max_period) * jnp.arange(half, dtype=jnp.float32) / max(half, 1))
     args = timestamps[..., None] * freqs
     emb = jnp.concatenate([jnp.cos(args), jnp.sin(args)], axis=-1)
     if emb.shape[-1] < dim:
-        emb = jnp.concatenate(
-            [emb, jnp.zeros((*emb.shape[:-1], dim - emb.shape[-1]))], axis=-1
-        )
+        emb = jnp.concatenate([emb, jnp.zeros((*emb.shape[:-1], dim - emb.shape[-1]))], axis=-1)
     return emb
 
 
@@ -85,9 +81,7 @@ class CrossModalAttention(hk.Module):
         attended_values = jnp.matmul(attention_weights, V)
 
         # Reshape and project output
-        attended_values = attended_values.transpose(0, 2, 1, 3).reshape(
-            batch_size, seq_len, self.d_model
-        )
+        attended_values = attended_values.transpose(0, 2, 1, 3).reshape(batch_size, seq_len, self.d_model)
         output = self.output_proj(attended_values)
 
         return output, attention_weights
@@ -327,9 +321,7 @@ class VisionEncoder(hk.Module):
 
         # Standard patch embedding (used when not multi-resolution)
         self.patch_embed = hk.Linear(d_model, name="patch_embed")
-        self.pos_embed = hk.get_parameter(
-            "pos_embed", [1, 196, d_model], init=hk.initializers.TruncatedNormal(0.02)
-        )
+        self.pos_embed = hk.get_parameter("pos_embed", [1, 196, d_model], init=hk.initializers.TruncatedNormal(0.02))
 
         # Transformer layers
         self.transformer_layers = []
@@ -350,9 +342,7 @@ class VisionEncoder(hk.Module):
         if images.shape[-1] != self.in_channels:
             if images.shape[-1] < self.in_channels:
                 pad = self.in_channels - images.shape[-1]
-                images = jnp.concatenate(
-                    [images, jnp.zeros((*images.shape[:-1], pad), dtype=images.dtype)], axis=-1
-                )
+                images = jnp.concatenate([images, jnp.zeros((*images.shape[:-1], pad), dtype=images.dtype)], axis=-1)
             else:
                 images = images[..., : self.in_channels]
 
@@ -376,9 +366,7 @@ class VisionEncoder(hk.Module):
             pos_embed = self.pos_embed[:, : patches.shape[1], :]
         else:
             # Interpolate if needed
-            pos_embed = jax.image.resize(
-                self.pos_embed, (1, patches.shape[1], self.d_model), method="linear"
-            )
+            pos_embed = jax.image.resize(self.pos_embed, (1, patches.shape[1], self.d_model), method="linear")
 
         x = patches + pos_embed
 
@@ -480,8 +468,7 @@ class VideoEncoder(hk.Module):
         self.max_frames = max_frames
         self.motion_window = motion_window
 
-        self.frame_encoder = VisionEncoder(d_model, patch_size=patch_size, num_layers=2,
-                                           name="video_frame_encoder")
+        self.frame_encoder = VisionEncoder(d_model, patch_size=patch_size, num_layers=2, name="video_frame_encoder")
         self.motion_proj = hk.Linear(d_model // 4, name="motion_proj")
         self.fuse_proj = hk.Linear(d_model, name="motion_fuse_proj")
 
@@ -506,7 +493,7 @@ class VideoEncoder(hk.Module):
         x = jax.nn.silu(x)
         x = hk.Conv2D(64, kernel_shape=3, stride=2, padding="SAME", name="motion_c2")(x)
         x = jax.nn.silu(x)
-        side = max(int(target_patches ** 0.5), 1)
+        side = max(int(target_patches**0.5), 1)
         x = jax.image.resize(x, (b * fm1, side, side, 64), method="linear")
         x = self.motion_proj(x)
         x = x.reshape(b, fm1, side * side, -1)
@@ -532,14 +519,12 @@ class VideoEncoder(hk.Module):
         appearance = frame_tokens.reshape(b, fr, patches, self.d_model)
 
         motion = self._motion_features(video_frames, target_patches=patches)
-        motion_padded = jnp.concatenate(
-            [jnp.zeros((b, 1, patches, motion.shape[-1])), motion], axis=1
-        )
+        motion_padded = jnp.concatenate([jnp.zeros((b, 1, patches, motion.shape[-1])), motion], axis=1)
 
         appearance_motion = jnp.concatenate([appearance, motion_padded], axis=-1)
         fused = self.fuse_proj(appearance_motion)
 
-        ph = pw = int(patches ** 0.5)
+        ph = pw = int(patches**0.5)
         if ph * pw != patches:
             ph, pw = 1, patches
         tokens = fused.reshape(b, fr * patches, self.d_model)
@@ -584,18 +569,23 @@ class MultiModalRTDLM(hk.Module):
 
         if self.enable_document:
             from src.modules.multimodal.document_encoder import DocumentEncoder
+
             self.document_encoder = DocumentEncoder(config.d_model, name="document_encoder")
         if self.enable_pointcloud:
             from src.modules.multimodal.point_cloud_encoder import PointCloudEncoder
+
             self.pointcloud_encoder = PointCloudEncoder(config.d_model, name="pointcloud_encoder")
         if self.enable_biosignal:
             from src.modules.multimodal.biosignal_encoder import BiosignalEncoder
+
             self.biosignal_encoder = BiosignalEncoder(config.d_model, name="biosignal_encoder")
         if self.enable_tactile:
             from src.modules.multimodal.tactile_encoder import TactileEncoder
+
             self.tactile_encoder = TactileEncoder(config.d_model, name="tactile_encoder")
         if self.enable_action:
             from src.modules.multimodal.action_encoder import ActionEncoder
+
             self.action_encoder = ActionEncoder(
                 config.d_model,
                 num_axes=getattr(config, "action_num_axes", 15),
@@ -616,9 +606,7 @@ class MultiModalRTDLM(hk.Module):
             modalities.append("action")
         self.active_modalities = modalities
 
-        self.fusion_layer = MultiModalFusionLayer(
-            config.d_model, config.num_heads, modalities=modalities
-        )
+        self.fusion_layer = MultiModalFusionLayer(config.d_model, config.num_heads, modalities=modalities)
 
         self.output_projection = hk.Linear(config.vocab_size, name="output_proj")
         self.modality_classifier = hk.Sequential(

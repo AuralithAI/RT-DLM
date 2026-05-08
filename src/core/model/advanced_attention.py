@@ -168,9 +168,7 @@ class RotaryEmbedding(hk.Module):
         self.scaling_factor = scaling_factor
 
         # Precompute frequencies
-        self.cos_cached, self.sin_cached = precompute_rope_frequencies(
-            dim, max_seq_length, theta, scaling_factor
-        )
+        self.cos_cached, self.sin_cached = precompute_rope_frequencies(dim, max_seq_length, theta, scaling_factor)
 
     def __call__(
         self, q: jnp.ndarray, k: jnp.ndarray, position_ids: Optional[jnp.ndarray] = None
@@ -224,9 +222,7 @@ class GroupedQueryAttention(hk.Module):
 
         # Validate
         if num_heads % num_kv_heads != 0:
-            raise ValueError(
-                f"num_heads ({num_heads}) must be divisible by num_kv_heads ({num_kv_heads})"
-            )
+            raise ValueError(f"num_heads ({num_heads}) must be divisible by num_kv_heads ({num_kv_heads})")
 
         self.num_queries_per_kv = num_heads // num_kv_heads
         self.d_model = num_heads * head_dim
@@ -434,15 +430,11 @@ class SlidingWindowAttention(hk.Module):
         if mask is not None:
             if mask.ndim == 2:  # [batch, seq_len]
                 mask_expanded = mask[:, None, None, :] * mask[:, None, :, None]
-                mask_expanded = jnp.broadcast_to(
-                    mask_expanded, (batch_size, self.num_heads, seq_len, seq_len)
-                )
+                mask_expanded = jnp.broadcast_to(mask_expanded, (batch_size, self.num_heads, seq_len, seq_len))
                 window_mask = window_mask * mask_expanded
             elif mask.ndim == 3:  # [batch, seq, seq]
                 mask_expanded = mask[:, None, :, :]
-                mask_expanded = jnp.broadcast_to(
-                    mask_expanded, (batch_size, self.num_heads, seq_len, seq_len)
-                )
+                mask_expanded = jnp.broadcast_to(mask_expanded, (batch_size, self.num_heads, seq_len, seq_len))
                 window_mask = window_mask * mask_expanded
             elif mask.ndim == 4:  # [batch, heads, seq, seq]
                 # Broadcast to match our num_heads
@@ -574,9 +566,7 @@ class AdvancedSelfAttention(hk.Module):
 
         # Choose attention variant
         if config.attention_type == "sliding":
-            self.attention = SlidingWindowAttention(
-                config.num_heads, self.head_dim, config.sliding_window_size
-            )
+            self.attention = SlidingWindowAttention(config.num_heads, self.head_dim, config.sliding_window_size)
         elif config.attention_type == "linear":
             self.attention = LinearAttention(config.num_heads, self.head_dim)
         else:  # standard, gqa, mqa

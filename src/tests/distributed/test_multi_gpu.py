@@ -190,9 +190,7 @@ class TestFullTrainingLoop:
             model_apply_fn=model.apply, optimizer=optimizer, mesh=mesh, loss_fn=loss_fn
         )
 
-        new_params, new_opt_state, loss, _ = train_step(
-            replicated_params, replicated_opt_state, batch, rngs
-        )
+        new_params, new_opt_state, loss, _ = train_step(replicated_params, replicated_opt_state, batch, rngs)
 
         assert loss.shape == (num_devices,)
         assert jnp.allclose(loss[0], loss[1])

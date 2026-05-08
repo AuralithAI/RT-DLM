@@ -58,12 +58,8 @@ class SyntheticDataGenerator:
         """
         self.difficulty_threshold = getattr(config, "synthetic_data_difficulty_threshold", 0.6)
         self.batch_multiplier = getattr(config, "synthetic_data_batch_multiplier", 0.2)
-        self.quality_improvement_min = getattr(
-            config, "synthetic_data_quality_improvement_min", 0.1
-        )
-        self.output_dir = Path(
-            output_dir or getattr(config, "synthetic_data_output_dir", "synthetic_shards")
-        )
+        self.quality_improvement_min = getattr(config, "synthetic_data_quality_improvement_min", 0.1)
+        self.output_dir = Path(output_dir or getattr(config, "synthetic_data_output_dir", "synthetic_shards"))
         self.vocab_size = getattr(config, "vocab_size", 8000)
         self.seq_length = getattr(config, "max_seq_length", 2048)
         self._shard_counter = 0
@@ -253,9 +249,7 @@ class SyntheticDataGenerator:
                 str(shard_path),
             )
 
-            logger.info(
-                f"Saved synthetic shard: {shard_path} " f"({combined_inputs.shape[0]} examples)"
-            )
+            logger.info(f"Saved synthetic shard: {shard_path} " f"({combined_inputs.shape[0]} examples)")
             return shard_path
 
         except ImportError:

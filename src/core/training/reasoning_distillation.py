@@ -10,6 +10,7 @@ import jax.numpy as jnp
 @dataclass
 class TraceDistillConfig:
     """Hyperparameters for reasoning-trace distillation."""
+
     cosine_weight: float = 1.0
     structure_weight: float = 0.3
     logit_weight: float = 0.0
@@ -42,9 +43,7 @@ def cosine_trace_loss(
     return (per * mask).sum() / weight
 
 
-def structural_alignment_loss(
-    student_adjacency: jnp.ndarray, teacher_adjacency: jnp.ndarray
-) -> jnp.ndarray:
+def structural_alignment_loss(student_adjacency: jnp.ndarray, teacher_adjacency: jnp.ndarray) -> jnp.ndarray:
     """MSE between student reasoning-graph adjacency and teacher chain-structure matrix."""
     n = min(student_adjacency.shape[-1], teacher_adjacency.shape[-1])
     s = student_adjacency[..., :n, :n]
@@ -59,7 +58,7 @@ def logit_distillation_loss(
     s = jax.nn.log_softmax(student_logits / temperature, axis=-1)
     t = jax.nn.softmax(teacher_logits / temperature, axis=-1)
     kl = jnp.sum(t * (jnp.log(t + 1e-9) - s), axis=-1)
-    return jnp.mean(kl) * (temperature ** 2)
+    return jnp.mean(kl) * (temperature**2)
 
 
 def chain_to_adjacency(num_steps: int) -> jnp.ndarray:
@@ -92,18 +91,14 @@ def reasoning_trace_distillation_loss(
         total = total + cfg.structure_weight * out["structural"]
 
     if student_logits is not None and teacher_logits is not None and cfg.logit_weight > 0.0:
-        out["logit"] = logit_distillation_loss(
-            student_logits, teacher_logits, cfg.temperature
-        )
+        out["logit"] = logit_distillation_loss(student_logits, teacher_logits, cfg.temperature)
         total = total + cfg.logit_weight * out["logit"]
 
     out["total"] = total
     return out
 
 
-def project_teacher_to_student_dim(
-    teacher_steps: jnp.ndarray, target_dim: int
-) -> jnp.ndarray:
+def project_teacher_to_student_dim(teacher_steps: jnp.ndarray, target_dim: int) -> jnp.ndarray:
     """Linear projection (truncate or zero-pad) when teacher embedding dim differs."""
     src_dim = teacher_steps.shape[-1]
     if src_dim == target_dim:

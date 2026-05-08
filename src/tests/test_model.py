@@ -66,9 +66,7 @@ class SelfAttention(hk.Module):
 class Embedding(hk.Module):
     """Token and positional embedding module"""
 
-    def __init__(
-        self, vocab_size: int, d_model: int, max_seq_len: int = 512, name: Optional[str] = None
-    ):
+    def __init__(self, vocab_size: int, d_model: int, max_seq_len: int = 512, name: Optional[str] = None):
         super().__init__(name=name)
         self.vocab_size = vocab_size
         self.d_model = d_model
@@ -88,15 +86,11 @@ class Embedding(hk.Module):
         seq_len = seq_length if seq_length is not None else token_ids.shape[1]
 
         # Token embedding
-        token_embed = hk.Embed(
-            vocab_size=self.vocab_size, embed_dim=self.d_model, name="token_embed"
-        )(token_ids)
+        token_embed = hk.Embed(vocab_size=self.vocab_size, embed_dim=self.d_model, name="token_embed")(token_ids)
 
         # Positional encoding (learnable)
         positions = jnp.arange(seq_len)
-        pos_embed = hk.Embed(vocab_size=self.max_seq_len, embed_dim=self.d_model, name="pos_embed")(
-            positions
-        )
+        pos_embed = hk.Embed(vocab_size=self.max_seq_len, embed_dim=self.d_model, name="pos_embed")(positions)
 
         # Broadcast positional embedding to batch
         pos_embed = jnp.broadcast_to(pos_embed, (batch_size, seq_len, self.d_model))

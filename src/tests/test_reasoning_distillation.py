@@ -49,9 +49,7 @@ def test_structural_alignment_loss_handles_dim_mismatch():
 def test_chain_to_adjacency_structure():
     """chain_to_adjacency must have ones on the super-diagonal only."""
     a = chain_to_adjacency(4)
-    expected = jnp.array(
-        [[0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1], [0, 0, 0, 0]], dtype=jnp.float32
-    )
+    expected = jnp.array([[0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1], [0, 0, 0, 0]], dtype=jnp.float32)
     assert jnp.allclose(a, expected)
 
 
@@ -81,9 +79,7 @@ def test_combined_loss_with_all_terms():
     ta = chain_to_adjacency(3)[None, ...].repeat(2, axis=0)
     sl = jnp.asarray(rng.normal(size=(2, 3, 6)).astype(np.float32))
     tl = jnp.asarray(rng.normal(size=(2, 3, 6)).astype(np.float32))
-    out = reasoning_trace_distillation_loss(
-        s, t, sa, ta, sl, tl, config=TraceDistillConfig(logit_weight=0.5)
-    )
+    out = reasoning_trace_distillation_loss(s, t, sa, ta, sl, tl, config=TraceDistillConfig(logit_weight=0.5))
     assert {"cosine", "structural", "logit", "total"}.issubset(out.keys())
 
 

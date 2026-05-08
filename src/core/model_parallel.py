@@ -53,9 +53,7 @@ class DeviceMesh:
         mesh_shape: Tuple[int, ...]
         if self.config.tensor_parallel and self.config.pipeline_parallel:
             # 3D mesh: (data, tensor, pipeline)
-            dp_size = self.num_devices // (
-                self.config.tensor_parallel_size * self.config.pipeline_parallel_size
-            )
+            dp_size = self.num_devices // (self.config.tensor_parallel_size * self.config.pipeline_parallel_size)
             mesh_shape = (
                 dp_size,
                 self.config.tensor_parallel_size,
@@ -190,9 +188,7 @@ class TensorParallelAttention(hk.Module):
         self.tp_size = mesh.config.tensor_parallel_size
 
         # Divide heads across devices
-        assert (
-            num_heads % self.tp_size == 0
-        ), f"num_heads ({num_heads}) must be divisible by tp_size ({self.tp_size})"
+        assert num_heads % self.tp_size == 0, f"num_heads ({num_heads}) must be divisible by tp_size ({self.tp_size})"
         self.local_num_heads = num_heads // self.tp_size
         self.head_dim = d_model // num_heads
 
@@ -236,9 +232,7 @@ class TensorParallelAttention(hk.Module):
         attn_output = attn_output.reshape(batch_size, seq_len, local_dim)
 
         # Output projection (row parallel - will all-reduce)
-        output_proj = TensorParallelLinear(
-            self.d_model, self.mesh, parallel_mode="row", name="output"
-        )
+        output_proj = TensorParallelLinear(self.d_model, self.mesh, parallel_mode="row", name="output")
         output = output_proj(attn_output)
 
         return output
@@ -313,9 +307,7 @@ class PipelineStage(hk.Module):
             layer_name = f"layer_{self.stage_id}_{i}"
 
             # Pre-norm attention
-            norm1 = hk.LayerNorm(
-                axis=-1, create_scale=True, create_offset=True, name=f"{layer_name}_norm1"
-            )
+            norm1 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name=f"{layer_name}_norm1")
             attn = hk.MultiHeadAttention(
                 num_heads=self.num_heads,
                 key_size=self.d_model // self.num_heads,
@@ -329,9 +321,7 @@ class PipelineStage(hk.Module):
             x = x + attn_out
 
             # Pre-norm MLP
-            norm2 = hk.LayerNorm(
-                axis=-1, create_scale=True, create_offset=True, name=f"{layer_name}_norm2"
-            )
+            norm2 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name=f"{layer_name}_norm2")
             mlp = hk.Sequential(
                 [
                     hk.Linear(self.d_ff, name=f"{layer_name}_fc1"),
@@ -411,9 +401,7 @@ class PipelineParallelModel(hk.Module):
 # =============================================================================
 
 
-def shard_params_for_tensor_parallel(
-    params: Dict, mesh: DeviceMesh, layer_names: List[str]
-) -> Dict:
+def shard_params_for_tensor_parallel(params: Dict, mesh: DeviceMesh, layer_names: List[str]) -> Dict:
     """
     Shard model parameters for tensor parallelism.
 
@@ -452,9 +440,7 @@ def shard_params_for_tensor_parallel(
     return param_shardings
 
 
-def create_sharded_train_step(
-    train_step_fn: Callable, mesh: DeviceMesh, param_shardings: Dict
-) -> Callable:
+def create_sharded_train_step(train_step_fn: Callable, mesh: DeviceMesh, param_shardings: Dict) -> Callable:
     """
     Create a training step with proper sharding.
 
@@ -504,9 +490,7 @@ class ModelParallelTransformer(hk.Module):
                     self.config.d_model, self.config.num_heads, self.mesh, name=f"layer_{i}_attn"
                 )
                 # Tensor parallel MLP
-                mlp = TensorParallelMLP(
-                    self.config.d_model, self.config.d_model * 4, self.mesh, name=f"layer_{i}_mlp"
-                )
+                mlp = TensorParallelMLP(self.config.d_model, self.config.d_model * 4, self.mesh, name=f"layer_{i}_mlp")
             else:
                 # Standard attention and MLP
                 attn = hk.MultiHeadAttention(
@@ -525,12 +509,8 @@ class ModelParallelTransformer(hk.Module):
                 )
 
             # Pre-norm architecture
-            norm1 = hk.LayerNorm(
-                axis=-1, create_scale=True, create_offset=True, name=f"layer_{i}_norm1"
-            )
-            norm2 = hk.LayerNorm(
-                axis=-1, create_scale=True, create_offset=True, name=f"layer_{i}_norm2"
-            )
+            norm1 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name=f"layer_{i}_norm1")
+            norm2 = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name=f"layer_{i}_norm2")
 
             # Attention block
             if self.use_tensor_parallel:
@@ -564,12 +544,8 @@ def create_model_parallel_system(config) -> Tuple[DeviceMesh, ModelParallelConfi
     mesh = DeviceMesh(mp_config)
 
     logger.info(f"Created device mesh with shape {mesh.mesh.shape}")
-    logger.info(
-        f"Tensor parallel: {mp_config.tensor_parallel}, size: {mp_config.tensor_parallel_size}"
-    )
-    logger.info(
-        f"Pipeline parallel: {mp_config.pipeline_parallel}, size: {mp_config.pipeline_parallel_size}"
-    )
+    logger.info(f"Tensor parallel: {mp_config.tensor_parallel}, size: {mp_config.tensor_parallel_size}")
+    logger.info(f"Pipeline parallel: {mp_config.pipeline_parallel}, size: {mp_config.pipeline_parallel_size}")
 
     return mesh, mp_config
 

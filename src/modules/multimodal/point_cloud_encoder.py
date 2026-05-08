@@ -6,7 +6,7 @@ from typing import Dict
 
 def _knn_indices(points: jnp.ndarray, k: int) -> jnp.ndarray:
     """points [B,N,3] -> neighbor indices [B,N,k]."""
-    sq = jnp.sum(points ** 2, axis=-1, keepdims=True)
+    sq = jnp.sum(points**2, axis=-1, keepdims=True)
     pairwise = sq + jnp.swapaxes(sq, -1, -2) - 2.0 * jnp.einsum("bnd,bmd->bnm", points, points)
     pairwise = -pairwise
     return jax.lax.top_k(pairwise, k)[1]

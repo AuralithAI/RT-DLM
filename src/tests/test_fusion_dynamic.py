@@ -38,9 +38,7 @@ def test_fusion_layer_handles_three_modalities():
     """Fusion FFN must work with 3 modalities, validating the dynamic projection fix."""
 
     def fwd(inputs):
-        layer = MultiModalFusionLayer(
-            d_model=32, num_heads=4, modalities=["text", "audio", "video"]
-        )
+        layer = MultiModalFusionLayer(d_model=32, num_heads=4, modalities=["text", "audio", "video"])
         return layer(inputs)[0]
 
     transformed = hk.transform(fwd)

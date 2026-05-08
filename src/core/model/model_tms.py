@@ -115,9 +115,7 @@ class TMSModel(hk.Module):
             position_encoding=position_encoding,
             sliding_window_size=sliding_window_size,
         )
-        self.transformer = TransformerModel(
-            d_model, num_heads, num_layers, vocab_size, max_seq_length
-        )
+        self.transformer = TransformerModel(d_model, num_heads, num_layers, vocab_size, max_seq_length)
         self.moe = SparseMoE(d_model, moe_experts, moe_top_k, expert_capacity=3)
         self.memory = MemoryBank(memory_size, d_model, retrieval_k)
         self.memory_to_logits = hk.Linear(vocab_size)
@@ -170,9 +168,7 @@ class TMSModel(hk.Module):
             epsilon=self._spiking.epsilon,
         )
 
-    def apply_shared_spiking(
-        self, scores: jnp.ndarray, spike_threshold: Optional[float] = None
-    ) -> jnp.ndarray:
+    def apply_shared_spiking(self, scores: jnp.ndarray, spike_threshold: Optional[float] = None) -> jnp.ndarray:
         """
         Apply shared spiking mechanism to attention scores.
 
@@ -258,9 +254,7 @@ class TMSModel(hk.Module):
 
         # Check if we should use AGI attention with cross-memory fusion
         all_memories_available = (
-            retrieved_memory_ltm is not None
-            and retrieved_memory_stm is not None
-            and retrieved_memory_mtm is not None
+            retrieved_memory_ltm is not None and retrieved_memory_stm is not None and retrieved_memory_mtm is not None
         )
 
         if self.use_agi_attention and use_memory_cross_attention and all_memories_available:
@@ -270,19 +264,13 @@ class TMSModel(hk.Module):
             # ==================================================================
 
             # Project memories to model dimension
-            ltm_projected = self.memory_projection_ltm(
-                jnp.expand_dims(retrieved_memory_ltm, axis=1)
-            ).squeeze(
+            ltm_projected = self.memory_projection_ltm(jnp.expand_dims(retrieved_memory_ltm, axis=1)).squeeze(
                 1
             )  # [batch, d_model]
-            stm_projected = self.memory_projection_stm(
-                jnp.expand_dims(retrieved_memory_stm, axis=1)
-            ).squeeze(
+            stm_projected = self.memory_projection_stm(jnp.expand_dims(retrieved_memory_stm, axis=1)).squeeze(
                 1
             )  # [batch, d_model]
-            mtm_projected = self.memory_projection_mtm(
-                jnp.expand_dims(retrieved_memory_mtm, axis=1)
-            ).squeeze(
+            mtm_projected = self.memory_projection_mtm(jnp.expand_dims(retrieved_memory_mtm, axis=1)).squeeze(
                 1
             )  # [batch, d_model]
 
@@ -311,9 +299,7 @@ class TMSModel(hk.Module):
             fused_memory_expanded = fused_memory[:, None, :].repeat(x.shape[1], axis=1)
 
             # Learn a gate to control memory influence
-            memory_gate = hk.Sequential(
-                [hk.Linear(self.d_model), jax.nn.sigmoid], name="memory_gate"
-            )
+            memory_gate = hk.Sequential([hk.Linear(self.d_model), jax.nn.sigmoid], name="memory_gate")
             gate = memory_gate(x)
             x = x + gate * fused_memory_expanded
 
@@ -358,9 +344,7 @@ class TMSModel(hk.Module):
         # ==================================================================
         # Apply AGI attention (Ring Attention or Infinite Context)
         # ==================================================================
-        if self.use_agi_attention and (
-            use_infinite_context or self.agi_attention_config.enable_ring_attention
-        ):
+        if self.use_agi_attention and (use_infinite_context or self.agi_attention_config.enable_ring_attention):
             # Use AGI attention for main sequence processing
             x_agi, agi_info = self.agi_attention.forward_attention(
                 x,
@@ -385,9 +369,7 @@ class TMSModel(hk.Module):
         x, attn_weights_transformer = self.transformer(
             x, rng, return_attention=True, spike_threshold=spike_threshold, epsilon=epsilon
         )
-        x, top_k_expert_indices, aux_loss, _ = self.moe(
-            x, spike_threshold=spike_threshold, epsilon=epsilon
-        )
+        x, top_k_expert_indices, aux_loss, _ = self.moe(x, spike_threshold=spike_threshold, epsilon=epsilon)
         x = self.norm(x)
         logits = self.proj(x)
 

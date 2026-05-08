@@ -161,9 +161,7 @@ class SelfAttentionModel(hk.Module):
             num_heads=num_heads, d_model=d_model, head_threshold=0.01, ffn_threshold=0.01
         )
 
-    def apply_spiking_attention(
-        self, scores: jnp.ndarray, spike_threshold: float, epsilon: float
-    ) -> jnp.ndarray:
+    def apply_spiking_attention(self, scores: jnp.ndarray, spike_threshold: float, epsilon: float) -> jnp.ndarray:
         """
         Apply Spiking Attention by thresholding attention scores.
 
@@ -206,18 +204,12 @@ class SelfAttentionModel(hk.Module):
         ffn_usage_update = self._pruning_manager.compute_ffn_usage(ffn_out)
 
         # Accumulate to Haiku state
-        current_head_usage = hk.get_state(
-            "head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros
-        )
-        current_ffn_usage = hk.get_state(
-            "ffn_usage", [self.d_model], dtype=jnp.float32, init=jnp.zeros
-        )
+        current_head_usage = hk.get_state("head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros)
+        current_ffn_usage = hk.get_state("ffn_usage", [self.d_model], dtype=jnp.float32, init=jnp.zeros)
         hk.set_state("head_usage", current_head_usage + head_usage_update)
         hk.set_state("ffn_usage", current_ffn_usage + ffn_usage_update)
 
-    def prune_heads_and_ffn(
-        self, head_threshold: float = 0.01, ffn_threshold: float = 0.01
-    ) -> "SelfAttentionModel":
+    def prune_heads_and_ffn(self, head_threshold: float = 0.01, ffn_threshold: float = 0.01) -> "SelfAttentionModel":
         """
         Prune attention heads and FFN neurons with usage below thresholds.
 
@@ -231,9 +223,7 @@ class SelfAttentionModel(hk.Module):
             New SelfAttentionModel with pruned components
         """
         # Get usage statistics from Haiku state
-        usage_heads = hk.get_state(
-            "head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros
-        )
+        usage_heads = hk.get_state("head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros)
         usage_ffn = hk.get_state("ffn_usage", [self.d_model], dtype=jnp.float32, init=jnp.zeros)
 
         # Update pruning manager thresholds and get masks

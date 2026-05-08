@@ -59,16 +59,12 @@ def create_real_batches(config: TrainingConfig, num_batches: int, rng_key: jax.r
         mask = jax.random.bernoulli(subkey, 0.9, (config.batch_size, config.max_seq_length))
         mask = mask.at[:, 0].set(1.0)
 
-        batches.append(
-            {"input_ids": input_ids, "target_ids": target_ids, "mask": mask.astype(jnp.float32)}
-        )
+        batches.append({"input_ids": input_ids, "target_ids": target_ids, "mask": mask.astype(jnp.float32)})
 
     return batches
 
 
-def compute_loss(
-    logits: jnp.ndarray, targets: jnp.ndarray, mask: jnp.ndarray
-) -> Tuple[jnp.ndarray, Dict]:
+def compute_loss(logits: jnp.ndarray, targets: jnp.ndarray, mask: jnp.ndarray) -> Tuple[jnp.ndarray, Dict]:
     """Compute cross-entropy loss with proper masking."""
     vocab_size = logits.shape[-1]
     one_hot_targets = jax.nn.one_hot(targets, vocab_size)
@@ -136,9 +132,7 @@ class TestFullTrainingCycle:
             end_value=config.learning_rate * 0.1,
         )
 
-        optimizer = optax.chain(
-            optax.clip_by_global_norm(config.grad_clip), optax.adamw(schedule, weight_decay=0.01)
-        )
+        optimizer = optax.chain(optax.clip_by_global_norm(config.grad_clip), optax.adamw(schedule, weight_decay=0.01))
 
         return optimizer
 
@@ -274,9 +268,7 @@ class TestFullTrainingCycle:
 
         for step, batch in enumerate(batches):
             step_rng, subkey = jax.random.split(step_rng)
-            params, opt_state, state, loss, metrics = train_step(
-                params, opt_state, state, batch, subkey
-            )
+            params, opt_state, state, loss, metrics = train_step(params, opt_state, state, batch, subkey)
             losses.append(float(loss))
 
             if step % 2 == 0:
@@ -313,9 +305,7 @@ class TestFullTrainingCycle:
 
         print(f"\nParameter memory: {param_mb:.2f} MB")
         print(f"Input batch memory: {input_mb:.4f} MB")
-        print(
-            f"Estimated training memory: {(param_mb * 4 + input_mb):.2f} MB (params + grads + optimizer + batch)"
-        )
+        print(f"Estimated training memory: {(param_mb * 4 + input_mb):.2f} MB (params + grads + optimizer + batch)")
 
     def test_checkpoint_save_load(self, model_and_params, optimizer, config, rng_key):
         """Test checkpoint save and load functionality."""
@@ -448,13 +438,9 @@ class TestFullTrainingCycle:
             if accumulated_grads is None:
                 accumulated_grads = grads
             else:
-                accumulated_grads = jax.tree_util.tree_map(
-                    lambda a, g: a + g, accumulated_grads, grads
-                )
+                accumulated_grads = jax.tree_util.tree_map(lambda a, g: a + g, accumulated_grads, grads)
 
-        accumulated_grads = jax.tree_util.tree_map(
-            lambda g: g / accumulation_steps, accumulated_grads
-        )
+        accumulated_grads = jax.tree_util.tree_map(lambda g: g / accumulation_steps, accumulated_grads)
         avg_loss = total_loss / accumulation_steps
 
         for grad in jax.tree_util.tree_leaves(accumulated_grads):
@@ -507,9 +493,7 @@ class TestTrainScriptIntegration:
             )
 
             assert len(batches) == 2
-            print(
-                f"\nSynthetic batch keys: {batches[0].keys() if isinstance(batches[0], dict) else 'tensor'}"
-            )
+            print(f"\nSynthetic batch keys: {batches[0].keys() if isinstance(batches[0], dict) else 'tensor'}")
         except (ImportError, TypeError) as e:
             pytest.skip(f"create_synthetic_batches not available: {e}")
 

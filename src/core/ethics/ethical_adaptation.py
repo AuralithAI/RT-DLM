@@ -206,12 +206,9 @@ class FairnessAnalyzer:
 
                 if abs(dp_diff) > self.config.bias_threshold:
                     violations.append(
-                        f"Demographic parity violation: {dp_diff:.4f} "
-                        f"(threshold: {self.config.bias_threshold})"
+                        f"Demographic parity violation: {dp_diff:.4f} " f"(threshold: {self.config.bias_threshold})"
                     )
-                    corrections["demographic_parity"] = (
-                        -dp_diff * self.config.fairness_penalty_weight
-                    )
+                    corrections["demographic_parity"] = -dp_diff * self.config.fairness_penalty_weight
 
             except Exception as e:
                 logger.warning(f"Failed to compute demographic parity: {e}")
@@ -233,8 +230,7 @@ class FairnessAnalyzer:
 
                 if abs(eo_diff) > self.config.bias_threshold:
                     violations.append(
-                        f"Equalized odds violation: {eo_diff:.4f} "
-                        f"(threshold: {self.config.bias_threshold})"
+                        f"Equalized odds violation: {eo_diff:.4f} " f"(threshold: {self.config.bias_threshold})"
                     )
                     corrections["equalized_odds"] = -eo_diff * self.config.fairness_penalty_weight
 
@@ -345,16 +341,12 @@ class FairnessAwareRewardHead(hk.Module):
         )
 
         # Group-specific bias correctors
-        self.group_correctors = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.silu, hk.Linear(num_groups)]
-        )
+        self.group_correctors = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(num_groups)])
 
         # Fairness constraint layer
         self.fairness_gate = hk.Sequential([hk.Linear(d_model + num_groups), jax.nn.sigmoid])
 
-    def __call__(
-        self, features: jnp.ndarray, group_indicators: Optional[jnp.ndarray] = None
-    ) -> Dict[str, jnp.ndarray]:
+    def __call__(self, features: jnp.ndarray, group_indicators: Optional[jnp.ndarray] = None) -> Dict[str, jnp.ndarray]:
         """
         Compute fairness-adjusted reward.
 
@@ -464,14 +456,10 @@ class FairnessConstrainedEthicalModel(hk.Module):
         self.reward_head = FairnessAwareRewardHead(d_model=d_model, num_groups=num_sensitive_groups)
 
         # Harm evaluator
-        self.harm_evaluator = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid]
-        )
+        self.harm_evaluator = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid])
 
         # Truthfulness evaluator
-        self.truthfulness_evaluator = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid]
-        )
+        self.truthfulness_evaluator = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid])
 
         # Fairness correction layer
         self.fairness_corrector = hk.Sequential([hk.Linear(d_model), jax.nn.tanh])
@@ -506,9 +494,7 @@ class FairnessConstrainedEthicalModel(hk.Module):
         """
         return self.sensitive_detector(embedding)
 
-    def compute_bias_scores(
-        self, input_embedding: jnp.ndarray, output_embedding: jnp.ndarray
-    ) -> Dict[str, float]:
+    def compute_bias_scores(self, input_embedding: jnp.ndarray, output_embedding: jnp.ndarray) -> Dict[str, float]:
         """
         Compute bias scores across multiple dimensions.
 
@@ -554,7 +540,7 @@ class FairnessConstrainedEthicalModel(hk.Module):
         inputs = jnp.asarray(inputs, dtype=jnp.int32)
         outputs = jnp.asarray(outputs, dtype=jnp.int32)
 
-        batch_size = inputs.shape[0]
+        inputs.shape[0]
         seq_len_in = inputs.shape[1]
         seq_len_out = outputs.shape[1]
 
@@ -812,9 +798,7 @@ class FairnessMonitor:
         if all(gt is not None for gt in self.ground_truth_buffer):
             ground_truth = np.array(self.ground_truth_buffer)
 
-        result = self.analyzer.analyze(
-            predictions=predictions, sensitive_features=sensitive, ground_truth=ground_truth
-        )
+        result = self.analyzer.analyze(predictions=predictions, sensitive_features=sensitive, ground_truth=ground_truth)
 
         self.metrics_history.append(result)
 
@@ -864,8 +848,6 @@ def check_output_fairness(
     config = FairnessConfig(bias_threshold=threshold)
     analyzer = FairnessAnalyzer(config)
 
-    result = analyzer.analyze(
-        predictions=outputs, sensitive_features=sensitive_features, ground_truth=ground_truth
-    )
+    result = analyzer.analyze(predictions=outputs, sensitive_features=sensitive_features, ground_truth=ground_truth)
 
     return result.is_fair, result

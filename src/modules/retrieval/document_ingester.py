@@ -467,9 +467,7 @@ class DocumentIngester:
             raise ValueError("Document must have 'text' field")
 
         # Generate doc_id (MD5 used only for content-based ID generation, not security)
-        doc_id = doc.get(
-            "doc_id", hashlib.md5(text.encode(), usedforsecurity=False).hexdigest()[:16]
-        )
+        doc_id = doc.get("doc_id", hashlib.md5(text.encode(), usedforsecurity=False).hexdigest()[:16])
 
         # Extract metadata
         metadata = {k: v for k, v in doc.items() if k not in ("text", "doc_id")}
@@ -570,8 +568,7 @@ class DocumentIngester:
 
             self.doc_index = index_data.get("doc_index", {})
             self.chunk_store = {
-                cid: DocumentChunk.from_dict(data)
-                for cid, data in index_data.get("chunks", {}).items()
+                cid: DocumentChunk.from_dict(data) for cid, data in index_data.get("chunks", {}).items()
             }
 
             logger.info(f"Loaded index: {len(self.chunk_store)} chunks")

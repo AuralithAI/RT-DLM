@@ -109,8 +109,6 @@ class TestDependencyChecks(unittest.TestCase):
         def mock_model_fn(params, x):
             return x
 
-        params = {}
-
         # This test verifies the structure - actual import behavior
         # depends on environment
         # Just verify the exporter class has the dependency check method

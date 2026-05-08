@@ -86,9 +86,7 @@ class ConsciousnessSimulator(hk.Module):
 
         # Introspection gate - controls depth of self-reflection
         # Input: combined [d_model * 2], Output: gate [d_model]
-        self.introspection_gate = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.sigmoid], name="introspection_gate"
-        )
+        self.introspection_gate = hk.Sequential([hk.Linear(d_model), jax.nn.sigmoid], name="introspection_gate")
 
         # Goal setting module
         self.goal_setter = hk.Sequential(
@@ -197,13 +195,9 @@ class ConsciousnessSimulator(hk.Module):
         try:
             # Validate input shapes
             if internal_state.ndim < 2:
-                raise ValueError(
-                    f"internal_state must be at least 2D, got shape {internal_state.shape}"
-                )
+                raise ValueError(f"internal_state must be at least 2D, got shape {internal_state.shape}")
             if external_input.ndim < 2:
-                raise ValueError(
-                    f"external_input must be at least 2D, got shape {external_input.shape}"
-                )
+                raise ValueError(f"external_input must be at least 2D, got shape {external_input.shape}")
 
             # Self-awareness: model understands its own processing
             self_state = self.self_awareness(internal_state.mean(axis=1))
@@ -212,9 +206,7 @@ class ConsciousnessSimulator(hk.Module):
             recurrent_intro, _ = self._recurrent_introspection(self_state, internal_state)
 
             # Standard introspection: look at own thoughts
-            introspective_analysis = self.introspection(
-                internal_state, internal_state, internal_state
-            )
+            introspective_analysis = self.introspection(internal_state, internal_state, internal_state)
 
             # Goal formation based on current state and inputs
             goal_input = jnp.concatenate(
@@ -225,17 +217,13 @@ class ConsciousnessSimulator(hk.Module):
             autonomous_goals = self.goal_setter(goal_input)
 
             # Metacognitive awareness - enhanced with recurrent introspection
-            meta_awareness = self.metacognition(
-                introspective_analysis.mean(axis=1) + recurrent_intro * 0.5
-            )
+            meta_awareness = self.metacognition(introspective_analysis.mean(axis=1) + recurrent_intro * 0.5)
 
             # Deep multi-level introspection
             deep_intro = self.deep_introspection(introspective_analysis.mean(axis=1))
 
             # Self-reflection on own cognitive processes
-            self_reflection = self.self_reflection(
-                internal_state, introspective_analysis, introspective_analysis
-            )
+            self_reflection = self.self_reflection(internal_state, introspective_analysis, introspective_analysis)
 
             # Goal revision based on reflection
             if previous_goals is not None:
@@ -413,18 +401,14 @@ class ScientificDiscoveryEngine(hk.Module):
         intervention_encoding = self.intervention_encoder(intervention_target)
 
         # Predict effect of intervention (cutting incoming edges in causal graph)
-        intervention_input = jnp.concatenate(
-            [variable_state.mean(axis=1), intervention_encoding.mean(axis=1)], axis=-1
-        )
+        intervention_input = jnp.concatenate([variable_state.mean(axis=1), intervention_encoding.mean(axis=1)], axis=-1)
         predicted_effect = self.intervention_effect_predictor(intervention_input)
 
         # Apply intervention: replace natural value with intervention value
         intervened_state = variable_state + predicted_effect[:, None, :] * 0.5
 
         # Counterfactual reasoning: what would have happened without intervention?
-        counterfactual = self.counterfactual_reasoner(
-            variable_state, intervened_state, intervened_state
-        )
+        counterfactual = self.counterfactual_reasoner(variable_state, intervened_state, intervened_state)
 
         # Compute causal effect: difference between intervened and counterfactual
         causal_effect = intervened_state - counterfactual
@@ -473,9 +457,7 @@ class ScientificDiscoveryEngine(hk.Module):
         causal_analysis = self.causal_reasoner(observations, encoded_knowledge, encoded_knowledge)
 
         # Perform do-interventions to discover causal structure
-        intervention_results = self._do_intervention(
-            observations, encoded_knowledge, causal_analysis
-        )
+        intervention_results = self._do_intervention(observations, encoded_knowledge, causal_analysis)
 
         # Update causal graph based on interventions
         causal_graph = self._update_causal_graph(observations, intervention_results)
@@ -502,9 +484,7 @@ class ScientificDiscoveryEngine(hk.Module):
         experiment_simulation = self.experiment_simulator(experiment_design)
 
         # Synthesize results
-        result_synthesis = self.result_synthesizer(
-            experiment_simulation, literature_analysis, encoded_knowledge
-        )
+        result_synthesis = self.result_synthesizer(experiment_simulation, literature_analysis, encoded_knowledge)
 
         # Refine hypothesis based on results
         refinement_input = jnp.concatenate(
@@ -614,9 +594,7 @@ class CreativeGenerationEngine(hk.Module):
         # Shannon entropy: H(X) = -sum(p(x) * log(p(x)))
         # Add small epsilon for numerical stability
         epsilon = 1e-10
-        entropy = -jnp.sum(
-            content_distribution * jnp.log(content_distribution + epsilon), axis=-1, keepdims=True
-        )
+        entropy = -jnp.sum(content_distribution * jnp.log(content_distribution + epsilon), axis=-1, keepdims=True)
 
         # Normalize entropy to [0, 1] range (max entropy = log(d_model))
         max_entropy = jnp.log(float(self.d_model))
@@ -629,16 +607,14 @@ class CreativeGenerationEngine(hk.Module):
         surprise_input = jnp.concatenate(
             [
                 novelty_encoding,
-                diversity_repr.repeat(self.d_model // (self.d_model // 4), axis=-1)[
-                    :, : self.d_model
-                ],
+                diversity_repr.repeat(self.d_model // (self.d_model // 4), axis=-1)[:, : self.d_model],
             ],
             axis=-1,
         )
         surprise_dist = self.surprise_predictor(surprise_input)
-        surprise_score = -jnp.sum(
-            surprise_dist * jnp.log(surprise_dist + epsilon), axis=-1, keepdims=True
-        ) / jnp.log(float(self.d_model))
+        surprise_score = -jnp.sum(surprise_dist * jnp.log(surprise_dist + epsilon), axis=-1, keepdims=True) / jnp.log(
+            float(self.d_model)
+        )
 
         # If reference content provided, compute similarity-based novelty
         if reference_content is not None:
@@ -658,9 +634,7 @@ class CreativeGenerationEngine(hk.Module):
             similarity_novelty = jnp.ones_like(normalized_entropy) * 0.5
 
         # Combined novelty score (weighted average)
-        combined_novelty = (
-            0.4 * normalized_entropy + 0.3 * surprise_score + 0.3 * similarity_novelty
-        )
+        combined_novelty = 0.4 * normalized_entropy + 0.3 * surprise_score + 0.3 * similarity_novelty
 
         return {
             "entropy": entropy,
@@ -671,9 +645,7 @@ class CreativeGenerationEngine(hk.Module):
             "diversity_representation": diversity_repr,
         }
 
-    def __call__(
-        self, content_context, style_reference=None, creativity_level=0.7, previous_content=None
-    ):
+    def __call__(self, content_context, style_reference=None, creativity_level=0.7, previous_content=None):
         """
         Generate creative content
 
@@ -701,14 +673,10 @@ class CreativeGenerationEngine(hk.Module):
         )  # [batch, seq, d_model]
 
         # Amplify creativity
-        creative_input = jnp.concatenate(
-            [inspired_content, style_expanded], axis=-1
-        )  # [batch, seq, 2*d_model]
+        creative_input = jnp.concatenate([inspired_content, style_expanded], axis=-1)  # [batch, seq, 2*d_model]
 
         creative_output = self.creativity_amplifier(creative_input)
-        creative_output = creative_output * creativity_level + inspired_content * (
-            1 - creativity_level
-        )
+        creative_output = creative_output * creativity_level + inspired_content * (1 - creativity_level)
 
         # Compute entropy-based novelty
         novelty_metrics = self._compute_entropy_novelty(creative_output, previous_content)
@@ -875,15 +843,11 @@ class SocialEmotionalIntelligence(hk.Module):
         empathy_signal = self.empathy_generator(input_repr)
 
         # Adapt response based on detected emotions
-        emotion_adapted = self.emotion_adapter(
-            jnp.concatenate([empathy_signal, primary_emotions], axis=-1)
-        )
+        emotion_adapted = self.emotion_adapter(jnp.concatenate([empathy_signal, primary_emotions], axis=-1))
 
         # Analyze social context
         if conversation_history is not None:
-            social_analysis = self.social_analyzer(
-                user_input, conversation_history, conversation_history
-            )
+            social_analysis = self.social_analyzer(user_input, conversation_history, conversation_history)
         else:
             social_analysis = user_input
 
@@ -904,9 +868,7 @@ class SocialEmotionalIntelligence(hk.Module):
 
         # Modulate response based on social-emotional understanding
         # All inputs should be [batch, features]
-        modulated_input = jnp.concatenate(
-            [social_features, empathy_signal, mixed_emotions, valence, arousal], axis=-1
-        )
+        modulated_input = jnp.concatenate([social_features, empathy_signal, mixed_emotions, valence, arousal], axis=-1)
 
         socially_aware_response = self.response_modulator(modulated_input)
 
@@ -971,9 +933,7 @@ class RTDLMAGISystem(hk.Module):
             self.vqc = VariationalQuantumCircuit(
                 num_qubits=min(6, config.quantum_layers + 4), num_layers=config.quantum_layers
             )
-            self.vqc_input_projection = hk.Linear(
-                2 ** min(6, config.quantum_layers + 4), name="vqc_input_projection"
-            )
+            self.vqc_input_projection = hk.Linear(2 ** min(6, config.quantum_layers + 4), name="vqc_input_projection")
             self.vqc_output_projection = hk.Linear(config.d_model, name="vqc_output_projection")
 
         # Consciousness simulation
@@ -1092,9 +1052,7 @@ class RTDLMAGISystem(hk.Module):
 
         # Self-critique head — evaluates and revises output quality
         if config.enable_self_critique:
-            self.self_critique_head = SelfCritiqueHead(
-                d_model=config.d_model, name="self_critique_head"
-            )
+            self.self_critique_head = SelfCritiqueHead(d_model=config.d_model, name="self_critique_head")
             # Full closed-loop self-critique module (generate → critique → revise)
             self.self_critique_module = SelfCritiqueModule(
                 d_model=config.d_model,
@@ -1158,9 +1116,7 @@ class RTDLMAGISystem(hk.Module):
         if self.use_compute_controller:
             # Resolve think-budget: explicit param > config default
             effective_think_budget = think_budget_tokens
-            if effective_think_budget is None and getattr(
-                self.config, "enable_think_budget", False
-            ):
+            if effective_think_budget is None and getattr(self.config, "enable_think_budget", False):
                 effective_think_budget = getattr(self.config, "think_budget_max_tokens", None)
             return self._forward_with_controller(
                 core_features=core_features,
@@ -1241,21 +1197,13 @@ class RTDLMAGISystem(hk.Module):
 
         # GRPO value estimate for RL training
         if self.config.use_grpo and hasattr(self, "grpo_value_head"):
-            value_estimate = self.grpo_value_head(
-                final_state.hidden_pooled, is_training=is_training
-            )
+            value_estimate = self.grpo_value_head(final_state.hidden_pooled, is_training=is_training)
             output["value_estimate"] = value_estimate
 
         # Self-critique on low-confidence outputs
-        if (
-            self.config.enable_self_critique
-            and hasattr(self, "self_critique_module")
-            and is_training
-        ):
+        if self.config.enable_self_critique and hasattr(self, "self_critique_module") and is_training:
             # Run full closed-loop self-critique: critique → revise → re-critique
-            critique_module_result = self.self_critique_module(
-                final_features.mean(axis=1), is_training=is_training
-            )
+            critique_module_result = self.self_critique_module(final_features.mean(axis=1), is_training=is_training)
             output["critique_quality_score"] = critique_module_result["final_quality"]
             output["critique_quality_scores"] = critique_module_result["quality_scores"]
             output["critique_needs_revision"] = critique_module_result["num_revisions_applied"] > 0
@@ -1269,28 +1217,20 @@ class RTDLMAGISystem(hk.Module):
                 revised[:, None, :], (revised.shape[0], core_features.shape[1], revised.shape[-1])
             )
             # Blend revised features with original (gated by revision count)
-            revision_blend = jnp.clip(
-                critique_module_result["num_revisions_applied"] * 0.3, 0.0, 0.8
-            )
+            revision_blend = jnp.clip(critique_module_result["num_revisions_applied"] * 0.3, 0.0, 0.8)
             blended_features = (1.0 - revision_blend) * final_features + revision_blend * revised_3d
 
             # Recompute logits with revised features
             output["logits"] = self.output_head(blended_features)
             output["features"] = blended_features
-        elif (
-            self.config.enable_self_critique
-            and hasattr(self, "self_critique_head")
-            and not is_training
-        ):
+        elif self.config.enable_self_critique and hasattr(self, "self_critique_head") and not is_training:
             # Inference mode: just run single critique for quality scoring
             critique_result = self.self_critique_head(final_features.mean(axis=1))
             output["critique_quality_score"] = critique_result["quality_score"]
             output["critique_needs_revision"] = critique_result["needs_revision"]
 
         if return_reasoning:
-            output["reasoning_chain"] = [
-                step.get("module", "") for step in execution_trace.get("steps", [])
-            ]
+            output["reasoning_chain"] = [step.get("module", "") for step in execution_trace.get("steps", [])]
 
         return output
 
@@ -1360,11 +1300,7 @@ class RTDLMAGISystem(hk.Module):
 
         def symbolic_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
             try:
-                query = (
-                    state.hidden_pooled[:, None, :]
-                    if state.hidden_pooled.ndim == 2
-                    else state.hidden_pooled
-                )
+                query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
                 result = self.hybrid_integrator({"text": query}, task_type="classification")
                 delta = result.get("symbolic_out", result["ensemble_output"])
                 if delta.ndim == 3:
@@ -1378,11 +1314,7 @@ class RTDLMAGISystem(hk.Module):
 
         def probabilistic_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
             try:
-                query = (
-                    state.hidden_pooled[:, None, :]
-                    if state.hidden_pooled.ndim == 2
-                    else state.hidden_pooled
-                )
+                query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
                 result = self.hybrid_integrator({"text": query}, task_type="generation")
                 delta = result.get("probabilistic_out", result["ensemble_output"])
                 if delta.ndim == 3:
@@ -1397,11 +1329,7 @@ class RTDLMAGISystem(hk.Module):
         def quantum_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
             if self.use_quantum:
                 try:
-                    query = (
-                        state.hidden_pooled[:, None, :]
-                        if state.hidden_pooled.ndim == 2
-                        else state.hidden_pooled
-                    )
+                    query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
                     result = self.reasoning_engine(query, core_features)
                     optimal, _ = self.quantum_optimization(query, result)
                     delta = optimal.mean(axis=1) if optimal.ndim == 3 else optimal
@@ -1414,11 +1342,7 @@ class RTDLMAGISystem(hk.Module):
 
         def moe_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
             try:
-                query = (
-                    state.hidden_pooled[:, None, :]
-                    if state.hidden_pooled.ndim == 2
-                    else state.hidden_pooled
-                )
+                query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
                 result = self.hybrid_integrator({"text": query}, task_type="reasoning")
                 delta = result["ensemble_output"]
                 if delta.ndim == 3:
@@ -1433,11 +1357,7 @@ class RTDLMAGISystem(hk.Module):
         def scientific_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
             if self.config.scientific_reasoning and hasattr(self, "science_engine"):
                 try:
-                    query = (
-                        state.hidden_pooled[:, None, :]
-                        if state.hidden_pooled.ndim == 2
-                        else state.hidden_pooled
-                    )
+                    query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
                     result = self.science_engine(query)
                     delta = result.get("enhanced", query)
                     if delta.ndim == 3:
@@ -1452,11 +1372,7 @@ class RTDLMAGISystem(hk.Module):
         def creative_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
             if self.config.creative_generation and hasattr(self, "creative_engine"):
                 try:
-                    query = (
-                        state.hidden_pooled[:, None, :]
-                        if state.hidden_pooled.ndim == 2
-                        else state.hidden_pooled
-                    )
+                    query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
                     result = self.creative_engine(query)
                     delta = result.get("enhanced", query)
                     if delta.ndim == 3:
@@ -1471,11 +1387,7 @@ class RTDLMAGISystem(hk.Module):
         def consciousness_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
             if self.config.consciousness_simulation and hasattr(self, "consciousness_sim"):
                 try:
-                    query = (
-                        state.hidden_pooled[:, None, :]
-                        if state.hidden_pooled.ndim == 2
-                        else state.hidden_pooled
-                    )
+                    query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
                     result = self.consciousness_sim(query, query)
                     delta = result.get("enhanced", query)
                     if delta.ndim == 3:
@@ -1492,11 +1404,7 @@ class RTDLMAGISystem(hk.Module):
                 try:
                     result = self._process_multimodal_inputs(
                         multimodal_inputs,
-                        (
-                            state.hidden[:, :, :d_model]
-                            if state.hidden.ndim == 3
-                            else state.hidden_pooled[:, None, :]
-                        ),
+                        (state.hidden[:, :, :d_model] if state.hidden.ndim == 3 else state.hidden_pooled[:, None, :]),
                     )
                     if result is not None:
                         delta = result.mean(axis=1) if result.ndim == 3 else result
@@ -1512,11 +1420,7 @@ class RTDLMAGISystem(hk.Module):
 
         def attention_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
             try:
-                query = (
-                    state.hidden_pooled[:, None, :]
-                    if state.hidden_pooled.ndim == 2
-                    else state.hidden_pooled
-                )
+                query = state.hidden_pooled[:, None, :] if state.hidden_pooled.ndim == 2 else state.hidden_pooled
                 result = self.hybrid_integrator({"text": query}, task_type="reasoning")
                 delta = result["ensemble_output"]
                 if delta.ndim == 3:
@@ -1529,9 +1433,7 @@ class RTDLMAGISystem(hk.Module):
         executors[ModuleType.ATTENTION_REFINEMENT] = attention_executor
 
         def output_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
-            return make_output(
-                jnp.zeros_like(state.hidden_pooled), confidence=0.9, cost=0.05, suggests_halt=True
-            )
+            return make_output(jnp.zeros_like(state.hidden_pooled), confidence=0.9, cost=0.05, suggests_halt=True)
 
         executors[ModuleType.OUTPUT_GENERATION] = output_executor
 
@@ -1562,9 +1464,7 @@ class RTDLMAGISystem(hk.Module):
         knowledge_features = None
         if knowledge_base is not None:
             # Encode retrieved knowledge through the hybrid integrator
-            knowledge_result = self.hybrid_integrator(
-                {"text": knowledge_base}, task_type="retrieval"
-            )
+            knowledge_result = self.hybrid_integrator({"text": knowledge_base}, task_type="retrieval")
             knowledge_features = knowledge_result["ensemble_output"]
 
         # Integrate all features including retrieval context
@@ -1587,9 +1487,7 @@ class RTDLMAGISystem(hk.Module):
                     hybrid_features, reasoning_result
                 )
 
-                vqc_enhanced_features = self._apply_vqc_optimization(
-                    integrated_features, quantum_search_probs
-                )
+                vqc_enhanced_features = self._apply_vqc_optimization(integrated_features, quantum_search_probs)
 
                 quantum_results = {
                     "optimal_decision": quantum_optimal_decision,
@@ -1600,37 +1498,21 @@ class RTDLMAGISystem(hk.Module):
                 logger.warning(f"Quantum processing failed: {e}")
 
         # Self-evolving architecture processing
-        architecture_results = None
         try:
             system_state = integrated_features.mean(axis=1)
             evolved_dna, layer_types, predicted_perf = self.self_evolution(system_state)
 
-            architecture_results = {
-                "evolved_architecture": evolved_dna,
-                "layer_types": layer_types,
-                "predicted_performance": predicted_perf,
-            }
         except Exception as e:
             logger.warning(f"Architecture evolution failed: {e}")
 
         # Autonomous scientific discovery
-        discovery_results = None
         try:
-            theories, experiments, validation = self.autonomous_discovery(
-                core_features, reasoning_result
-            )
-            discovery_results = {
-                "theories": theories,
-                "experiments": experiments,
-                "validation_scores": validation,
-            }
+            theories, experiments, validation = self.autonomous_discovery(core_features, reasoning_result)
         except Exception as e:
             logger.warning(f"Scientific discovery failed: {e}")
 
         # AGI System Orchestration - unify cognitive components and track stage
-        agi_system_result = self._orchestrate_agi_system(
-            core_features, reasoning_result, integrated_features
-        )
+        agi_system_result = self._orchestrate_agi_system(core_features, reasoning_result, integrated_features)
 
         # Use quantum-enhanced features if available
         final_features = integrated_features
@@ -1652,9 +1534,7 @@ class RTDLMAGISystem(hk.Module):
         logits = self.output_head(final_features)
 
         # Build output with quantum and ASI results
-        base_output = self._build_output_dict(
-            logits, hybrid_result, reasoning_result, return_reasoning
-        )
+        base_output = self._build_output_dict(logits, hybrid_result, reasoning_result, return_reasoning)
 
         # Add quantum and ASI results to output
         if quantum_results:
@@ -1675,9 +1555,7 @@ class RTDLMAGISystem(hk.Module):
 
         # Process with original multimodal processor
         if hasattr(self, "multimodal_processor"):
-            multimodal_result = self.multimodal_processor(
-                multimodal_inputs, text_features=core_features
-            )
+            multimodal_result = self.multimodal_processor(multimodal_inputs, text_features=core_features)
             multimodal_features.append(multimodal_result["fused_features"])
 
         # Enhanced audio processing
@@ -1718,9 +1596,7 @@ class RTDLMAGISystem(hk.Module):
         # Helper to expand 2D to 3D
         def ensure_3d(features, name="features"):
             if features.ndim == 2:
-                return jnp.broadcast_to(
-                    features[:, None, :], (batch_size, seq_len, features.shape[-1])
-                )
+                return jnp.broadcast_to(features[:, None, :], (batch_size, seq_len, features.shape[-1]))
             return features
 
         # Ensure hybrid_features is 3D
@@ -1762,9 +1638,7 @@ class RTDLMAGISystem(hk.Module):
         # Concatenate all features
         return jnp.concatenate(features_list, axis=-1)
 
-    def _apply_vqc_optimization(
-        self, features: jnp.ndarray, quantum_probs: jnp.ndarray
-    ) -> jnp.ndarray:
+    def _apply_vqc_optimization(self, features: jnp.ndarray, quantum_probs: jnp.ndarray) -> jnp.ndarray:
         """Apply Variational Quantum Circuit optimization to features.
 
         Uses the VQC to find quantum-enhanced feature representations that
@@ -1839,9 +1713,7 @@ class RTDLMAGISystem(hk.Module):
                 output_probs = jax.nn.softmax(logits, axis=-1)
                 output["fairness_evaluation"] = {
                     "analyzer_active": True,
-                    "output_entropy": float(
-                        jnp.mean(-jnp.sum(output_probs * jnp.log(output_probs + 1e-10), axis=-1))
-                    ),
+                    "output_entropy": float(jnp.mean(-jnp.sum(output_probs * jnp.log(output_probs + 1e-10), axis=-1))),
                     "fairness_config": {
                         "bias_threshold": fairness_config.bias_threshold,
                         "fairness_penalty_weight": fairness_config.fairness_penalty_weight,
@@ -1904,9 +1776,7 @@ class RTDLMAGISystem(hk.Module):
             creativity_output = None
             creativity_dict = None
             if self.config.creative_generation and hasattr(self, "creative_engine"):
-                creativity_dict = self.creative_engine(
-                    integrated_features, style_input=core_features
-                )
+                creativity_dict = self.creative_engine(integrated_features, style_input=core_features)
                 creativity_output = creativity_dict.get(
                     "creative_output",
                     creativity_dict.get("creativity", integrated_features.mean(axis=1)),
@@ -1977,9 +1847,7 @@ def create_agi_optimizer(config: AGIConfig):
     # Advanced optimizer with gradient clipping
     optimizer = optax.chain(
         optax.clip_by_global_norm(config.clip_norm),
-        optax.adamw(
-            learning_rate=schedule, weight_decay=config.weight_decay, b1=0.9, b2=0.999, eps=1e-8
-        ),
+        optax.adamw(learning_rate=schedule, weight_decay=config.weight_decay, b1=0.9, b2=0.999, eps=1e-8),
     )
 
     return optimizer
@@ -1993,9 +1861,7 @@ def compute_agi_loss(logits, targets, aux_outputs=None, config=None):
 
     # Add label smoothing
     if config and config.label_smoothing > 0:
-        smoothed_loss = core_loss * (1 - config.label_smoothing) + config.label_smoothing * jnp.log(
-            config.vocab_size
-        )
+        smoothed_loss = core_loss * (1 - config.label_smoothing) + config.label_smoothing * jnp.log(config.vocab_size)
         core_loss = smoothed_loss
 
     total_loss = core_loss
@@ -2027,9 +1893,7 @@ def compute_agi_loss(logits, targets, aux_outputs=None, config=None):
         if "fairness_evaluation" in aux_outputs:
             fairness_eval = aux_outputs["fairness_evaluation"]
             if fairness_eval.get("analyzer_active", False):
-                fairness_loss = compute_fairness_penalty_loss(
-                    aux_outputs.get("logits"), fairness_eval
-                )
+                fairness_loss = compute_fairness_penalty_loss(aux_outputs.get("logits"), fairness_eval)
                 total_loss += 0.15 * fairness_loss
                 loss_components["fairness_loss"] = fairness_loss
 
@@ -2058,18 +1922,14 @@ def compute_agi_loss(logits, targets, aux_outputs=None, config=None):
             )
 
             # Compute controller losses
-            controller_total_loss, controller_components = (
-                controller_loss_computer.compute_total_loss(
-                    task_loss=core_loss,
-                    execution_trace=controller_trace,
-                    predicted_confidence=(
-                        predicted_confidence.flatten()
-                        if predicted_confidence.ndim > 1
-                        else predicted_confidence
-                    ),
-                    actual_accuracy=actual_accuracy,
-                    initial_budget=config.controller_initial_budget,
-                )
+            controller_total_loss, controller_components = controller_loss_computer.compute_total_loss(
+                task_loss=core_loss,
+                execution_trace=controller_trace,
+                predicted_confidence=(
+                    predicted_confidence.flatten() if predicted_confidence.ndim > 1 else predicted_confidence
+                ),
+                actual_accuracy=actual_accuracy,
+                initial_budget=config.controller_initial_budget,
             )
 
             # Add controller loss components
@@ -2166,9 +2026,7 @@ def compute_multimodal_alignment_loss(aux_outputs, config=None):
     temperature = 0.07
 
     # Hard-negative mining parameters (from config or defaults)
-    use_hard_negatives = config is not None and getattr(
-        config, "enable_hard_negative_mining", False
-    )
+    use_hard_negatives = config is not None and getattr(config, "enable_hard_negative_mining", False)
     contrastive_margin = getattr(config, "contrastive_margin", 0.2) if config else 0.2
     hard_negative_ratio = getattr(config, "hard_negative_ratio", 0.5) if config else 0.5
 
@@ -2185,9 +2043,7 @@ def compute_multimodal_alignment_loss(aux_outputs, config=None):
         if other_features.shape != text_features.shape:
             continue
 
-        other_norm = other_features / (
-            jnp.linalg.norm(other_features, axis=-1, keepdims=True) + 1e-8
-        )
+        other_norm = other_features / (jnp.linalg.norm(other_features, axis=-1, keepdims=True) + 1e-8)
         similarity = jnp.matmul(text_norm, other_norm.T) / temperature
 
         batch_size = text_features.shape[0]
@@ -2239,9 +2095,7 @@ def compute_multimodal_alignment_loss(aux_outputs, config=None):
             fused_features = fused_features.mean(axis=1)
 
         if fused_features.shape == text_features.shape:
-            fused_norm = fused_features / (
-                jnp.linalg.norm(fused_features, axis=-1, keepdims=True) + 1e-8
-            )
+            fused_norm = fused_features / (jnp.linalg.norm(fused_features, axis=-1, keepdims=True) + 1e-8)
             cosine_sim = jnp.sum(text_norm * fused_norm, axis=-1)
             fusion_loss = jnp.mean(1.0 - cosine_sim)
             total_loss += 0.5 * fusion_loss

@@ -57,9 +57,7 @@ class TestRecursiveLanguageModelModule:
         params = init_fn(rng, query_emb, 5000, 0, 0)
         assert params is not None
 
-        tool_probs, term_prob, parameters, encoded_query = apply_fn(
-            params, rng, query_emb, 5000, 0, 0
-        )
+        tool_probs, term_prob, parameters, encoded_query = apply_fn(params, rng, query_emb, 5000, 0, 0)
 
         assert tool_probs.shape[-1] == len(ToolType)
         assert term_prob.shape[-1] == 1

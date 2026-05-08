@@ -35,9 +35,7 @@ def apply_router_jitter(
         return logits
 
     # Multiplicative jitter (more effective than additive)
-    noise = jax.random.uniform(
-        rng_key, logits.shape, minval=1.0 - jitter_noise, maxval=1.0 + jitter_noise
-    )
+    noise = jax.random.uniform(rng_key, logits.shape, minval=1.0 - jitter_noise, maxval=1.0 + jitter_noise)
     return logits * noise
 
 
@@ -126,11 +124,9 @@ def dynamic_load_balancing_loss(gating_logits, expert_usage_history, num_experts
     current_usage = jnp.sum(routing_probs, axis=(0, 1))
 
     # Combine with historical usage
-    target_usage = jnp.ones(num_experts) / num_experts
+    jnp.ones(num_experts) / num_experts
     historical_weight = 0.9
-    combined_usage = (
-        historical_weight * expert_usage_history + (1 - historical_weight) * current_usage
-    )
+    combined_usage = historical_weight * expert_usage_history + (1 - historical_weight) * current_usage
 
     # Calculate KL divergence from uniform distribution
     usage_distribution = combined_usage / jnp.sum(combined_usage)
@@ -164,9 +160,7 @@ class AdaptiveGatingNetwork(hk.Module):
         )
 
         # Context encoder for routing decisions
-        self.context_encoder = hk.Sequential(
-            [hk.Linear(d_model // 4), jax.nn.silu, hk.Linear(num_experts)]
-        )
+        self.context_encoder = hk.Sequential([hk.Linear(d_model // 4), jax.nn.silu, hk.Linear(num_experts)])
 
         # Expert affinity predictor
         self.affinity_predictor = hk.Linear(num_experts)
@@ -260,9 +254,7 @@ class SparseMoE(hk.Module):
         self.gate = AdaptiveGatingNetwork(d_model, num_experts)
 
         # Expert usage tracking with momentum
-        self.expert_usage = hk.get_state(
-            "expert_usage", [num_experts], dtype=jnp.float32, init=jnp.zeros
-        )
+        self.expert_usage = hk.get_state("expert_usage", [num_experts], dtype=jnp.float32, init=jnp.zeros)
 
     def apply_spiking_attention(self, x, spike_threshold, epsilon):
         """
@@ -292,14 +284,10 @@ class SparseMoE(hk.Module):
         Update usage statistics for experts based on their selection frequency.
         """
         expert_usage_update = (
-            jnp.bincount(
-                top_k_indices.flatten(), minlength=self.num_experts, length=self.num_experts
-            )
+            jnp.bincount(top_k_indices.flatten(), minlength=self.num_experts, length=self.num_experts)
             / self.num_experts
         )
-        current_usage = hk.get_state(
-            "expert_usage", [self.num_experts], dtype=jnp.float32, init=jnp.zeros
-        )
+        current_usage = hk.get_state("expert_usage", [self.num_experts], dtype=jnp.float32, init=jnp.zeros)
         new_usage = current_usage + expert_usage_update
         hk.set_state("expert_usage", new_usage)
 
@@ -343,9 +331,7 @@ class SparseMoE(hk.Module):
                     hk.Linear(self.d_model, w_init=hk.initializers.VarianceScaling(1.0)),
                 ]
             )
-            new_expert.layers[0].w = jnp.take(
-                expert.layers[0].w, jnp.where(active_neurons)[0], axis=1
-            )
+            new_expert.layers[0].w = jnp.take(expert.layers[0].w, jnp.where(active_neurons)[0], axis=1)
             new_expert.layers[0].b = jnp.take(expert.layers[0].b, jnp.where(active_neurons)[0])
             new_expert.layers[2].w = expert.layers[2].w
             new_expert.layers[2].b = expert.layers[2].b
@@ -409,9 +395,7 @@ class SparseMoE(hk.Module):
         hk.set_state("training_step", training_step + 1)
 
         # Calculate comprehensive losses
-        load_balance_loss = dynamic_load_balancing_loss(
-            gating_logits, self.expert_usage, self.num_experts
-        )
+        load_balance_loss = dynamic_load_balancing_loss(gating_logits, self.expert_usage, self.num_experts)
         specialization_loss = expert_specialization_loss(
             selected_expert_outputs.reshape(-1, selected_expert_outputs.shape[-1]),
             top_k_indices.reshape(-1),

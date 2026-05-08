@@ -95,11 +95,7 @@ class MemoryProfiler:
         """Record optimizer state size."""
         if not self.enabled:
             return
-        total_bytes = sum(
-            p.size * p.dtype.itemsize
-            for p in jax.tree_util.tree_leaves(opt_state)
-            if hasattr(p, "size")
-        )
+        total_bytes = sum(p.size * p.dtype.itemsize for p in jax.tree_util.tree_leaves(opt_state) if hasattr(p, "size"))
         self.profile.optimizer_state_bytes = total_bytes
         logger.info(f"Optimizer state: {total_bytes / (1024**3):.2f} GB")
 
@@ -200,9 +196,7 @@ def estimate_memory_for_preset(preset: str) -> Dict[str, Any]:
     total_fp16 = params_fp16 + optimizer_fp32 + gradients_fp16 + activations_base * 0.5
 
     # With gradient checkpointing: ~30% reduction in activations
-    total_fp16_checkpointed = (
-        params_fp16 + optimizer_fp32 + gradients_fp16 + activations_base * 0.35
-    )
+    total_fp16_checkpointed = params_fp16 + optimizer_fp32 + gradients_fp16 + activations_base * 0.35
 
     return {
         "preset": preset,

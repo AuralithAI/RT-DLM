@@ -36,7 +36,7 @@ class TestControllerConfigIntegration:
         """Test default values for controller settings."""
         config = AGIConfig()
 
-        assert config.use_compute_controller == False  # Disabled by default
+        assert config.use_compute_controller is False  # Disabled by default
         assert config.controller_max_steps == 10
         assert config.controller_initial_budget == pytest.approx(1.0)
         assert config.controller_halt_threshold == pytest.approx(0.8)
@@ -46,7 +46,7 @@ class TestControllerConfigIntegration:
         """Test enabling controller via config."""
         config = AGIConfig(use_compute_controller=True)
 
-        assert config.use_compute_controller == True
+        assert config.use_compute_controller is True
 
     def test_config_controller_validation(self):
         """Test controller config validation."""
@@ -356,12 +356,8 @@ class TestEndToEndControllerTraining:
 
         # Define loss function
         def loss_fn(params, state, rng_key, inputs, targets):
-            output, new_state = model_fn.apply(
-                params, state, rng_key, inputs=inputs, is_training=True
-            )
-            loss = compute_agi_loss(
-                output["logits"], targets, aux_outputs=output, config=mini_config
-            )
+            output, new_state = model_fn.apply(params, state, rng_key, inputs=inputs, is_training=True)
+            loss = compute_agi_loss(output["logits"], targets, aux_outputs=output, config=mini_config)
             return loss, (output, new_state)
 
         # Compute gradients
@@ -406,12 +402,8 @@ class TestEndToEndControllerTraining:
 
         def make_loss_fn(rng_key, current_state):
             def loss_fn(params):
-                output, _ = model_fn.apply(
-                    params, current_state, rng_key, inputs=inputs, is_training=True
-                )
-                return compute_agi_loss(
-                    output["logits"], targets, aux_outputs=output, config=mini_config
-                )
+                output, _ = model_fn.apply(params, current_state, rng_key, inputs=inputs, is_training=True)
+                return compute_agi_loss(output["logits"], targets, aux_outputs=output, config=mini_config)
 
             return loss_fn
 
@@ -452,9 +444,7 @@ class TestControllerModeComparison:
         }
 
         config_static = AGIConfig(**base_config, use_compute_controller=False)
-        config_controller = AGIConfig(
-            **base_config, use_compute_controller=True, controller_max_steps=3
-        )
+        config_controller = AGIConfig(**base_config, use_compute_controller=True, controller_max_steps=3)
 
         rng = jax.random.PRNGKey(42)
         batch_size = 2

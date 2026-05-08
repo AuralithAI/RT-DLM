@@ -208,9 +208,7 @@ class AGIPerformanceMonitor:
             "learning_rate": float(np.mean(self.metrics["learning_rate"][-recent_window:])),
             "total_tasks": len(self.metrics["task_success_rate"]),
             "efficiency": (
-                float(np.mean(self.metrics["efficiency"][-recent_window:]))
-                if self.metrics["efficiency"]
-                else 0.0
+                float(np.mean(self.metrics["efficiency"][-recent_window:])) if self.metrics["efficiency"] else 0.0
             ),
         }
 
@@ -228,9 +226,7 @@ class AGIPerformanceMonitor:
             AGIStage.STAGE_6_BEYOND: {"success_rate": 0.98, "confidence": 0.95},
         }
 
-        requirements = stage_requirements.get(
-            target_stage, {"success_rate": 0.5, "confidence": 0.5}
-        )
+        requirements = stage_requirements.get(target_stage, {"success_rate": 0.5, "confidence": 0.5})
 
         # Extract numeric values safely
         success_rate = performance.get("success_rate", 0)
@@ -246,10 +242,7 @@ class AGIPerformanceMonitor:
             }
 
         readiness = {
-            "ready": (
-                success_rate >= requirements["success_rate"]
-                and avg_confidence >= requirements["confidence"]
-            ),
+            "ready": (success_rate >= requirements["success_rate"] and avg_confidence >= requirements["confidence"]),
             "success_rate_gap": max(0, requirements["success_rate"] - success_rate),
             "confidence_gap": max(0, requirements["confidence"] - avg_confidence),
             "current_performance": performance,
@@ -387,9 +380,7 @@ class IntegratedAGISystem:
             relevant_episodes = self.memory_manager.retrieve_relevant_episodes(task_request)
 
             # Execute task based on type
-            result, reasoning_chain, confidence, learned = self._execute_by_type(
-                task_request, relevant_episodes
-            )
+            result, reasoning_chain, confidence, learned = self._execute_by_type(task_request, relevant_episodes)
 
             # Create response
             response = TaskResponse(
@@ -472,9 +463,7 @@ class IntegratedAGISystem:
             # Enhance with past experience
             if relevant_episodes:
                 # Use similar past solutions to improve result
-                confidence = (
-                    float(np.mean(reasoning_chain.confidence_scores)) * 1.1
-                )  # Boost confidence
+                confidence = float(np.mean(reasoning_chain.confidence_scores)) * 1.1  # Boost confidence
                 confidence = min(confidence, 1.0)
             else:
                 confidence = float(np.mean(reasoning_chain.confidence_scores))

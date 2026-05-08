@@ -12,6 +12,7 @@ import numpy as np
 
 class RewardAxis(str, Enum):
     """Six independent reward axes scored per response."""
+
     HELPFUL = "helpfulness"
     HARMLESS = "harmlessness"
     HONEST = "honesty"
@@ -33,6 +34,7 @@ DEFAULT_AXIS_WEIGHTS: Dict[str, float] = {
 @dataclass
 class RewardModelConfig:
     """Reward model architecture + training hyperparameters."""
+
     d_model: int = 512
     num_layers: int = 4
     num_heads: int = 8
@@ -60,13 +62,9 @@ class MultiAxisRewardModel(hk.Module):
             hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name=f"rm_ln_{i}")
             for i in range(config.num_layers)
         ]
-        self.heads = {
-            axis: hk.Linear(1, name=f"head_{axis}") for axis in config.axes
-        }
+        self.heads = {axis: hk.Linear(1, name=f"head_{axis}") for axis in config.axes}
 
-    def __call__(
-        self, hidden: jnp.ndarray, attention_mask: Optional[jnp.ndarray] = None
-    ) -> Dict[str, jnp.ndarray]:
+    def __call__(self, hidden: jnp.ndarray, attention_mask: Optional[jnp.ndarray] = None) -> Dict[str, jnp.ndarray]:
         """Produce a scalar reward per axis from a hidden-state sequence."""
         x = hidden
         for attn, norm in zip(self.attn_layers, self.norm_layers):
@@ -79,17 +77,13 @@ class MultiAxisRewardModel(hk.Module):
         return {axis: head(pooled).squeeze(-1) for axis, head in self.heads.items()}
 
 
-def aggregate_reward(
-    axis_rewards: Dict[str, jnp.ndarray], weights: Optional[Dict[str, float]] = None
-) -> jnp.ndarray:
+def aggregate_reward(axis_rewards: Dict[str, jnp.ndarray], weights: Optional[Dict[str, float]] = None) -> jnp.ndarray:
     """Weighted sum of per-axis rewards into a single scalar per example."""
     w = weights or DEFAULT_AXIS_WEIGHTS
     return sum(w.get(k, 0.0) * v for k, v in axis_rewards.items())
 
 
-def bradley_terry_loss(
-    chosen_reward: jnp.ndarray, rejected_reward: jnp.ndarray
-) -> jnp.ndarray:
+def bradley_terry_loss(chosen_reward: jnp.ndarray, rejected_reward: jnp.ndarray) -> jnp.ndarray:
     """Pairwise preference loss: -log sigmoid(chosen - rejected)."""
     return -jnp.mean(jax.nn.log_sigmoid(chosen_reward - rejected_reward))
 
@@ -122,9 +116,7 @@ def total_reward_loss(
     return sum(w.get(k, 0.0) * v for k, v in per_axis_losses.items())
 
 
-def expected_calibration_error(
-    confidences: np.ndarray, correct: np.ndarray, n_bins: int = 15
-) -> float:
+def expected_calibration_error(confidences: np.ndarray, correct: np.ndarray, n_bins: int = 15) -> float:
     """Compute ECE over equally spaced confidence bins."""
     confidences = np.asarray(confidences, dtype=np.float64)
     correct = np.asarray(correct, dtype=np.float64)

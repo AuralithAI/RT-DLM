@@ -26,9 +26,7 @@ class TestFairnessConfig(unittest.TestCase):
         """Test custom fairness configuration."""
         from src.core.ethics.ethical_adaptation import FairnessConfig
 
-        config = FairnessConfig(
-            bias_threshold=0.2, fairness_penalty_weight=0.8, strict_enforcement=True
-        )
+        config = FairnessConfig(bias_threshold=0.2, fairness_penalty_weight=0.8, strict_enforcement=True)
 
         self.assertEqual(config.bias_threshold, 0.2)
         self.assertEqual(config.fairness_penalty_weight, 0.8)

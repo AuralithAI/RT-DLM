@@ -11,6 +11,7 @@ import jax.numpy as jnp
 @dataclass
 class PRMConfig:
     """Hyperparameters for ProcessRewardModel."""
+
     d_model: int = 512
     num_heads: int = 8
     num_layers: int = 4
@@ -36,17 +37,11 @@ class ProcessRewardModel(hk.Module):
                     name=f"prm_attn_{i}",
                 )
             )
-            self.norms.append(
-                hk.LayerNorm(
-                    axis=-1, create_scale=True, create_offset=True, name=f"prm_ln_{i}"
-                )
-            )
+            self.norms.append(hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name=f"prm_ln_{i}"))
         self.step_head = hk.Linear(1, name="step_correct_head")
         self.outcome_head = hk.Linear(1, name="outcome_head")
 
-    def __call__(
-        self, hidden: jnp.ndarray, step_mask: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def __call__(self, hidden: jnp.ndarray, step_mask: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """Return (step_logits [B,T], outcome_logits [B])."""
         x = hidden
         for layer, norm in zip(self.layers, self.norms):
@@ -60,9 +55,7 @@ class ProcessRewardModel(hk.Module):
         return step_logits, outcome_logits
 
 
-def step_correctness_loss(
-    step_logits: jnp.ndarray, step_labels: jnp.ndarray, step_mask: jnp.ndarray
-) -> jnp.ndarray:
+def step_correctness_loss(step_logits: jnp.ndarray, step_labels: jnp.ndarray, step_mask: jnp.ndarray) -> jnp.ndarray:
     """Binary cross-entropy over steps, masked to active positions."""
     log_p = jax.nn.log_sigmoid(step_logits)
     log_1mp = jax.nn.log_sigmoid(-step_logits)

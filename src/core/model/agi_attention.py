@@ -161,9 +161,7 @@ class RingAttentionBlock(hk.Module):
 
         return attended, log_sum_exp
 
-    def _accumulate_attention(
-        self, attended_list: List[jnp.ndarray], lse_list: List[jnp.ndarray]
-    ) -> jnp.ndarray:
+    def _accumulate_attention(self, attended_list: List[jnp.ndarray], lse_list: List[jnp.ndarray]) -> jnp.ndarray:
         """
         Accumulate attention outputs from multiple blocks using log-sum-exp trick.
 
@@ -270,9 +268,7 @@ class RingAttentionBlock(hk.Module):
                     block_mask = None
 
                 # Compute attention for this block pair
-                attended, lse = self._compute_block_attention(
-                    q_block, k_block, v_block, block_mask, q_start, k_start
-                )
+                attended, lse = self._compute_block_attention(q_block, k_block, v_block, block_mask, q_start, k_start)
 
                 block_attended.append(attended)
                 block_lse.append(lse)
@@ -296,15 +292,10 @@ class RingAttentionBlock(hk.Module):
 
         return output, attention_weights
 
-    def _apply_rope(
-        self, q: jnp.ndarray, k: jnp.ndarray, seq_len: int
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def _apply_rope(self, q: jnp.ndarray, k: jnp.ndarray, seq_len: int) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """Apply Rotary Position Embedding."""
         # Compute frequencies
-        inv_freq = 1.0 / (
-            self.max_seq_length
-            ** (jnp.arange(0, self.head_dim, 2, dtype=jnp.float32) / self.head_dim)
-        )
+        inv_freq = 1.0 / (self.max_seq_length ** (jnp.arange(0, self.head_dim, 2, dtype=jnp.float32) / self.head_dim))
         positions = jnp.arange(seq_len, dtype=jnp.float32)
         freqs = jnp.outer(positions, inv_freq)
 
@@ -464,27 +455,19 @@ class CrossMemoryAttention(hk.Module):
         attention_weights = {}
 
         # LTM queries STM: "What recent information is relevant?"
-        ltm_from_stm, weights_ltm_stm = self._cross_attend(
-            ltm, stm, stm, "ltm_queries_stm", is_training
-        )
+        ltm_from_stm, weights_ltm_stm = self._cross_attend(ltm, stm, stm, "ltm_queries_stm", is_training)
         attention_weights["ltm_from_stm"] = weights_ltm_stm
 
         # STM queries LTM: "What long-term knowledge applies?"
-        stm_from_ltm, weights_stm_ltm = self._cross_attend(
-            stm, ltm, ltm, "stm_queries_ltm", is_training
-        )
+        stm_from_ltm, weights_stm_ltm = self._cross_attend(stm, ltm, ltm, "stm_queries_ltm", is_training)
         attention_weights["stm_from_ltm"] = weights_stm_ltm
 
         # MTM queries LTM: "What persistent knowledge for this task?"
-        mtm_from_ltm, weights_mtm_ltm = self._cross_attend(
-            mtm, ltm, ltm, "mtm_queries_ltm", is_training
-        )
+        mtm_from_ltm, weights_mtm_ltm = self._cross_attend(mtm, ltm, ltm, "mtm_queries_ltm", is_training)
         attention_weights["mtm_from_ltm"] = weights_mtm_ltm
 
         # MTM queries STM: "What recent context for this task?"
-        mtm_from_stm, weights_mtm_stm = self._cross_attend(
-            mtm, stm, stm, "mtm_queries_stm", is_training
-        )
+        mtm_from_stm, weights_mtm_stm = self._cross_attend(mtm, stm, stm, "mtm_queries_stm", is_training)
         attention_weights["mtm_from_stm"] = weights_mtm_stm
 
         # Gated updates for each memory
@@ -495,9 +478,7 @@ class CrossMemoryAttention(hk.Module):
         # Apply gated updates
         ltm_updated = ltm + ltm_gate(ltm_from_stm) * ltm_from_stm
         stm_updated = stm + stm_gate(stm_from_ltm) * stm_from_ltm
-        mtm_updated = (
-            mtm + mtm_gate(mtm_from_ltm + mtm_from_stm) * (mtm_from_ltm + mtm_from_stm) * 0.5
-        )
+        mtm_updated = mtm + mtm_gate(mtm_from_ltm + mtm_from_stm) * (mtm_from_ltm + mtm_from_stm) * 0.5
 
         # Layer norms for stability
         ltm_norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name="ltm_norm")
@@ -572,9 +553,7 @@ class HierarchicalMemoryFusion(hk.Module):
             d_model=d_model, num_heads=num_heads, dropout_rate=dropout_rate
         )
 
-    def _local_self_attention(
-        self, memory: jnp.ndarray, name: str, is_training: bool = True
-    ) -> jnp.ndarray:
+    def _local_self_attention(self, memory: jnp.ndarray, name: str, is_training: bool = True) -> jnp.ndarray:
         """Apply local self-attention within a memory bank."""
         if memory.ndim == 2:
             # Single vector per batch, expand for attention
@@ -933,9 +912,7 @@ class InfiniteContextAttention(hk.Module):
                 [1, min(16, self.global_context_size), self.d_model],
                 init=hk.initializers.TruncatedNormal(stddev=0.02),
             )
-            global_context = jnp.broadcast_to(
-                global_context, (batch_size, global_context.shape[1], self.d_model)
-            )
+            global_context = jnp.broadcast_to(global_context, (batch_size, global_context.shape[1], self.d_model))
 
         # Process each chunk
         outputs = []
@@ -1131,9 +1108,7 @@ class AGIAttention(hk.Module):
 
         # Apply memory fusion if memories provided
         if ltm is not None and stm is not None and mtm is not None:
-            memory_result = self.forward_memory_fusion(
-                ltm, stm, mtm, attn_output.mean(axis=1), is_training
-            )
+            memory_result = self.forward_memory_fusion(ltm, stm, mtm, attn_output.mean(axis=1), is_training)
             info["memory"] = memory_result
 
             # Combine attention output with fused memory
@@ -1142,9 +1117,7 @@ class AGIAttention(hk.Module):
                 fused_memory = fused_memory[:, None, :]
 
             # Gate for memory integration
-            mem_gate = hk.Sequential(
-                [hk.Linear(self.d_model), jax.nn.sigmoid], name="memory_integration_gate"
-            )
+            mem_gate = hk.Sequential([hk.Linear(self.d_model), jax.nn.sigmoid], name="memory_integration_gate")
 
             gate = mem_gate(attn_output)
             output = attn_output + gate * fused_memory
@@ -1152,9 +1125,7 @@ class AGIAttention(hk.Module):
             output = attn_output
 
         # Final layer norm
-        output_norm = hk.LayerNorm(
-            axis=-1, create_scale=True, create_offset=True, name="output_norm"
-        )
+        output_norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name="output_norm")
         output = output_norm(output)
 
         return output, info

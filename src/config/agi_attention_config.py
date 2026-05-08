@@ -227,9 +227,7 @@ class AGIAttentionConfig:
             enable_ring_attention=getattr(agi_config, "enable_ring_attention", False),
             ring_block_size=getattr(agi_config, "ring_block_size", 512),
             num_ring_devices=getattr(agi_config, "num_ring_devices", 1),
-            enable_memory_cross_attention=getattr(
-                agi_config, "enable_memory_cross_attention", False
-            ),
+            enable_memory_cross_attention=getattr(agi_config, "enable_memory_cross_attention", False),
             num_memory_heads=getattr(agi_config, "memory_attention_heads", 4),
             memory_dropout=getattr(agi_config, "memory_dropout", 0.1),
             enable_infinite_context=getattr(agi_config, "enable_infinite_context", False),

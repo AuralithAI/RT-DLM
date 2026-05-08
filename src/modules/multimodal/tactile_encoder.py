@@ -19,12 +19,8 @@ class TactileEncoder(hk.Module):
         self.max_sensors = max_sensors
         self.group_size = group_size
         self.sensor_proj = hk.Linear(d_model, name="sensor_proj")
-        self.group_mlp = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.silu, hk.Linear(d_model)], name="group_mlp"
-        )
-        self.temporal_conv = hk.Conv1D(
-            output_channels=d_model, kernel_shape=5, padding="SAME", name="t_conv"
-        )
+        self.group_mlp = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(d_model)], name="group_mlp")
+        self.temporal_conv = hk.Conv1D(output_channels=d_model, kernel_shape=5, padding="SAME", name="t_conv")
         self.norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
 
     def __call__(self, signals: jnp.ndarray) -> Dict[str, jnp.ndarray]:

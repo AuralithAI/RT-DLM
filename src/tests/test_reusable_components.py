@@ -87,9 +87,7 @@ class TestReusableAttention(unittest.TestCase):
 
     def test_attention_without_spiking(self):
         """Test ReusableAttention with spiking disabled."""
-        config = AttentionConfig(
-            d_model=self.d_model, num_heads=self.num_heads, enable_spiking=False
-        )
+        config = AttentionConfig(d_model=self.d_model, num_heads=self.num_heads, enable_spiking=False)
 
         def forward_fn(x):
             attention = ReusableAttention(config=config, name="no_spike_attention")
@@ -207,12 +205,8 @@ class TestComponentReusability(unittest.TestCase):
         """Test that factory functions create independent modules."""
 
         def forward_fn(x):
-            attn1 = create_attention(
-                d_model=self.d_model, num_heads=self.num_heads, name="factory_1"
-            )
-            attn2 = create_attention(
-                d_model=self.d_model, num_heads=self.num_heads, name="factory_2"
-            )
+            attn1 = create_attention(d_model=self.d_model, num_heads=self.num_heads, name="factory_1")
+            attn2 = create_attention(d_model=self.d_model, num_heads=self.num_heads, name="factory_2")
 
             out1, _ = attn1(x)
             out2, _ = attn2(x)

@@ -42,10 +42,7 @@ except ImportError:
 
         pass
 
-    logger.warning(
-        "cryptography library not installed. Encryption disabled. "
-        "Install with: pip install cryptography"
-    )
+    logger.warning("cryptography library not installed. Encryption disabled. " "Install with: pip install cryptography")
 
 
 @dataclass
@@ -103,10 +100,7 @@ class SecureStorage:
         self._salt: Optional[bytes] = None
 
         if encryption_key and not CRYPTOGRAPHY_AVAILABLE:
-            logger.warning(
-                "Encryption requested but cryptography not installed. "
-                "Data will NOT be encrypted."
-            )
+            logger.warning("Encryption requested but cryptography not installed. " "Data will NOT be encrypted.")
 
         if self._encryption_enabled:
             self._salt = salt or self._load_or_create_salt()

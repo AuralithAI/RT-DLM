@@ -96,9 +96,7 @@ class TestScientificDiscoveryEngine(unittest.TestCase):
         research_question = jnp.ones((BATCH_SIZE, SEQ_LEN, D_MODEL))
 
         params = transformed.init(self.rng, knowledge_base, observations, research_question)
-        result = transformed.apply(
-            params, self.rng, knowledge_base, observations, research_question
-        )
+        result = transformed.apply(params, self.rng, knowledge_base, observations, research_question)
 
         self.assertIn("hypothesis", result)
 

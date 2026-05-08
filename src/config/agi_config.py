@@ -63,18 +63,14 @@ class AGIConfig:
     def __init__(self, **kwargs):
         # --- Model Architecture Parameters ---
         self.vocab_size = kwargs.get("vocab_size", 32000)  # Base vocabulary size
-        self.total_vocab_size = kwargs.get(
-            "total_vocab_size", 50000
-        )  # Total vocab including all modalities
+        self.total_vocab_size = kwargs.get("total_vocab_size", 50000)  # Total vocab including all modalities
         self.max_seq_length = kwargs.get("max_seq_length", 2048)  # Maximum sequence length
         self.d_model = kwargs.get("d_model", 384)  # Embedding dimension (model width)
         self.num_heads = kwargs.get("num_heads", 8)  # Number of attention heads
         self.num_layers = kwargs.get("num_layers", 12)  # Number of transformer layers
         self.moe_experts = kwargs.get("moe_experts", 8)  # Number of experts in Mixture of Experts
         self.moe_top_k = kwargs.get("moe_top_k", 2)  # Top-k experts to select in MoE
-        self.task_size = kwargs.get(
-            "task_size", 15
-        )  # Task size for support and query sets (batches)
+        self.task_size = kwargs.get("task_size", 15)  # Task size for support and query sets (batches)
         self.prune_threshold = kwargs.get(
             "prune_threshold", 0.01
         )  # Pruning threshold for MoE/Transformer/Self-Attention neurons.
@@ -83,56 +79,32 @@ class AGIConfig:
         )  # Pruning interval for MoE/Transformer/Self-Attention neurons.
 
         # --- Advanced Attention Parameters ---
-        self.attention_type = kwargs.get(
-            "attention_type", "standard"
-        )  # "standard", "gqa", "mqa", "linear", "sliding"
+        self.attention_type = kwargs.get("attention_type", "standard")  # "standard", "gqa", "mqa", "linear", "sliding"
         self.num_kv_heads = kwargs.get("num_kv_heads", None)  # KV heads for GQA (None=MHA, 1=MQA)
-        self.position_encoding = kwargs.get(
-            "position_encoding", "rope"
-        )  # "rope", "learned", "alibi", "none"
+        self.position_encoding = kwargs.get("position_encoding", "rope")  # "rope", "learned", "alibi", "none"
         self.rope_theta = kwargs.get("rope_theta", 10000.0)  # RoPE base frequency
-        self.rope_scaling = kwargs.get(
-            "rope_scaling", None
-        )  # Extended context scaling (e.g., 2.0 for 2x length)
-        self.sliding_window_size = kwargs.get(
-            "sliding_window_size", 512
-        )  # Window size for sliding attention
-        self.use_flash_attention = kwargs.get(
-            "use_flash_attention", False
-        )  # Enable Flash Attention if available
+        self.rope_scaling = kwargs.get("rope_scaling", None)  # Extended context scaling (e.g., 2.0 for 2x length)
+        self.sliding_window_size = kwargs.get("sliding_window_size", 512)  # Window size for sliding attention
+        self.use_flash_attention = kwargs.get("use_flash_attention", False)  # Enable Flash Attention if available
 
         # --- Graph Neural Network Parameters ---
-        self.graph_neurons_enabled = kwargs.get(
-            "graph_neurons_enabled", True
-        )  # Enable graph-based neurons
+        self.graph_neurons_enabled = kwargs.get("graph_neurons_enabled", True)  # Enable graph-based neurons
         self.graph_max_nodes = kwargs.get("graph_max_nodes", 64)  # Maximum nodes in dynamic graphs
-        self.graph_edge_threshold = kwargs.get(
-            "graph_edge_threshold", 0.3
-        )  # Edge creation threshold
+        self.graph_edge_threshold = kwargs.get("graph_edge_threshold", 0.3)  # Edge creation threshold
         self.graph_num_hops = kwargs.get("graph_num_hops", 3)  # Multi-hop reasoning steps
         self.graph_num_edge_types = kwargs.get("graph_num_edge_types", 8)  # Relational edge types
         self.graph_moe_routing = kwargs.get("graph_moe_routing", True)  # Graph-based MoE routing
 
         # --- Advanced AGI Features ---
-        self.max_reasoning_steps = kwargs.get(
-            "max_reasoning_steps", 10
-        )  # Chain-of-thought reasoning steps
-        self.quantum_qubits = kwargs.get(
-            "quantum_qubits", 16
-        )  # Number of qubits for quantum simulation
+        self.max_reasoning_steps = kwargs.get("max_reasoning_steps", 10)  # Chain-of-thought reasoning steps
+        self.quantum_qubits = kwargs.get("quantum_qubits", 16)  # Number of qubits for quantum simulation
         self.quantum_layers = kwargs.get("quantum_layers", 4)  # Number of quantum-inspired layers
-        self.meta_learning_enabled = kwargs.get(
-            "meta_learning_enabled", True
-        )  # Enable meta-learning
-        self.self_improvement_enabled = kwargs.get(
-            "self_improvement_enabled", True
-        )  # Enable self-improvement
+        self.meta_learning_enabled = kwargs.get("meta_learning_enabled", True)  # Enable meta-learning
+        self.self_improvement_enabled = kwargs.get("self_improvement_enabled", True)  # Enable self-improvement
 
         # --- Recursive Language Model (RLM) Parameters ---
         self.rlm_enabled = kwargs.get("rlm_enabled", True)  # Enable RLM for long context
-        self.rlm_max_recursion_depth = kwargs.get(
-            "rlm_max_recursion_depth", 5
-        )  # Max recursion depth
+        self.rlm_max_recursion_depth = kwargs.get("rlm_max_recursion_depth", 5)  # Max recursion depth
         self.rlm_context_peek_size = kwargs.get("rlm_context_peek_size", 2000)  # Chars per peek
         self.rlm_tool_budget = kwargs.get("rlm_tool_budget", 20)  # Max tool calls per query
         self.rlm_auto_partition_threshold = kwargs.get(
@@ -143,9 +115,7 @@ class AGIConfig:
         )  # Use direct pass below this
 
         # --- Multi-Modal Parameters ---
-        self.multimodal_enabled = kwargs.get(
-            "multimodal_enabled", True
-        )  # Enable multi-modal processing
+        self.multimodal_enabled = kwargs.get("multimodal_enabled", True)  # Enable multi-modal processing
         self.vision_patch_size = kwargs.get("vision_patch_size", 16)  # ViT patch size
         self.vision_layers = kwargs.get("vision_layers", 6)  # Number of vision transformer layers
         self.audio_freq_bins = kwargs.get("audio_freq_bins", 128)  # Audio frequency bins
@@ -191,121 +161,71 @@ class AGIConfig:
         # --- Ethical AI Parameters ---
         self.ethics_enabled = kwargs.get("ethics_enabled", True)  # Enable ethical reasoning
         self.ethics_weight = kwargs.get("ethics_weight", 0.1)  # Weight for ethical loss
-        self.bias_detection_enabled = kwargs.get(
-            "bias_detection_enabled", True
-        )  # Enable bias detection
-        self.fairness_constraints = kwargs.get(
-            "fairness_constraints", True
-        )  # Apply fairness constraints
+        self.bias_detection_enabled = kwargs.get("bias_detection_enabled", True)  # Enable bias detection
+        self.fairness_constraints = kwargs.get("fairness_constraints", True)  # Apply fairness constraints
 
         # --- Self-Evolution Parameters ---
-        self.auto_architecture_search = kwargs.get(
-            "auto_architecture_search", False
-        )  # Neural architecture search
-        self.dynamic_layer_creation = kwargs.get(
-            "dynamic_layer_creation", False
-        )  # Dynamic layer addition
-        self.capability_expansion = kwargs.get(
-            "capability_expansion", True
-        )  # Expand capabilities over time
+        self.auto_architecture_search = kwargs.get("auto_architecture_search", False)  # Neural architecture search
+        self.dynamic_layer_creation = kwargs.get("dynamic_layer_creation", False)  # Dynamic layer addition
+        self.capability_expansion = kwargs.get("capability_expansion", True)  # Expand capabilities over time
         self.knowledge_distillation = kwargs.get("knowledge_distillation", True)  # Self-teaching
 
         # --- Advanced Memory Parameters ---
-        self.episodic_memory_enabled = kwargs.get(
-            "episodic_memory_enabled", True
-        )  # Episodic memory
-        self.semantic_memory_size = kwargs.get(
-            "semantic_memory_size", 50000
-        )  # Semantic memory size
-        self.working_memory_capacity = kwargs.get(
-            "working_memory_capacity", 7
-        )  # Working memory slots
+        self.episodic_memory_enabled = kwargs.get("episodic_memory_enabled", True)  # Episodic memory
+        self.semantic_memory_size = kwargs.get("semantic_memory_size", 50000)  # Semantic memory size
+        self.working_memory_capacity = kwargs.get("working_memory_capacity", 7)  # Working memory slots
         self.memory_consolidation = kwargs.get("memory_consolidation", True)  # Memory consolidation
 
         # --- AGI-Scale Attention Parameters ---
         # Ring Attention for infinite context distributed across devices
-        self.use_agi_attention = kwargs.get(
-            "use_agi_attention", False
-        )  # Enable AGI attention features
+        self.use_agi_attention = kwargs.get("use_agi_attention", False)  # Enable AGI attention features
         self.enable_ring_attention = kwargs.get(
             "enable_ring_attention", True
         )  # Ring Attention for distributed infinite context
         self.ring_block_size = kwargs.get("ring_block_size", 512)  # Block size for Ring Attention
-        self.num_ring_devices = kwargs.get(
-            "num_ring_devices", 1
-        )  # Number of devices for distributed attention
+        self.num_ring_devices = kwargs.get("num_ring_devices", 1)  # Number of devices for distributed attention
 
         # Cross-Memory Attention for LTM/STM/MTM interaction
         self.enable_memory_cross_attention = kwargs.get(
             "enable_memory_cross_attention", True
         )  # Memory banks interact via attention
-        self.memory_attention_heads = kwargs.get(
-            "memory_attention_heads", 4
-        )  # Heads for memory cross-attention
+        self.memory_attention_heads = kwargs.get("memory_attention_heads", 4)  # Heads for memory cross-attention
         self.memory_dropout = kwargs.get("memory_dropout", 0.1)  # Dropout for memory attention
 
         # Infinite Context via hierarchical compression
-        self.enable_infinite_context = kwargs.get(
-            "enable_infinite_context", False
-        )  # Infinite context mode
-        self.context_chunk_size = kwargs.get(
-            "context_chunk_size", 1024
-        )  # Chunk size for infinite context
-        self.global_context_size = kwargs.get(
-            "global_context_size", 256
-        )  # Compressed global context tokens
-        self.context_compression_ratio = kwargs.get(
-            "context_compression_ratio", 4
-        )  # Compression ratio for chunks
+        self.enable_infinite_context = kwargs.get("enable_infinite_context", False)  # Infinite context mode
+        self.context_chunk_size = kwargs.get("context_chunk_size", 1024)  # Chunk size for infinite context
+        self.global_context_size = kwargs.get("global_context_size", 256)  # Compressed global context tokens
+        self.context_compression_ratio = kwargs.get("context_compression_ratio", 4)  # Compression ratio for chunks
 
         # --- Continual Learning Parameters ---
-        self.continual_learning = kwargs.get(
-            "continual_learning", True
-        )  # Enable continual learning (EWC)
+        self.continual_learning = kwargs.get("continual_learning", True)  # Enable continual learning (EWC)
         self.lambda_ewc = kwargs.get("lambda_ewc", 1000.0)  # EWC regularization strength
         self.lambda_si = kwargs.get("lambda_si", 1.0)  # Synaptic Intelligence strength
         self.max_task_memories = kwargs.get("max_task_memories", 10)  # Max tasks to remember
 
         # --- Consciousness Simulation Parameters ---
-        self.consciousness_simulation = kwargs.get(
-            "consciousness_simulation", False
-        )  # Simulate consciousness
-        self.self_awareness_level = kwargs.get(
-            "self_awareness_level", 0.3
-        )  # Self-awareness simulation
+        self.consciousness_simulation = kwargs.get("consciousness_simulation", False)  # Simulate consciousness
+        self.self_awareness_level = kwargs.get("self_awareness_level", 0.3)  # Self-awareness simulation
         self.introspection_enabled = kwargs.get("introspection_enabled", True)  # Self-monitoring
-        self.goal_setting_enabled = kwargs.get(
-            "goal_setting_enabled", True
-        )  # Autonomous goal setting
+        self.goal_setting_enabled = kwargs.get("goal_setting_enabled", True)  # Autonomous goal setting
 
         # Ensure d_model is divisible by num_heads for MultiHeadAttention compatibility
         if self.d_model % self.num_heads != 0:
-            raise ValueError(
-                f"d_model ({self.d_model}) must be divisible by num_heads ({self.num_heads})"
-            )
+            raise ValueError(f"d_model ({self.d_model}) must be divisible by num_heads ({self.num_heads})")
 
         # --- Training Hyperparameters ---
         self.batch_size = kwargs.get("batch_size", 32)  # Batch size for training
         self.learning_rate = kwargs.get("learning_rate", 1e-4)  # Initial learning rate
-        self.inner_learning_rate = kwargs.get(
-            "inner_learning_rate", 0.01
-        )  # Inner loop learning rate for MAML
-        self.num_inner_steps = kwargs.get(
-            "num_inner_steps", 10
-        )  # Number of inner loop steps for MAML
+        self.inner_learning_rate = kwargs.get("inner_learning_rate", 0.01)  # Inner loop learning rate for MAML
+        self.num_inner_steps = kwargs.get("num_inner_steps", 10)  # Number of inner loop steps for MAML
         self.num_epochs = kwargs.get("num_epochs", 3)  # Number of training epochs
-        self.eval_interval = kwargs.get(
-            "eval_interval", 25
-        )  # Frequency of evaluation during training
-        self.temperature = kwargs.get(
-            "temperature", 1.2
-        )  # Temperature for sampling (if applicable)
+        self.eval_interval = kwargs.get("eval_interval", 25)  # Frequency of evaluation during training
+        self.temperature = kwargs.get("temperature", 1.2)  # Temperature for sampling (if applicable)
         self.label_smoothing = kwargs.get("label_smoothing", 0.1)  # Label smoothing factor for loss
 
         # Optimizer parameters
-        self.warmup_steps = kwargs.get(
-            "warmup_steps", 5000
-        )  # Warmup steps for learning rate schedule
+        self.warmup_steps = kwargs.get("warmup_steps", 5000)  # Warmup steps for learning rate schedule
         self.decay_steps = kwargs.get("decay_steps", 200000)  # Decay steps for cosine decay
         self.init_lr = kwargs.get("init_lr", 2e-6)  # Initial learning rate for warmup
         self.end_lr = kwargs.get("end_lr", 2e-6)  # End learning rate after decay
@@ -313,26 +233,16 @@ class AGIConfig:
         self.clip_norm = kwargs.get("clip_norm", 0.5)  # Global norm clipping value
 
         # --- Data Processing Parameters ---
-        self.max_seq_length = kwargs.get(
-            "max_seq_length", 4096
-        )  # Maximum sequence length for input
+        self.max_seq_length = kwargs.get("max_seq_length", 4096)  # Maximum sequence length for input
         self.pad_token_id = kwargs.get("pad_token_id", 0)  # Token ID used for padding
-        self.max_sentence_length = kwargs.get(
-            "max_sentence_length", 2048
-        )  # Maximum allowed sentence length
-        self.input_sentence_size = kwargs.get(
-            "input_sentence_size", 500000
-        )  # Total number of sentences in input data
+        self.max_sentence_length = kwargs.get("max_sentence_length", 2048)  # Maximum allowed sentence length
+        self.input_sentence_size = kwargs.get("input_sentence_size", 500000)  # Total number of sentences in input data
         self.num_threads = kwargs.get("num_threads", 16)  # Number of threads for data processing
 
         # --- Memory Bank Parameters ---
         self.memory_size = kwargs.get("memory_size", 5000)  # Size of the long-term memory bank
-        self.retrieval_k = kwargs.get(
-            "retrieval_k", 3
-        )  # Number of top-k items to retrieve from LTM
-        self.stm_buffer_size = kwargs.get(
-            "stm_buffer_size", self.batch_size
-        )  # Default STM buffer size (tunable)
+        self.retrieval_k = kwargs.get("retrieval_k", 3)  # Number of top-k items to retrieve from LTM
+        self.stm_buffer_size = kwargs.get("stm_buffer_size", self.batch_size)  # Default STM buffer size (tunable)
         self.ltm_weight = kwargs.get("ltm_weight", 0.5)  # Weight for long-term memory contribution
         self.stm_weight = kwargs.get("stm_weight", 0.5)  # Weight for short-term memory contribution
         self.mtm_weight = kwargs.get("mtm_weight", 0.5)  # Weight for mid-term memory contribution
@@ -347,9 +257,7 @@ class AGIConfig:
         self.scientific_reasoning = kwargs.get("scientific_reasoning", True)  # Scientific discovery
         self.creative_generation = kwargs.get("creative_generation", True)  # Creative content
         self.social_intelligence = kwargs.get("social_intelligence", True)  # Social understanding
-        self.emotional_intelligence = kwargs.get(
-            "emotional_intelligence", True
-        )  # Emotional reasoning
+        self.emotional_intelligence = kwargs.get("emotional_intelligence", True)  # Emotional reasoning
 
         # --- Safety and Alignment ---
         self.alignment_training = kwargs.get("alignment_training", True)  # Human alignment
@@ -364,89 +272,49 @@ class AGIConfig:
         # --- Performance Optimization Parameters ---
         # Mixed Precision Training
         self.mixed_precision = kwargs.get("mixed_precision", False)  # Enable mixed precision
-        self.precision_dtype = kwargs.get(
-            "precision_dtype", "float32"
-        )  # float32, bfloat16, float16
+        self.precision_dtype = kwargs.get("precision_dtype", "float32")  # float32, bfloat16, float16
         self.compute_dtype = kwargs.get("compute_dtype", "float32")  # Compute precision
 
         # Gradient Checkpointing (Memory Efficiency)
-        self.gradient_checkpointing = kwargs.get(
-            "gradient_checkpointing", False
-        )  # Enable gradient checkpointing
-        self.checkpoint_every_n_layers = kwargs.get(
-            "checkpoint_every_n_layers", 2
-        )  # Checkpoint frequency
+        self.gradient_checkpointing = kwargs.get("gradient_checkpointing", False)  # Enable gradient checkpointing
+        self.checkpoint_every_n_layers = kwargs.get("checkpoint_every_n_layers", 2)  # Checkpoint frequency
 
         # Distributed Training
-        self.distributed_training = kwargs.get(
-            "distributed_training", False
-        )  # Enable distributed training
+        self.distributed_training = kwargs.get("distributed_training", False)  # Enable distributed training
         self.num_devices = kwargs.get("num_devices", 1)  # Number of devices for training
         self.data_parallel = kwargs.get("data_parallel", True)  # Data parallelism
         self.model_parallel = kwargs.get("model_parallel", False)  # Model parallelism
-        self.gradient_accumulation_steps = kwargs.get(
-            "gradient_accumulation_steps", 1
-        )  # Gradient accumulation
-        self.enable_memory_profiling = kwargs.get(
-            "enable_memory_profiling", False
-        )  # Enable memory profiling
+        self.gradient_accumulation_steps = kwargs.get("gradient_accumulation_steps", 1)  # Gradient accumulation
+        self.enable_memory_profiling = kwargs.get("enable_memory_profiling", False)  # Enable memory profiling
 
         # Production Evaluation Metrics
-        self.enable_fairness_tracking = kwargs.get(
-            "enable_fairness_tracking", False
-        )  # Track fairness metrics
+        self.enable_fairness_tracking = kwargs.get("enable_fairness_tracking", False)  # Track fairness metrics
         self.calibration_bins = kwargs.get("calibration_bins", 10)  # Bins for calibration tracking
-        self.perplexity_window = kwargs.get(
-            "perplexity_window", 100
-        )  # Window for running perplexity
+        self.perplexity_window = kwargs.get("perplexity_window", 100)  # Window for running perplexity
 
         # Extended Quantum Simulation
-        self.quantum_max_qubits = kwargs.get(
-            "quantum_max_qubits", 64
-        )  # Extended qubit simulation limit
-        self.quantum_chunked_simulation = kwargs.get(
-            "quantum_chunked_simulation", True
-        )  # Enable chunked simulation
-        self.quantum_sparse_mode = kwargs.get(
-            "quantum_sparse_mode", True
-        )  # Sparse state representation
+        self.quantum_max_qubits = kwargs.get("quantum_max_qubits", 64)  # Extended qubit simulation limit
+        self.quantum_chunked_simulation = kwargs.get("quantum_chunked_simulation", True)  # Enable chunked simulation
+        self.quantum_sparse_mode = kwargs.get("quantum_sparse_mode", True)  # Sparse state representation
 
         # --- Compute Controller Parameters (Dynamic Module Orchestration) ---
-        self.use_compute_controller = kwargs.get(
-            "use_compute_controller", False
-        )  # Enable dynamic compute allocation
-        self.controller_max_steps = kwargs.get(
-            "controller_max_steps", 10
-        )  # Max steps per forward pass
-        self.controller_initial_budget = kwargs.get(
-            "controller_initial_budget", 1.0
-        )  # Initial compute budget
-        self.controller_halt_threshold = kwargs.get(
-            "controller_halt_threshold", 0.8
-        )  # Halt when confidence exceeds
-        self.controller_min_budget = kwargs.get(
-            "controller_min_budget", 0.05
-        )  # Minimum budget per step
-        self.controller_temperature = kwargs.get(
-            "controller_temperature", 1.0
-        )  # Module selection temperature
+        self.use_compute_controller = kwargs.get("use_compute_controller", False)  # Enable dynamic compute allocation
+        self.controller_max_steps = kwargs.get("controller_max_steps", 10)  # Max steps per forward pass
+        self.controller_initial_budget = kwargs.get("controller_initial_budget", 1.0)  # Initial compute budget
+        self.controller_halt_threshold = kwargs.get("controller_halt_threshold", 0.8)  # Halt when confidence exceeds
+        self.controller_min_budget = kwargs.get("controller_min_budget", 0.05)  # Minimum budget per step
+        self.controller_temperature = kwargs.get("controller_temperature", 1.0)  # Module selection temperature
 
         # Controller Training Losses
-        self.controller_lambda_compute = kwargs.get(
-            "controller_lambda_compute", 0.01
-        )  # Compute efficiency weight
+        self.controller_lambda_compute = kwargs.get("controller_lambda_compute", 0.01)  # Compute efficiency weight
         self.controller_lambda_utilization = kwargs.get(
             "controller_lambda_utilization", 0.005
         )  # Module utilization weight
         self.controller_lambda_calibration = kwargs.get(
             "controller_lambda_calibration", 0.1
         )  # Confidence calibration weight
-        self.controller_lambda_budget = kwargs.get(
-            "controller_lambda_budget", 0.05
-        )  # Budget adherence weight
-        self.controller_lambda_ponder = kwargs.get(
-            "controller_lambda_ponder", 0.01
-        )  # Ponder cost weight
+        self.controller_lambda_budget = kwargs.get("controller_lambda_budget", 0.05)  # Budget adherence weight
+        self.controller_lambda_ponder = kwargs.get("controller_lambda_ponder", 0.01)  # Ponder cost weight
 
         # Controller Strategy
         self.controller_strategy = kwargs.get(
@@ -455,108 +323,64 @@ class AGIConfig:
 
         # --- GRPO (Group Relative Policy Optimization) ---
         self.use_grpo = kwargs.get("use_grpo", False)  # Enable GRPO value head & training
-        self.grpo_num_groups = kwargs.get(
-            "grpo_num_groups", 4
-        )  # Number of response groups per prompt
+        self.grpo_num_groups = kwargs.get("grpo_num_groups", 4)  # Number of response groups per prompt
         self.grpo_group_size = kwargs.get("grpo_group_size", 4)  # Responses per group
         self.grpo_clip_eps = kwargs.get("grpo_clip_eps", 0.2)  # PPO-style clip epsilon
         self.grpo_kl_coeff = kwargs.get("grpo_kl_coeff", 0.01)  # KL penalty coefficient
-        self.grpo_value_loss_coeff = kwargs.get(
-            "grpo_value_loss_coeff", 0.5
-        )  # Value head loss weight
-        self.grpo_entropy_coeff = kwargs.get(
-            "grpo_entropy_coeff", 0.01
-        )  # Entropy bonus coefficient
+        self.grpo_value_loss_coeff = kwargs.get("grpo_value_loss_coeff", 0.5)  # Value head loss weight
+        self.grpo_entropy_coeff = kwargs.get("grpo_entropy_coeff", 0.01)  # Entropy bonus coefficient
         self.grpo_gamma = kwargs.get("grpo_gamma", 1.0)  # Discount factor for returns
         self.grpo_lam = kwargs.get("grpo_lam", 0.95)  # GAE lambda for advantage estimation
-        self.grpo_normalize_advantages = kwargs.get(
-            "grpo_normalize_advantages", True
-        )  # Normalize advantages per group
-        self.grpo_reward_model = kwargs.get(
-            "grpo_reward_model", "internal"
-        )  # "internal", "external", "rule_based"
+        self.grpo_normalize_advantages = kwargs.get("grpo_normalize_advantages", True)  # Normalize advantages per group
+        self.grpo_reward_model = kwargs.get("grpo_reward_model", "internal")  # "internal", "external", "rule_based"
 
         # --- Verify / Reflect Loop ---
-        self.enable_verify_reflect = kwargs.get(
-            "enable_verify_reflect", False
-        )  # Enable verify/reflect reasoning loop
+        self.enable_verify_reflect = kwargs.get("enable_verify_reflect", False)  # Enable verify/reflect reasoning loop
         self.max_verify_steps = kwargs.get("max_verify_steps", 3)  # Max verification iterations
         self.verify_confidence_threshold = kwargs.get(
             "verify_confidence_threshold", 0.85
         )  # Confidence to accept without reflection
-        self.reflect_temperature = kwargs.get(
-            "reflect_temperature", 0.7
-        )  # Temperature for reflection sampling
-        self.verify_reward_bonus = kwargs.get(
-            "verify_reward_bonus", 0.1
-        )  # Bonus reward for passing verification
-        self.reflect_penalty = kwargs.get(
-            "reflect_penalty", -0.05
-        )  # Penalty for requiring reflection
+        self.reflect_temperature = kwargs.get("reflect_temperature", 0.7)  # Temperature for reflection sampling
+        self.verify_reward_bonus = kwargs.get("verify_reward_bonus", 0.1)  # Bonus reward for passing verification
+        self.reflect_penalty = kwargs.get("reflect_penalty", -0.05)  # Penalty for requiring reflection
 
         # --- KV Prefix Cache ---
         self.enable_kv_cache = kwargs.get("enable_kv_cache", False)  # Enable KV prefix caching
-        self.kv_cache_prefix_len = kwargs.get(
-            "kv_cache_prefix_len", 256
-        )  # Max prefix tokens to cache
+        self.kv_cache_prefix_len = kwargs.get("kv_cache_prefix_len", 256)  # Max prefix tokens to cache
         self.kv_cache_max_batch = kwargs.get("kv_cache_max_batch", 32)  # Max batch size for cache
-        self.kv_cache_eviction = kwargs.get(
-            "kv_cache_eviction", "lru"
-        )  # Cache eviction: "lru", "fifo", "lfu"
+        self.kv_cache_eviction = kwargs.get("kv_cache_eviction", "lru")  # Cache eviction: "lru", "fifo", "lfu"
         self.kv_cache_dtype = kwargs.get("kv_cache_dtype", "bfloat16")  # Cache storage dtype
 
         # --- Self-Critique ---
-        self.enable_self_critique = kwargs.get(
-            "enable_self_critique", False
-        )  # Enable self-critique head
+        self.enable_self_critique = kwargs.get("enable_self_critique", False)  # Enable self-critique head
         self.self_critique_threshold = kwargs.get(
             "self_critique_threshold", 0.6
         )  # Quality threshold to trigger revision
         self.max_revisions = kwargs.get("max_revisions", 2)  # Maximum self-revision iterations
-        self.critique_loss_coeff = kwargs.get(
-            "critique_loss_coeff", 0.1
-        )  # Weight for critique loss
+        self.critique_loss_coeff = kwargs.get("critique_loss_coeff", 0.1)  # Weight for critique loss
 
         # --- Think Budget ---
-        self.enable_think_budget = kwargs.get(
-            "enable_think_budget", False
-        )  # Enable adaptive think budget
-        self.think_budget_max_tokens = kwargs.get(
-            "think_budget_max_tokens", 1024
-        )  # Max reasoning tokens
-        self.think_budget_min_tokens = kwargs.get(
-            "think_budget_min_tokens", 32
-        )  # Min reasoning tokens
+        self.enable_think_budget = kwargs.get("enable_think_budget", False)  # Enable adaptive think budget
+        self.think_budget_max_tokens = kwargs.get("think_budget_max_tokens", 1024)  # Max reasoning tokens
+        self.think_budget_min_tokens = kwargs.get("think_budget_min_tokens", 32)  # Min reasoning tokens
         self.think_budget_difficulty_scale = kwargs.get(
             "think_budget_difficulty_scale", True
         )  # Scale budget by difficulty
 
         # --- Hard Negative Mining (Contrastive Loss) ---
         self.enable_hard_negative_mining = kwargs.get("enable_hard_negative_mining", False)
-        self.contrastive_margin = kwargs.get(
-            "contrastive_margin", 0.2
-        )  # Margin for semi-hard selection
-        self.hard_negative_ratio = kwargs.get(
-            "hard_negative_ratio", 0.5
-        )  # Fraction of negatives to keep
+        self.contrastive_margin = kwargs.get("contrastive_margin", 0.2)  # Margin for semi-hard selection
+        self.hard_negative_ratio = kwargs.get("hard_negative_ratio", 0.5)  # Fraction of negatives to keep
 
         # --- MLflow Experiment Tracking ---
         self.mlflow_enabled = kwargs.get("mlflow_enabled", False)  # Enable MLflow tracking
-        self.mlflow_tracking_uri = kwargs.get(
-            "mlflow_tracking_uri", None
-        )  # MLflow server URI (None → local ./mlruns)
-        self.mlflow_experiment_name = kwargs.get(
-            "mlflow_experiment_name", "rtdlm_training"
-        )  # Experiment name
+        self.mlflow_tracking_uri = kwargs.get("mlflow_tracking_uri", None)  # MLflow server URI (None → local ./mlruns)
+        self.mlflow_experiment_name = kwargs.get("mlflow_experiment_name", "rtdlm_training")  # Experiment name
         self.mlflow_run_name = kwargs.get("mlflow_run_name", None)  # Optional run name
-        self.mlflow_log_interval = kwargs.get(
-            "mlflow_log_interval", 10
-        )  # Steps between metric logs
+        self.mlflow_log_interval = kwargs.get("mlflow_log_interval", 10)  # Steps between metric logs
 
         # --- Synthetic Data Self-Improvement ---
-        self.enable_synthetic_data = kwargs.get(
-            "enable_synthetic_data", False
-        )  # Enable synthetic hard-example mining
+        self.enable_synthetic_data = kwargs.get("enable_synthetic_data", False)  # Enable synthetic hard-example mining
         self.synthetic_data_difficulty_threshold = kwargs.get(
             "synthetic_data_difficulty_threshold", 0.6
         )  # Confidence below this → "hard"
@@ -571,9 +395,7 @@ class AGIConfig:
         )  # Dir for generated shards
 
         # --- Code Modality Routing ---
-        self.enable_code_routing = kwargs.get(
-            "enable_code_routing", False
-        )  # Enable code-aware module routing
+        self.enable_code_routing = kwargs.get("enable_code_routing", False)  # Enable code-aware module routing
         self.code_routing_threshold = kwargs.get(
             "code_routing_threshold", 0.6
         )  # Code confidence threshold for routing boost
@@ -583,21 +405,11 @@ class AGIConfig:
 
         # --- Benchmark Evaluation ---
         self.benchmark_enabled = kwargs.get("benchmark_enabled", False)  # Enable benchmark harness
-        self.benchmark_names = kwargs.get(
-            "benchmark_names", ["gpqa"]
-        )  # Benchmarks to run: gpqa, aime, swe, livecode
-        self.benchmark_max_samples = kwargs.get(
-            "benchmark_max_samples", None
-        )  # Max samples per benchmark (None=all)
-        self.benchmark_think_budget = kwargs.get(
-            "benchmark_think_budget", "medium"
-        )  # Think-budget preset for eval
-        self.benchmark_output_dir = kwargs.get(
-            "benchmark_output_dir", "eval_results"
-        )  # Output directory for results
-        self.benchmark_eval_interval = kwargs.get(
-            "benchmark_eval_interval", 1
-        )  # Run benchmarks every N epochs
+        self.benchmark_names = kwargs.get("benchmark_names", ["gpqa"])  # Benchmarks to run: gpqa, aime, swe, livecode
+        self.benchmark_max_samples = kwargs.get("benchmark_max_samples", None)  # Max samples per benchmark (None=all)
+        self.benchmark_think_budget = kwargs.get("benchmark_think_budget", "medium")  # Think-budget preset for eval
+        self.benchmark_output_dir = kwargs.get("benchmark_output_dir", "eval_results")  # Output directory for results
+        self.benchmark_eval_interval = kwargs.get("benchmark_eval_interval", 1)  # Run benchmarks every N epochs
 
         # Validate configuration
         self._validate_config()
@@ -619,9 +431,7 @@ class AGIConfig:
 
         # Validate precision dtype
         valid_dtypes = ["float32", "bfloat16", "float16"]
-        assert (
-            self.precision_dtype in valid_dtypes
-        ), f"precision_dtype must be one of {valid_dtypes}"
+        assert self.precision_dtype in valid_dtypes, f"precision_dtype must be one of {valid_dtypes}"
         assert self.compute_dtype in valid_dtypes, f"compute_dtype must be one of {valid_dtypes}"
 
         # Validate gradient checkpointing
@@ -631,19 +441,13 @@ class AGIConfig:
         # Validate distributed settings
         if self.distributed_training:
             assert self.num_devices >= 1, "num_devices must be at least 1"
-            assert (
-                self.gradient_accumulation_steps >= 1
-            ), "gradient_accumulation_steps must be at least 1"
+            assert self.gradient_accumulation_steps >= 1, "gradient_accumulation_steps must be at least 1"
 
         # Validate compute controller settings
         if self.use_compute_controller:
             assert self.controller_max_steps >= 1, "controller_max_steps must be at least 1"
-            assert (
-                0 < self.controller_initial_budget <= 10.0
-            ), "controller_initial_budget must be between 0 and 10"
-            assert (
-                0 < self.controller_halt_threshold <= 1.0
-            ), "controller_halt_threshold must be between 0 and 1"
+            assert 0 < self.controller_initial_budget <= 10.0, "controller_initial_budget must be between 0 and 10"
+            assert 0 < self.controller_halt_threshold <= 1.0, "controller_halt_threshold must be between 0 and 1"
             valid_strategies = ["fast", "balanced", "thorough", "adaptive"]
             assert (
                 self.controller_strategy in valid_strategies
@@ -664,27 +468,19 @@ class AGIConfig:
         # Validate verify/reflect settings
         if self.enable_verify_reflect:
             assert self.max_verify_steps >= 1, "max_verify_steps must be at least 1"
-            assert (
-                0 < self.verify_confidence_threshold <= 1.0
-            ), "verify_confidence_threshold must be between 0 and 1"
-            assert (
-                0 < self.reflect_temperature <= 2.0
-            ), "reflect_temperature must be between 0 and 2"
+            assert 0 < self.verify_confidence_threshold <= 1.0, "verify_confidence_threshold must be between 0 and 1"
+            assert 0 < self.reflect_temperature <= 2.0, "reflect_temperature must be between 0 and 2"
 
         # Validate KV cache settings
         if self.enable_kv_cache:
             assert self.kv_cache_prefix_len >= 1, "kv_cache_prefix_len must be at least 1"
             assert self.kv_cache_max_batch >= 1, "kv_cache_max_batch must be at least 1"
             valid_evictions = ["lru", "fifo", "lfu"]
-            assert (
-                self.kv_cache_eviction in valid_evictions
-            ), f"kv_cache_eviction must be one of {valid_evictions}"
+            assert self.kv_cache_eviction in valid_evictions, f"kv_cache_eviction must be one of {valid_evictions}"
 
         # Validate self-critique settings
         if self.enable_self_critique:
-            assert (
-                0 < self.self_critique_threshold <= 1.0
-            ), "self_critique_threshold must be between 0 and 1"
+            assert 0 < self.self_critique_threshold <= 1.0, "self_critique_threshold must be between 0 and 1"
             assert self.max_revisions >= 1, "max_revisions must be at least 1"
             assert self.critique_loss_coeff >= 0, "critique_loss_coeff must be non-negative"
 
@@ -702,9 +498,7 @@ class AGIConfig:
 
         # Validate code routing settings
         if self.enable_code_routing:
-            assert (
-                0 < self.code_routing_threshold <= 1.0
-            ), "code_routing_threshold must be between 0 and 1"
+            assert 0 < self.code_routing_threshold <= 1.0, "code_routing_threshold must be between 0 and 1"
             assert self.code_routing_boost >= 1.0, "code_routing_boost must be at least 1.0"
 
         # Validate think budget settings
@@ -717,24 +511,16 @@ class AGIConfig:
         # Validate hard negative mining
         if self.enable_hard_negative_mining:
             assert 0.0 <= self.contrastive_margin <= 1.0, "contrastive_margin must be in [0.0, 1.0]"
-            assert (
-                0.0 < self.hard_negative_ratio <= 1.0
-            ), "hard_negative_ratio must be in (0.0, 1.0]"
+            assert 0.0 < self.hard_negative_ratio <= 1.0, "hard_negative_ratio must be in (0.0, 1.0]"
 
         # Validate multi-resolution vision
         if self.enable_multi_res_vision:
-            assert (
-                len(self.vision_patch_sizes) >= 1
-            ), "vision_patch_sizes must have at least one entry"
-            assert all(
-                ps > 0 for ps in self.vision_patch_sizes
-            ), "All vision_patch_sizes must be positive"
+            assert len(self.vision_patch_sizes) >= 1, "vision_patch_sizes must have at least one entry"
+            assert all(ps > 0 for ps in self.vision_patch_sizes), "All vision_patch_sizes must be positive"
 
         # Validate MLflow settings
         if self.mlflow_enabled:
-            assert (
-                self.mlflow_experiment_name
-            ), "mlflow_experiment_name must be non-empty when MLflow is enabled"
+            assert self.mlflow_experiment_name, "mlflow_experiment_name must be non-empty when MLflow is enabled"
             assert self.mlflow_log_interval >= 1, "mlflow_log_interval must be at least 1"
 
         # Validate benchmark settings
@@ -742,9 +528,7 @@ class AGIConfig:
             valid_benchmarks = {"gpqa", "aime", "swe", "livecode", "all"}
             if isinstance(self.benchmark_names, list):
                 for b in self.benchmark_names:
-                    assert (
-                        b in valid_benchmarks
-                    ), f"Unknown benchmark: {b}. Must be one of {valid_benchmarks}"
+                    assert b in valid_benchmarks, f"Unknown benchmark: {b}. Must be one of {valid_benchmarks}"
             assert self.benchmark_eval_interval >= 1, "benchmark_eval_interval must be at least 1"
             valid_budgets = {"low", "medium", "high", "max"}
             if isinstance(self.benchmark_think_budget, str):
@@ -946,9 +730,7 @@ class AGIConfig:
         print("\nThink Budget:")
         print(f"  - Enabled: {self.enable_think_budget}")
         if self.enable_think_budget:
-            print(
-                f"    - Token range: {self.think_budget_min_tokens}-{self.think_budget_max_tokens}"
-            )
+            print(f"    - Token range: {self.think_budget_min_tokens}-{self.think_budget_max_tokens}")
             print(f"    - Difficulty scaling: {self.think_budget_difficulty_scale}")
 
         print("\nHard Negative Mining (Contrastive Loss):")

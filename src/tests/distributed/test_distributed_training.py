@@ -154,8 +154,8 @@ class TestMemoryEstimation:
         rec = recommend_parallelism(model_memory_gb=2.0, device_memory_gb=16.0, num_devices=1)
 
         assert rec["strategy"] == "single_device"
-        assert rec["data_parallel"] == False
-        assert rec["tensor_parallel"] == False
+        assert rec["data_parallel"] is False
+        assert rec["tensor_parallel"] is False
 
     def test_recommend_parallelism_data_parallel(self):
         """Test parallelism recommendation for multi-GPU with small model."""
@@ -164,8 +164,8 @@ class TestMemoryEstimation:
         rec = recommend_parallelism(model_memory_gb=2.0, device_memory_gb=16.0, num_devices=4)
 
         assert rec["strategy"] == "data_parallel"
-        assert rec["data_parallel"] == True
-        assert rec["tensor_parallel"] == False
+        assert rec["data_parallel"] is True
+        assert rec["tensor_parallel"] is False
 
     def test_recommend_parallelism_tensor_parallel(self):
         """Test parallelism recommendation for large model."""
@@ -173,7 +173,7 @@ class TestMemoryEstimation:
 
         rec = recommend_parallelism(model_memory_gb=50.0, device_memory_gb=16.0, num_devices=8)
 
-        assert rec["tensor_parallel"] == True
+        assert rec["tensor_parallel"] is True
 
 
 class TestDistributedValidation:
@@ -192,8 +192,8 @@ class TestDistributedValidation:
         assert "num_devices" in results
         assert "checks" in results
         assert "valid" in results
-        assert results["checks"]["devices_visible"] == True
-        assert results["checks"]["mesh_valid"] == True
+        assert results["checks"]["devices_visible"] is True
+        assert results["checks"]["mesh_valid"] is True
 
 
 class TestTrainStepCreation:

@@ -64,9 +64,7 @@ def yarn_attention_scale(scale_factor: float, mscale: float = 0.1) -> float:
     return float(1.0 + mscale * jnp.log(scale_factor))
 
 
-def apply_rope_with_inv_freq(
-    x: jnp.ndarray, positions: jnp.ndarray, inv_freq: jnp.ndarray
-) -> jnp.ndarray:
+def apply_rope_with_inv_freq(x: jnp.ndarray, positions: jnp.ndarray, inv_freq: jnp.ndarray) -> jnp.ndarray:
     """Apply RoPE to `x` of shape [..., seq, dim] using precomputed inverse frequencies."""
     *_, seq, dim = x.shape
     half = dim // 2

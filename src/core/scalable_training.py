@@ -75,15 +75,11 @@ class ScalableMesh:
         else:
             self.pipeline_parallel_size = 1
 
-        self.data_parallel_size = max(
-            1, self.num_devices // (self.tensor_parallel_size * self.pipeline_parallel_size)
-        )
+        self.data_parallel_size = max(1, self.num_devices // (self.tensor_parallel_size * self.pipeline_parallel_size))
 
     def _create_mesh(self) -> Mesh:
         """Create JAX device mesh"""
-        total_needed = (
-            self.data_parallel_size * self.tensor_parallel_size * self.pipeline_parallel_size
-        )
+        total_needed = self.data_parallel_size * self.tensor_parallel_size * self.pipeline_parallel_size
 
         if total_needed > self.num_devices:
             logger.warning(
@@ -262,9 +258,7 @@ def create_scalable_train_step(
         return tensor_parallel_step
 
     elif mesh.is_distributed and not mesh.has_tensor_parallel:
-        return jax.pmap(
-            train_step_with_sync, axis_name="data", in_axes=(0, 0, 0, 0), out_axes=(0, 0, 0, 0)
-        )
+        return jax.pmap(train_step_with_sync, axis_name="data", in_axes=(0, 0, 0, 0), out_axes=(0, 0, 0, 0))
     else:
         return jax.jit(train_step_impl)
 
@@ -288,9 +282,7 @@ def create_scalable_mesh(config) -> ScalableMesh:
     return ScalableMesh(mp_config)
 
 
-def setup_scalable_training(
-    model_fn: Callable, config, sample_batch: Dict
-) -> Tuple[ScalableMesh, Dict, Callable]:
+def setup_scalable_training(model_fn: Callable, config, sample_batch: Dict) -> Tuple[ScalableMesh, Dict, Callable]:
     """
     Set up scalable training for the AGI model.
 
@@ -313,9 +305,7 @@ def setup_scalable_training(
     elif mesh.is_distributed:
         params = jax.device_put_replicated(params, jax.devices()[: mesh.data_parallel_size])
 
-    logger.info(
-        f"Model initialized with {sum(p.size for p in jax.tree_util.tree_leaves(params)):,} parameters"
-    )
+    logger.info(f"Model initialized with {sum(p.size for p in jax.tree_util.tree_leaves(params)):,} parameters")
 
     return mesh, params
 
@@ -518,9 +508,7 @@ class DistributedProfiler:
         }
 
 
-def profile_collective_communication(
-    mesh: ScalableMesh, array_size_bytes: int = 1_000_000
-) -> Dict[str, float]:
+def profile_collective_communication(mesh: ScalableMesh, array_size_bytes: int = 1_000_000) -> Dict[str, float]:
     """
     Profile collective communication operations.
 
@@ -568,9 +556,7 @@ def validate_distributed_setup(mesh: ScalableMesh) -> Dict[str, Any]:
     if mesh.is_distributed:
         try:
             test_tensor = jnp.ones((mesh.data_parallel_size, 100))
-            test_tensor = jax.device_put_replicated(
-                jnp.ones(100), jax.devices()[: mesh.data_parallel_size]
-            )
+            test_tensor = jax.device_put_replicated(jnp.ones(100), jax.devices()[: mesh.data_parallel_size])
 
             @partial(jax.pmap, axis_name="data")
             def test_sync(x):

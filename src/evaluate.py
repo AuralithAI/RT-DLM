@@ -101,8 +101,7 @@ Examples
         "--checkpoint",
         type=str,
         default=None,
-        help="Path to a model checkpoint directory.  "
-        "If omitted, a randomly-initialised model is used.",
+        help="Path to a model checkpoint directory.  " "If omitted, a randomly-initialised model is used.",
     )
 
     # ── sampling / budget ──────────────────────────────────────

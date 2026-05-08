@@ -38,9 +38,7 @@ class TestCheckpointMetadata(unittest.TestCase):
         """Test converting metadata to dictionary."""
         from src.core.checkpoint_manager import CheckpointMetadata
 
-        metadata = CheckpointMetadata(
-            epoch=5, step_count=1000, timestamp="2024-01-01", training_losses=[0.5, 0.4]
-        )
+        metadata = CheckpointMetadata(epoch=5, step_count=1000, timestamp="2024-01-01", training_losses=[0.5, 0.4])
 
         d = metadata.to_dict()
 
@@ -142,9 +140,7 @@ class TestCheckpointManager(unittest.TestCase):
         """Test checkpoint manager initialization."""
         from src.core.checkpoint_manager import CheckpointManager
 
-        manager = CheckpointManager(
-            checkpoint_dir=str(self.checkpoint_dir), model_name="test_model", keep_last_n=3
-        )
+        manager = CheckpointManager(checkpoint_dir=str(self.checkpoint_dir), model_name="test_model", keep_last_n=3)
 
         self.assertEqual(manager.model_name, "test_model")
         self.assertEqual(manager.keep_last_n, 3)
@@ -177,9 +173,7 @@ class TestCheckpointManager(unittest.TestCase):
 
         manager = CheckpointManager(checkpoint_dir=str(self.checkpoint_dir), model_name="load_test")
 
-        params = {
-            "layer": {"weight": jnp.array([[1.0, 2.0], [3.0, 4.0]]), "bias": jnp.array([0.1, 0.2])}
-        }
+        params = {"layer": {"weight": jnp.array([[1.0, 2.0], [3.0, 4.0]]), "bias": jnp.array([0.1, 0.2])}}
 
         import optax
 
@@ -200,9 +194,7 @@ class TestCheckpointManager(unittest.TestCase):
         """Test loading latest checkpoint when no path specified."""
         from src.core.checkpoint_manager import CheckpointManager
 
-        manager = CheckpointManager(
-            checkpoint_dir=str(self.checkpoint_dir), model_name="latest_test"
-        )
+        manager = CheckpointManager(checkpoint_dir=str(self.checkpoint_dir), model_name="latest_test")
 
         params = {"w": jnp.ones((5, 5))}
         import optax
@@ -222,9 +214,7 @@ class TestCheckpointManager(unittest.TestCase):
         """Test old checkpoint cleanup."""
         from src.core.checkpoint_manager import CheckpointManager
 
-        manager = CheckpointManager(
-            checkpoint_dir=str(self.checkpoint_dir), model_name="cleanup_test", keep_last_n=2
-        )
+        manager = CheckpointManager(checkpoint_dir=str(self.checkpoint_dir), model_name="cleanup_test", keep_last_n=2)
 
         params = {"w": jnp.ones((3, 3))}
         import optax
@@ -304,9 +294,7 @@ class TestCheckpointExtraTensors(unittest.TestCase):
 
         extra = {"running_mean": np.zeros(10), "running_var": np.ones(10)}
 
-        path = manager.save_checkpoint(
-            params=params, opt_state=opt_state, epoch=1, extra_tensors=extra
-        )
+        path = manager.save_checkpoint(params=params, opt_state=opt_state, epoch=1, extra_tensors=extra)
 
         self.assertTrue(Path(path).exists())
 

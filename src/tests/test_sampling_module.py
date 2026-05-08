@@ -404,9 +404,7 @@ class TestSampleWithGeneratedTokens(unittest.TestCase):
         from src.core.sampling import TokenSampler, SamplingConfig
 
         sampler = TokenSampler(vocab_size=100)
-        config = SamplingConfig(
-            temperature=1.0, top_k=0, top_p=1.0, frequency_penalty=0.5, presence_penalty=0.5
-        )
+        config = SamplingConfig(temperature=1.0, top_k=0, top_p=1.0, frequency_penalty=0.5, presence_penalty=0.5)
 
         rng = jax.random.PRNGKey(42)
         logits = jax.random.normal(rng, (1, 100))
@@ -901,9 +899,7 @@ class TestSelfSpeculativeDecoder(unittest.TestCase):
             rng = jax.random.PRNGKey(seq_len)
             return jax.random.normal(rng, (batch_size, seq_len, 30))
 
-        decoder = SelfSpeculativeDecoder(
-            model_forward_fn=mock_forward, early_exit_layer=4, num_speculative_tokens=2
-        )
+        decoder = SelfSpeculativeDecoder(model_forward_fn=mock_forward, early_exit_layer=4, num_speculative_tokens=2)
 
         rng = jax.random.PRNGKey(42)
         initial_tokens = jnp.array([[1, 2]])

@@ -105,9 +105,7 @@ class TestMatrixProductState:
         mps = MatrixProductState(num_qubits=4, bond_dimension=16)
 
         # CNOT gate
-        CNOT = jnp.array(
-            [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=jnp.complex64
-        )
+        CNOT = jnp.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=jnp.complex64)
 
         # Apply to sites 0, 1
         mps.apply_two_qubit_gate(CNOT, 0, 1)
@@ -310,9 +308,7 @@ class TestLargeScaleSimulation:
 
     def test_large_qubit_count(self):
         """Test simulation with many qubits"""
-        config = TensorNetworkConfig(
-            num_qubits=50, bond_dimension=32  # Would be impossible with full state vector
-        )
+        config = TensorNetworkConfig(num_qubits=50, bond_dimension=32)  # Would be impossible with full state vector
         simulator = TensorNetworkQuantumSimulator(config)
 
         # Should be able to create and use

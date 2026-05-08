@@ -277,9 +277,7 @@ class HierarchicalCompressor:
         # The summarize tool stores the result as {context_var}_summary.
         # We rename it to {root_var}_compressed_t{tier} for stable naming.
         summary_data = tool_result.data
-        summary_text = (
-            summary_data["summary"] if isinstance(summary_data, dict) else str(summary_data)
-        )
+        summary_text = summary_data["summary"] if isinstance(summary_data, dict) else str(summary_data)
 
         # Derive root var name (strip existing _compressed_tN suffix)
         root_var = context_var
@@ -312,6 +310,4 @@ class HierarchicalCompressor:
         self._stats.tier_counts[result.tier] = self._stats.tier_counts.get(result.tier, 0) + 1
         # Running average
         n = self._stats.total_compressions
-        self._stats.avg_compression_ratio = (
-            self._stats.avg_compression_ratio * (n - 1) + result.compression_ratio
-        ) / n
+        self._stats.avg_compression_ratio = (self._stats.avg_compression_ratio * (n - 1) + result.compression_ratio) / n

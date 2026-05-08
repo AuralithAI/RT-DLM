@@ -74,9 +74,7 @@ def run_test(test_name: str, verbose: bool = False, timeout: int = 600):
         if verbose:
             logger.info(f"Command: {' '.join(cmd)}")
 
-        result = subprocess.run(
-            cmd, capture_output=False, text=True, timeout=timeout, cwd=PROJECT_ROOT
-        )
+        result = subprocess.run(cmd, capture_output=False, text=True, timeout=timeout, cwd=PROJECT_ROOT)
 
         if result.returncode == 0:
             logger.info(f"Test '{test_name}' completed successfully!")

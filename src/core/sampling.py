@@ -34,7 +34,9 @@ Note:
 
 # Mark entire module as dev utility
 _MODULE_DEV_UTILITY = True
-_MODULE_DEV_REASON = "Sampling/generation is for development testing. Production inference uses separate optimized serving stack."
+_MODULE_DEV_REASON = (
+    "Sampling/generation is for development testing. Production inference uses separate optimized serving stack."
+)
 
 import jax
 import jax.numpy as jnp
@@ -197,9 +199,7 @@ class TokenSampler:
 
         # Unsort the mask back to original order
         unsorted_mask = jnp.zeros_like(sorted_mask)
-        unsorted_mask = jnp.take_along_axis(
-            sorted_mask, jnp.argsort(sorted_indices, axis=-1), axis=-1
-        )
+        unsorted_mask = jnp.take_along_axis(sorted_mask, jnp.argsort(sorted_indices, axis=-1), axis=-1)
 
         # Apply mask
         filtered_logits = jnp.where(unsorted_mask, logits, -1e10)
@@ -248,7 +248,7 @@ class TokenSampler:
             return logits
 
         # Create a mask of which tokens have been generated
-        batch_size = logits.shape[0]
+        logits.shape[0]
         vocab_size = logits.shape[-1]
 
         # For each batch, mark tokens that appear in generated_tokens
@@ -296,7 +296,7 @@ class TokenSampler:
         if frequency_penalty == 0.0 and presence_penalty == 0.0:
             return logits
 
-        batch_size = logits.shape[0]
+        logits.shape[0]
         vocab_size = logits.shape[-1]
 
         def compute_penalties(tokens):
@@ -349,9 +349,7 @@ class TokenSampler:
         # Apply repetition penalties if we have generated tokens
         if generated_tokens is not None:
             if config.repetition_penalty != 1.0:
-                logits = self.apply_repetition_penalty(
-                    logits, generated_tokens, config.repetition_penalty
-                )
+                logits = self.apply_repetition_penalty(logits, generated_tokens, config.repetition_penalty)
             if config.frequency_penalty != 0.0 or config.presence_penalty != 0.0:
                 logits = self.apply_frequency_presence_penalty(
                     logits, generated_tokens, config.frequency_penalty, config.presence_penalty
@@ -412,7 +410,7 @@ class TokenSampler:
         if logits.ndim == 3:
             logits = logits[:, -1, :]
 
-        batch_size = logits.shape[0]
+        logits.shape[0]
 
         probs = jax.nn.softmax(logits, axis=-1)
         log_probs = jax.nn.log_softmax(logits, axis=-1)
@@ -488,9 +486,7 @@ class TokenSampler:
         beam_sequences = jnp.tile(initial_tokens[:, None, :], (1, beam_width, 1))
 
         pad_length = max_length - initial_seq_len
-        beam_sequences = jnp.pad(
-            beam_sequences, ((0, 0), (0, 0), (0, pad_length)), mode="constant", constant_values=0
-        )
+        beam_sequences = jnp.pad(beam_sequences, ((0, 0), (0, 0), (0, pad_length)), mode="constant", constant_values=0)
 
         beam_scores = jnp.zeros((batch_size, beam_width))
         beam_scores = beam_scores.at[:, 1:].set(-float("inf"))
@@ -545,9 +541,7 @@ class TokenSampler:
             next_logits = all_logits[:, -1, :]
 
             if no_repeat_ngram_size > 0:
-                next_logits = _block_repeated_ngrams(
-                    next_logits, flat_seqs, no_repeat_ngram_size, current_pos
-                )
+                next_logits = _block_repeated_ngrams(next_logits, flat_seqs, no_repeat_ngram_size, current_pos)
 
             if current_pos < min_length:
                 for stop_token in stop_tokens:
@@ -565,9 +559,7 @@ class TokenSampler:
             )
 
             # Flatten beams and vocab for top-k selection
-            candidate_scores_flat: jnp.ndarray = candidate_scores.reshape(
-                batch_size, beam_width * vocab_size
-            )
+            candidate_scores_flat: jnp.ndarray = candidate_scores.reshape(batch_size, beam_width * vocab_size)
 
             # Get top beam_width candidates for each batch
             top_scores, top_indices = jax.lax.top_k(candidate_scores_flat, beam_width)
@@ -587,9 +579,7 @@ class TokenSampler:
                     # Add the new token
                     new_sequences = new_sequences.at[b, k, current_pos].set(token_indices[b, k])
                     # Check if this beam is now finished
-                    is_finished = beam_finished[b, source_beam] | (
-                        int(token_indices[b, k]) in stop_tokens_set
-                    )
+                    is_finished = beam_finished[b, source_beam] | (int(token_indices[b, k]) in stop_tokens_set)
                     new_finished = new_finished.at[b, k].set(is_finished)
 
             beam_sequences = new_sequences
@@ -652,10 +642,7 @@ class TokenSampler:
             Tuple of (best_sequences, scores) from all groups
         """
         if beam_width % num_beam_groups != 0:
-            raise ValueError(
-                f"beam_width ({beam_width}) must be divisible by "
-                f"num_beam_groups ({num_beam_groups})"
-            )
+            raise ValueError(f"beam_width ({beam_width}) must be divisible by " f"num_beam_groups ({num_beam_groups})")
 
         beams_per_group = beam_width // num_beam_groups
         all_sequences = []
@@ -737,9 +724,7 @@ class TokenSampler:
         """
         if not constraints:
             # No constraints, use regular beam search
-            return self.beam_search(
-                logits_fn, initial_tokens, beam_width, max_length, length_penalty, stop_tokens
-            )
+            return self.beam_search(logits_fn, initial_tokens, beam_width, max_length, length_penalty, stop_tokens)
 
         # Constraint State Machine for tracking constraint satisfaction
         # Each constraint has states: 0 (not started) -> len(constraint) (satisfied)
@@ -863,30 +848,22 @@ class TokenSampler:
 # Convenience functions for common sampling configurations
 def create_sampling_config_creative() -> SamplingConfig:
     """Create config for creative/diverse generation."""
-    return SamplingConfig(
-        temperature=1.2, top_k=100, top_p=0.95, repetition_penalty=1.2, log_probs=True
-    )
+    return SamplingConfig(temperature=1.2, top_k=100, top_p=0.95, repetition_penalty=1.2, log_probs=True)
 
 
 def create_sampling_config_precise() -> SamplingConfig:
     """Create config for precise/factual generation."""
-    return SamplingConfig(
-        temperature=0.3, top_k=20, top_p=0.85, repetition_penalty=1.1, log_probs=True
-    )
+    return SamplingConfig(temperature=0.3, top_k=20, top_p=0.85, repetition_penalty=1.1, log_probs=True)
 
 
 def create_sampling_config_balanced() -> SamplingConfig:
     """Create config for balanced generation (default)."""
-    return SamplingConfig(
-        temperature=0.8, top_k=50, top_p=0.9, repetition_penalty=1.15, log_probs=True
-    )
+    return SamplingConfig(temperature=0.8, top_k=50, top_p=0.9, repetition_penalty=1.15, log_probs=True)
 
 
 def create_sampling_config_deterministic() -> SamplingConfig:
     """Create config for deterministic/reproducible generation."""
-    return SamplingConfig(
-        temperature=0.01, top_k=1, top_p=1.0, repetition_penalty=1.0, log_probs=True  # Near-greedy
-    )
+    return SamplingConfig(temperature=0.01, top_k=1, top_p=1.0, repetition_penalty=1.0, log_probs=True)  # Near-greedy
 
 
 # ============================================================================
@@ -967,7 +944,7 @@ class SpeculativeDecoder:
             draft_tokens: Drafted token IDs [batch, num_tokens]
             draft_probs: Draft token probabilities [batch, num_tokens]
         """
-        batch_size = tokens.shape[0]
+        tokens.shape[0]
         draft_tokens_list = []
         draft_probs_list = []
         current_tokens = tokens
@@ -1021,7 +998,7 @@ class SpeculativeDecoder:
             accepted_tokens: Verified and corrected tokens
             num_accepted: Number of draft tokens accepted
         """
-        batch_size = tokens.shape[0]
+        tokens.shape[0]
         num_draft = draft_tokens.shape[1]
 
         # Concatenate original and draft tokens
@@ -1039,9 +1016,7 @@ class SpeculativeDecoder:
         target_probs = jax.nn.softmax(target_logits_for_draft / self.temperature, axis=-1)
 
         # Get target probability for each draft token
-        target_probs_for_draft = jnp.take_along_axis(
-            target_probs, draft_tokens[:, :, None], axis=-1
-        )[
+        target_probs_for_draft = jnp.take_along_axis(target_probs, draft_tokens[:, :, None], axis=-1)[
             :, :, 0
         ]  # [batch, num_draft]
 
@@ -1080,9 +1055,7 @@ class SpeculativeDecoder:
             resample_token = resample_output.token_id
 
             # Accept tokens up to rejection, then resampled token
-            accepted_tokens = jnp.concatenate(
-                [draft_tokens[:, :min_accepted], resample_token], axis=1
-            )
+            accepted_tokens = jnp.concatenate([draft_tokens[:, :min_accepted], resample_token], axis=1)
             return accepted_tokens, min_accepted + 1
 
     def generate(
@@ -1115,9 +1088,7 @@ class SpeculativeDecoder:
             rng_key, draft_key, verify_key = jax.random.split(rng_key, 3)
 
             # Draft tokens
-            draft_tokens, draft_probs = self._draft_tokens(
-                draft_params, tokens, draft_key, self.num_speculative_tokens
-            )
+            draft_tokens, draft_probs = self._draft_tokens(draft_params, tokens, draft_key, self.num_speculative_tokens)
 
             # Verify and accept
             accepted_tokens, num_accepted = self._verify_and_accept(
@@ -1244,9 +1215,7 @@ class SelfSpeculativeDecoder:
             rng_key, sample_key = jax.random.split(rng_key)
 
             # Get logits from early exit layer
-            early_logits = self.model_forward_fn(
-                params, text=current_tokens, exit_layer=self.early_exit_layer
-            )
+            early_logits = self.model_forward_fn(params, text=current_tokens, exit_layer=self.early_exit_layer)
             if isinstance(early_logits, tuple):
                 early_logits = early_logits[0]
 
@@ -1335,9 +1304,7 @@ class SelfSpeculativeDecoder:
         resample_logits = full_logits[:, pos, :]
         resample_output = self.sampler.sample(resample_logits, self.config, resample_key)
 
-        accepted_tokens = jnp.concatenate(
-            [draft_tokens[:, :min_accepted], resample_output.token_id], axis=1
-        )
+        accepted_tokens = jnp.concatenate([draft_tokens[:, :min_accepted], resample_output.token_id], axis=1)
         return accepted_tokens, min_accepted + 1
 
     def _standard_generate(
@@ -1442,9 +1409,7 @@ class SelfSpeculativeDecoder:
             total_drafted += self.num_speculative_tokens
 
             # Verify drafts using full model
-            accepted_tokens, num_accepted = self._verify_drafts(
-                params, tokens, draft_tokens, draft_probs, verify_key
-            )
+            accepted_tokens, num_accepted = self._verify_drafts(params, tokens, draft_tokens, draft_probs, verify_key)
             total_accepted += num_accepted
 
             # Append accepted tokens

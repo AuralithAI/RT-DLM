@@ -3,7 +3,6 @@
 import unittest
 
 import jax
-import jax.numpy as jnp
 
 from src.core.benchmark_evaluation import (
     ModalityInterferenceReport,
@@ -48,8 +47,11 @@ class TestMultimodalEvaluator(unittest.TestCase):
         modality_tasks = {"vision": vision_task, "audio": vision_task}
 
         report = evaluator.evaluate_with_interference(
-            params={}, rng=rng, modality_tasks=modality_tasks,
-            solo_samples=solo_samples, joint_samples=joint_samples,
+            params={},
+            rng=rng,
+            modality_tasks=modality_tasks,
+            solo_samples=solo_samples,
+            joint_samples=joint_samples,
         )
         self.assertIsInstance(report, ModalityInterferenceReport)
         self.assertAlmostEqual(report.per_modality_solo["vision"], 1.0, places=4)

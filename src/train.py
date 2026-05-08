@@ -130,11 +130,7 @@ class AGITrainer:
 
         # Memory profiling (tracks GPU memory usage during training)
         self.memory_profiler = MemoryProfiler(
-            enabled=(
-                config.enable_memory_profiling
-                if hasattr(config, "enable_memory_profiling")
-                else False
-            ),
+            enabled=(config.enable_memory_profiling if hasattr(config, "enable_memory_profiling") else False),
             log_every_n_steps=100,
         )
 
@@ -259,9 +255,7 @@ class AGITrainer:
         )
 
         # Initialize training integration
-        self.retrieval_training = RetrievalAugmentedTraining(
-            config=retrieval_config, retriever=self.retriever
-        )
+        self.retrieval_training = RetrievalAugmentedTraining(config=retrieval_config, retriever=self.retriever)
 
         # Initialize document ingester
         self.document_ingester = DocumentIngester(
@@ -382,8 +376,7 @@ class AGITrainer:
         """
         if self.params is None:
             raise RuntimeError(
-                "Model must be initialized before creating embeddings. "
-                "Call initialize_model() first."
+                "Model must be initialized before creating embeddings. " "Call initialize_model() first."
             )
 
         embedding_table = None
@@ -396,9 +389,7 @@ class AGITrainer:
                 for key, value in params.items():
                     full_key = f"{prefix}/{key}" if prefix else key
 
-                    if "token_embedding" in key.lower() or (
-                        key == "embeddings" and embedding_table is None
-                    ):
+                    if "token_embedding" in key.lower() or (key == "embeddings" and embedding_table is None):
                         if hasattr(value, "shape") and len(value.shape) == 2:
                             embedding_table = value
                     elif "position" in key.lower() and "embedding" in key.lower():
@@ -412,7 +403,7 @@ class AGITrainer:
         if embedding_table is None:
             logger.warning("Could not find embedding table in model params, using hash embeddings")
             # Fallback to hash-based
-            batch_size = token_ids.shape[0]
+            token_ids.shape[0]
             return np.array([self._hash_text_to_embedding(str(ids.tolist())) for ids in token_ids])
 
         # Look up token embeddings
@@ -473,9 +464,7 @@ class AGITrainer:
         for chunk in self.document_ingester.iter_chunks():
             chunk_texts.append(chunk.text)
             chunk_ids.append(chunk.chunk_id)
-            chunk_metadata.append(
-                {"doc_id": chunk.doc_id, "chunk_index": chunk.chunk_index, **(chunk.metadata or {})}
-            )
+            chunk_metadata.append({"doc_id": chunk.doc_id, "chunk_index": chunk.chunk_index, **(chunk.metadata or {})})
 
         if not chunk_texts:
             logger.warning("No chunks found in document ingester")
@@ -536,16 +525,10 @@ class AGITrainer:
         stats = {
             "rag_enabled": self.retrieval_config is not None and self.retrieval_config.enabled,
             "augmentation_probability": (
-                getattr(self.retrieval_config, "augmentation_probability", 0.0)
-                if self.retrieval_config
-                else 0.0
+                getattr(self.retrieval_config, "augmentation_probability", 0.0) if self.retrieval_config else 0.0
             ),
             "total_chunks_indexed": 0,
-            "retriever_type": (
-                "hybrid"
-                if (self.retrieval_config and self.retrieval_config.use_hybrid)
-                else "dense"
-            ),
+            "retriever_type": ("hybrid" if (self.retrieval_config and self.retrieval_config.use_hybrid) else "dense"),
         }
 
         if self.document_ingester:
@@ -592,9 +575,7 @@ class AGITrainer:
         for chunk in self.document_ingester.iter_chunks():
             chunk_texts.append(chunk.text)
             chunk_ids.append(chunk.chunk_id)
-            chunk_metadata.append(
-                {"doc_id": chunk.doc_id, "chunk_index": chunk.chunk_index, **(chunk.metadata or {})}
-            )
+            chunk_metadata.append({"doc_id": chunk.doc_id, "chunk_index": chunk.chunk_index, **(chunk.metadata or {})})
 
         if chunk_texts:
             # Create embeddings for hybrid (sparse + dense) retrieval
@@ -612,19 +593,13 @@ class AGITrainer:
             f"{stats['chunks_created']} chunks indexed (with embeddings)"
         )
 
-    def _augment_batch_with_retrieval(
-        self, batch: Dict[str, jnp.ndarray], rng: jax.Array
-    ) -> Dict[str, jnp.ndarray]:
+    def _augment_batch_with_retrieval(self, batch: Dict[str, jnp.ndarray], rng: jax.Array) -> Dict[str, jnp.ndarray]:
         """
         Optionally augment a batch with retrieved context.
 
         Uses probabilistic augmentation based on config.augmentation_probability.
         """
-        if (
-            self.retrieval_training is None
-            or self.retrieval_config is None
-            or not self.retrieval_config.enabled
-        ):
+        if self.retrieval_training is None or self.retrieval_config is None or not self.retrieval_config.enabled:
             return batch
 
         # Prepare augmented batch using the retrieval training module
@@ -674,33 +649,25 @@ class AGITrainer:
 
         # Count parameters (get from single replica if distributed)
         if self.is_distributed:
-            param_count = sum(
-                x.size for x in jax.tree_util.tree_leaves(unreplicate_params(self.params))
-            )
+            param_count = sum(x.size for x in jax.tree_util.tree_leaves(unreplicate_params(self.params)))
         else:
             param_count = sum(x.size for x in jax.tree_util.tree_leaves(self.params))
 
         # Print memory estimates
-        memory_est = estimate_model_memory(
-            unreplicate_params(self.params) if self.is_distributed else self.params
-        )
+        memory_est = estimate_model_memory(unreplicate_params(self.params) if self.is_distributed else self.params)
         logger.info(f"Model initialized with {param_count:,} parameters")
         logger.info(f"Estimated memory: {memory_est['total_gb']:.2f} GB")
 
         # Set up memory profiler with model/optimizer sizes
-        self.memory_profiler.set_model_size(
-            unreplicate_params(self.params) if self.is_distributed else self.params
-        )
+        self.memory_profiler.set_model_size(unreplicate_params(self.params) if self.is_distributed else self.params)
         self.memory_profiler.set_optimizer_size(self.opt_state)
 
         # Initialize gradient accumulator if using accumulation
         if self.gradient_accumulation_steps > 1:
-            self.gradient_accumulator: Optional[BatchGradientAccumulator] = (
-                BatchGradientAccumulator(
-                    accumulation_steps=self.gradient_accumulation_steps,
-                    loss_fn=self._make_loss_fn(),
-                    model_apply_fn=self.model.apply,
-                )
+            self.gradient_accumulator: Optional[BatchGradientAccumulator] = BatchGradientAccumulator(
+                accumulation_steps=self.gradient_accumulation_steps,
+                loss_fn=self._make_loss_fn(),
+                model_apply_fn=self.model.apply,
             )
             logger.info("Gradient accumulator initialized")
 
@@ -744,9 +711,7 @@ class AGITrainer:
             params_snapshot=jax.tree_util.tree_map(lambda x: x.copy(), params_for_snapshot),
             fisher_matrix=fisher_matrix,
             importance_weights=fisher_matrix,
-            performance_metrics={
-                "final_loss": float(self.training_losses[-1]) if self.training_losses else 0.0
-            },
+            performance_metrics={"final_loss": float(self.training_losses[-1]) if self.training_losses else 0.0},
             num_samples=len(data_samples),
         )
 
@@ -845,9 +810,7 @@ class AGITrainer:
         """
         # Generate random token sequences for reasoning evaluation
         self.rng, rng = jax.random.split(self.rng)
-        input_ids = jax.random.randint(
-            rng, (batch_size, self.config.max_seq_length), 0, self.config.vocab_size
-        )
+        input_ids = jax.random.randint(rng, (batch_size, self.config.max_seq_length), 0, self.config.vocab_size)
         return self.create_batch_from_tensors(input_ids)
 
     @jax.jit
@@ -896,18 +859,14 @@ class AGITrainer:
             return loss, model_output
 
         # Compute gradients
-        (loss, model_output), grads = jax.value_and_grad(loss_fn, has_aux=True)(
-            actual_params, batch, rng
-        )
+        (loss, model_output), grads = jax.value_and_grad(loss_fn, has_aux=True)(actual_params, batch, rng)
 
         # NaN check for loss - replace with zero if NaN detected
         loss = jax.lax.cond(jnp.isnan(loss), lambda _: jnp.float32(0.0), lambda l: l, loss)
 
         # NaN check for gradients - zero out NaN gradients
         def zero_nan_grads(g):
-            return jax.tree_util.tree_map(
-                lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x), g
-            )
+            return jax.tree_util.tree_map(lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x), g)
 
         grads = zero_nan_grads(grads)
 
@@ -930,9 +889,7 @@ class AGITrainer:
         """
 
         def loss_fn(outputs, batch):
-            return compute_agi_loss(
-                outputs["logits"], batch["targets"], aux_outputs=outputs, config=self.config
-            )
+            return compute_agi_loss(outputs["logits"], batch["targets"], aux_outputs=outputs, config=self.config)
 
         return loss_fn
 
@@ -1013,14 +970,12 @@ class AGITrainer:
             return total_loss, (model_output, base_loss, ewc_loss)
 
         # Compute gradients
-        (total_loss, (_, base_loss, ewc_loss)), actual_grads = jax.value_and_grad(
-            loss_fn_with_ewc, has_aux=True
-        )(actual_params, batch, rng)
+        (total_loss, (_, base_loss, ewc_loss)), actual_grads = jax.value_and_grad(loss_fn_with_ewc, has_aux=True)(
+            actual_params, batch, rng
+        )
 
         # NaN check for loss
-        total_loss = jax.lax.cond(
-            jnp.isnan(total_loss), lambda _: jnp.float32(0.0), lambda l: l, total_loss
-        )
+        total_loss = jax.lax.cond(jnp.isnan(total_loss), lambda _: jnp.float32(0.0), lambda l: l, total_loss)
 
         # NaN check for gradients
         def zero_nan_grads(g):
@@ -1087,9 +1042,7 @@ class AGITrainer:
 
             # Evaluate consciousness coherence
             if "consciousness" in model_output:
-                consciousness_score = self.evaluate_consciousness_coherence(
-                    model_output["consciousness"]
-                )
+                consciousness_score = self.evaluate_consciousness_coherence(model_output["consciousness"])
                 consciousness_scores.append(consciousness_score)
 
         # Reasoning-specific evaluation
@@ -1109,9 +1062,7 @@ class AGITrainer:
             "eval_loss": np.mean(eval_losses) if eval_losses else float("inf"),
             "reasoning_accuracy": reasoning_accuracy,
             "reasoning_quality": np.mean(reasoning_scores) if reasoning_scores else 0.0,
-            "consciousness_coherence": (
-                np.mean(consciousness_scores) if consciousness_scores else 0.0
-            ),
+            "consciousness_coherence": (np.mean(consciousness_scores) if consciousness_scores else 0.0),
         }
 
         return metrics
@@ -1184,9 +1135,7 @@ class AGITrainer:
 
     def save_checkpoint(self, epoch: int, metrics: Dict):
         """Save training checkpoint using SafeTensors."""
-        checkpoint_manager = CheckpointManager(
-            checkpoint_dir="checkpoints", model_name="rtdlm_agi", keep_last_n=5
-        )
+        checkpoint_manager = CheckpointManager(checkpoint_dir="checkpoints", model_name="rtdlm_agi", keep_last_n=5)
 
         params_to_save = self.params
         if isinstance(self.params, tuple):
@@ -1407,9 +1356,7 @@ class AGITrainer:
         print(f"  Volatility:    {metrics['gradients'].get('volatility', 0):.4f}")
         print("=" * 60 + "\n")
 
-    def _run_epoch(
-        self, batch_iterator: Iterator[Dict[str, jnp.ndarray]], num_batches_estimate: int
-    ) -> List[float]:
+    def _run_epoch(self, batch_iterator: Iterator[Dict[str, jnp.ndarray]], num_batches_estimate: int) -> List[float]:
         """
         Run a single training epoch.
 
@@ -1456,9 +1403,7 @@ class AGITrainer:
                     "targets": batch["targets"],
                 }
 
-                is_complete = self.gradient_accumulator.accumulate(
-                    self.params, structured_batch, train_rng
-                )
+                is_complete = self.gradient_accumulator.accumulate(self.params, structured_batch, train_rng)
 
                 # Track tokens from this batch
                 num_tokens = int(jnp.sum(batch["targets"] != 0))
@@ -1470,9 +1415,7 @@ class AGITrainer:
 
                 # Apply updates when accumulation is complete
                 if is_complete:
-                    self.compute_tracker.end_batch(
-                        self._accumulated_tokens, self._accumulated_samples
-                    )
+                    self.compute_tracker.end_batch(self._accumulated_tokens, self._accumulated_samples)
 
                     avg_grads = self.gradient_accumulator.get_accumulated_grads()
                     avg_loss = self.gradient_accumulator.get_accumulated_loss()
@@ -1491,9 +1434,7 @@ class AGITrainer:
                         continue
 
                     # Apply optimizer update
-                    updates, self.opt_state = self.optimizer.update(
-                        avg_grads, self.opt_state, self.params
-                    )
+                    updates, self.opt_state = self.optimizer.update(avg_grads, self.opt_state, self.params)
                     self.params = optax.apply_updates(self.params, updates)
 
                     # Memory profiling - after optimizer step
@@ -1510,8 +1451,7 @@ class AGITrainer:
                     if self.step_count % 50 == 0:
                         ppl = self.perplexity_tracker.get_perplexity()
                         logger.info(
-                            f"  Step {self.step_count}, "
-                            f"Loss: {avg_loss:.4f}, PPL: {ppl:.2f} (accum={accum_steps})"
+                            f"  Step {self.step_count}, " f"Loss: {avg_loss:.4f}, PPL: {ppl:.2f} (accum={accum_steps})"
                         )
 
                     # Reset for next accumulation cycle
@@ -1550,23 +1490,15 @@ class AGITrainer:
                 # Log with perplexity
                 if batch_idx % 50 == 0:
                     ppl = self.perplexity_tracker.get_perplexity()
-                    logger.info(
-                        f"  Batch {batch_idx + 1}/{num_batches_estimate}, "
-                        f"Loss: {loss:.4f}, PPL: {ppl:.2f}"
-                    )
+                    logger.info(f"  Batch {batch_idx + 1}/{num_batches_estimate}, " f"Loss: {loss:.4f}, PPL: {ppl:.2f}")
 
         if retrieval_augmented_count > 0:
-            logger.info(
-                f"  Retrieval augmented batches: {retrieval_augmented_count}/{len(epoch_losses)}"
-            )
+            logger.info(f"  Retrieval augmented batches: {retrieval_augmented_count}/{len(epoch_losses)}")
 
         # Log production metrics summary
         ppl = self.perplexity_tracker.get_perplexity()
         compute_metrics = self.compute_tracker.compute()
-        logger.info(
-            f"  Epoch metrics: PPL={ppl:.2f}, "
-            f"Throughput={compute_metrics.tokens_per_second:.0f} tok/s"
-        )
+        logger.info(f"  Epoch metrics: PPL={ppl:.2f}, " f"Throughput={compute_metrics.tokens_per_second:.0f} tok/s")
 
         # Log memory summary at end of epoch
         if self.memory_profiler.enabled:
@@ -1591,9 +1523,7 @@ class AGITrainer:
             Dictionary of validation metrics
         """
         if use_streaming:
-            val_batches: List[Dict[str, jnp.ndarray]] = val_data.get_validation_batches(
-                max_batches=50
-            )
+            val_batches: List[Dict[str, jnp.ndarray]] = val_data.get_validation_batches(max_batches=50)
         else:
             val_batches = val_data
 
@@ -1680,9 +1610,7 @@ class AGITrainer:
         self.config.print_summary()
 
         # Prepare training
-        start_epoch, _, num_batches_estimate, use_streaming = self._prepare_training(
-            train_data, resume_checkpoint
-        )
+        start_epoch, _, num_batches_estimate, use_streaming = self._prepare_training(train_data, resume_checkpoint)
 
         best_val_loss = float("inf")
         patience_counter = 0
@@ -1728,9 +1656,7 @@ class AGITrainer:
                     logger.info(f"Periodic checkpoint saved at epoch {epoch}")
 
                 # Validation
-                should_validate = (epoch % self.config.eval_interval == 0) or (
-                    epoch == self.config.num_epochs - 1
-                )
+                should_validate = (epoch % self.config.eval_interval == 0) or (epoch == self.config.num_epochs - 1)
                 if should_validate:
                     metrics = self._run_validation(val_data, use_streaming)
 
@@ -1740,9 +1666,7 @@ class AGITrainer:
 
                     logger.info(f"  Validation Loss: {metrics['eval_loss']:.4f}")
                     logger.info(f"  Reasoning Accuracy: {metrics['reasoning_accuracy']:.4f}")
-                    logger.info(
-                        f"  Consciousness Coherence: {metrics['consciousness_coherence']:.4f}"
-                    )
+                    logger.info(f"  Consciousness Coherence: {metrics['consciousness_coherence']:.4f}")
 
                     # MLflow validation metrics
                     if self.mlflow_tracker is not None:
@@ -1750,9 +1674,7 @@ class AGITrainer:
                             {
                                 "val/loss": float(metrics["eval_loss"]),
                                 "val/reasoning_accuracy": float(metrics["reasoning_accuracy"]),
-                                "val/consciousness_coherence": float(
-                                    metrics["consciousness_coherence"]
-                                ),
+                                "val/consciousness_coherence": float(metrics["consciousness_coherence"]),
                             },
                             step=epoch,
                         )
@@ -1845,25 +1767,13 @@ Examples:
         help="Path to checkpoint file to resume training from (.safetensors)",
     )
 
-    parser.add_argument(
-        "--epochs", "-e", type=int, default=10, help="Total number of training epochs (default: 10)"
-    )
-    parser.add_argument(
-        "--batch-size", "-b", type=int, default=16, help="Training batch size (default: 16)"
-    )
-    parser.add_argument(
-        "--lr", "--learning-rate", type=float, default=3e-4, help="Learning rate (default: 3e-4)"
-    )
+    parser.add_argument("--epochs", "-e", type=int, default=10, help="Total number of training epochs (default: 10)")
+    parser.add_argument("--batch-size", "-b", type=int, default=16, help="Training batch size (default: 16)")
+    parser.add_argument("--lr", "--learning-rate", type=float, default=3e-4, help="Learning rate (default: 3e-4)")
 
-    parser.add_argument(
-        "--d-model", type=int, default=512, help="Model hidden dimension (default: 512)"
-    )
-    parser.add_argument(
-        "--num-layers", type=int, default=12, help="Number of transformer layers (default: 12)"
-    )
-    parser.add_argument(
-        "--num-heads", type=int, default=8, help="Number of attention heads (default: 8)"
-    )
+    parser.add_argument("--d-model", type=int, default=512, help="Model hidden dimension (default: 512)")
+    parser.add_argument("--num-layers", type=int, default=12, help="Number of transformer layers (default: 12)")
+    parser.add_argument("--num-heads", type=int, default=8, help="Number of attention heads (default: 8)")
 
     parser.add_argument(
         "--data-dir",
@@ -1929,9 +1839,7 @@ class ShardedDataLoader:
         self.samples_per_shard = first_shard["input_ids"].shape[0]
         self.total_samples = self.samples_per_shard * self.num_shards
 
-        logger.info(
-            f"DataLoader initialized: {self.num_shards} shards, ~{self.total_samples} samples"
-        )
+        logger.info(f"DataLoader initialized: {self.num_shards} shards, ~{self.total_samples} samples")
 
     def _load_shard(self, shard_path: Path) -> Dict[str, np.ndarray]:
         """Load a single shard from disk.
@@ -1951,9 +1859,7 @@ class ShardedDataLoader:
 
         return tensors
 
-    def _create_batches_from_shard(
-        self, shard_data: Dict[str, np.ndarray]
-    ) -> List[Dict[str, jnp.ndarray]]:
+    def _create_batches_from_shard(self, shard_data: Dict[str, np.ndarray]) -> List[Dict[str, jnp.ndarray]]:
         """Create batches from a loaded shard."""
         input_ids = shard_data["input_ids"]
         targets = shard_data.get("targets", input_ids)
@@ -1984,9 +1890,7 @@ class ShardedDataLoader:
             current_batch_size = batch_input_ids.shape[0]
             if current_batch_size < self.batch_size:
                 pad_size = self.batch_size - current_batch_size
-                batch_input_ids = jnp.pad(
-                    batch_input_ids, ((0, pad_size), (0, 0)), constant_values=0
-                )
+                batch_input_ids = jnp.pad(batch_input_ids, ((0, pad_size), (0, 0)), constant_values=0)
                 batch_targets = jnp.pad(batch_targets, ((0, pad_size), (0, 0)), constant_values=0)
 
             batches.append(
@@ -2125,9 +2029,7 @@ def main():
                 shuffle=False,
             )
 
-            logger.info(
-                f"Streaming data loader ready: ~{train_loader.num_batches_per_epoch} batches/epoch"
-            )
+            logger.info(f"Streaming data loader ready: ~{train_loader.num_batches_per_epoch} batches/epoch")
 
             train_data = train_loader
             val_data = val_loader

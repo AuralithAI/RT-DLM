@@ -286,8 +286,7 @@ def requires(*dependencies: str):
                     missing.append(dep)
             if missing:
                 raise ImportError(
-                    f"{obj.__name__} requires: {', '.join(missing)}. "
-                    f"Install with: pip install {' '.join(missing)}"
+                    f"{obj.__name__} requires: {', '.join(missing)}. " f"Install with: pip install {' '.join(missing)}"
                 )
 
         if callable(obj) and not isinstance(obj, type):

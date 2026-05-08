@@ -75,9 +75,7 @@ class TestIntegration(unittest.TestCase):
             c_out = consciousness(internal_state, external_input)
             # self_awareness is (batch, d_model), need to expand for creativity input
             awareness_expanded = jnp.expand_dims(c_out["self_awareness"], axis=1)
-            awareness_expanded = jnp.broadcast_to(
-                awareness_expanded, (BATCH_SIZE, SEQ_LEN, D_MODEL)
-            )
+            awareness_expanded = jnp.broadcast_to(awareness_expanded, (BATCH_SIZE, SEQ_LEN, D_MODEL))
             cr_out = creativity(awareness_expanded)
 
             return {"awareness": c_out["self_awareness"], "novelty": cr_out["novelty_score"]}

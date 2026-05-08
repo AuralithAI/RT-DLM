@@ -103,9 +103,7 @@ class TestRealTimeFeedbackBuffer(unittest.TestCase):
         low_sample = FeedbackSample(input_text="low", output_text="low", user_rating=0.5)
 
         # High priority (above threshold)
-        high_sample = FeedbackSample(
-            input_text="high", output_text="high", user_rating=0.95  # Above 0.8 threshold
-        )
+        high_sample = FeedbackSample(input_text="high", output_text="high", user_rating=0.95)  # Above 0.8 threshold
 
         self.buffer.add_feedback(low_sample)
         self.buffer.add_feedback(high_sample)
@@ -152,9 +150,7 @@ class TestRealTimeFeedbackBuffer(unittest.TestCase):
 
         # Add samples
         for i in range(20):
-            sample = FeedbackSample(
-                input_text=f"input_{i}", output_text=f"output_{i}", user_rating=0.5
-            )
+            sample = FeedbackSample(input_text=f"input_{i}", output_text=f"output_{i}", user_rating=0.5)
             self.buffer.add_feedback(sample)
 
         batch = self.buffer.get_training_batch(batch_size=10)
@@ -172,9 +168,7 @@ class TestRealTimeFeedbackBuffer(unittest.TestCase):
 
         # Add high priority samples
         for i in range(10):
-            sample = FeedbackSample(
-                input_text=f"high_{i}", output_text=f"high_{i}", user_rating=0.95
-            )
+            sample = FeedbackSample(input_text=f"high_{i}", output_text=f"high_{i}", user_rating=0.95)
             self.buffer.add_feedback(sample)
 
         # Get prioritized batch - should prefer priority buffer

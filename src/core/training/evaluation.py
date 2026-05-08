@@ -223,9 +223,7 @@ class EvaluationMetrics:
 
         # Gather log probs for target tokens
         # targets: [batch, seq_len] -> one-hot would be [batch, seq_len, vocab]
-        target_log_probs = jnp.take_along_axis(log_probs, targets[:, :, None], axis=-1).squeeze(
-            -1
-        )  # [batch, seq_len]
+        target_log_probs = jnp.take_along_axis(log_probs, targets[:, :, None], axis=-1).squeeze(-1)  # [batch, seq_len]
 
         # Apply mask if provided
         if mask is None:
@@ -811,9 +809,7 @@ class ValidationRunner:
                 logits, targets, loss=0.0  # We'll compute loss from perplexity
             )
 
-            all_losses.append(
-                batch_metrics.loss if batch_metrics.loss > 0 else -jnp.log(batch_metrics.perplexity)
-            )
+            all_losses.append(batch_metrics.loss if batch_metrics.loss > 0 else -jnp.log(batch_metrics.perplexity))
             all_perplexities.append(batch_metrics.perplexity)
             all_accuracies.append(batch_metrics.token_accuracy)
             total_tokens += batch_metrics.num_tokens

@@ -34,9 +34,7 @@ class TestToolSelection(unittest.TestCase):
         from src.core.rlm.tool_selector import ToolSelection
         from src.config.rlm_config import ToolType
 
-        selection = ToolSelection(
-            tool=ToolType.GREP, confidence=0.8, parameters={"pattern": "test"}
-        )
+        selection = ToolSelection(tool=ToolType.GREP, confidence=0.8, parameters={"pattern": "test"})
 
         self.assertIsNone(selection.reasoning)
 
@@ -166,9 +164,7 @@ class TestToolClassifier(unittest.TestCase):
         def forward_fn(query, context, state):
             selector = ToolSelector(d_model=64, num_tools=num_tools)
             # Combine query and context
-            combined = jnp.concatenate(
-                [selector.query_encoder(query), selector.context_encoder(context)], axis=-1
-            )
+            combined = jnp.concatenate([selector.query_encoder(query), selector.context_encoder(context)], axis=-1)
             logits = selector.tool_classifier(combined)
             return logits
 
@@ -195,9 +191,7 @@ class TestTerminationHead(unittest.TestCase):
 
         def forward_fn(query, context, state):
             selector = ToolSelector(d_model=64, num_tools=5)
-            combined = jnp.concatenate(
-                [selector.query_encoder(query), selector.context_encoder(context)], axis=-1
-            )
+            combined = jnp.concatenate([selector.query_encoder(query), selector.context_encoder(context)], axis=-1)
             # Get first d_model features for termination
             termination = selector.termination_head(combined[..., :64])
             return termination

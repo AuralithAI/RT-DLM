@@ -74,9 +74,7 @@ class TestGraphAttentionLayer(unittest.TestCase):
         adjacency = jnp.eye(MAX_NODES)[None, :, :].repeat(BATCH_SIZE, axis=0)
 
         params = transformed.init(self.rng, node_features, adjacency)
-        updated_features, attention_weights = transformed.apply(
-            params, self.rng, node_features, adjacency
-        )
+        updated_features, attention_weights = transformed.apply(params, self.rng, node_features, adjacency)
 
         # Check output shapes
         self.assertEqual(updated_features.shape, (BATCH_SIZE, MAX_NODES, D_MODEL))
@@ -117,9 +115,7 @@ class TestConceptualGraphBuilder(unittest.TestCase):
         """Test that graph builder creates valid graphs"""
 
         def build_fn(text_embeddings):
-            builder = ConceptualGraphBuilder(
-                d_model=D_MODEL, max_nodes=MAX_NODES, edge_threshold=0.3
-            )
+            builder = ConceptualGraphBuilder(d_model=D_MODEL, max_nodes=MAX_NODES, edge_threshold=0.3)
             return builder(text_embeddings)
 
         transformed = hk.transform(build_fn)
@@ -168,9 +164,7 @@ class TestSemanticParser(unittest.TestCase):
         """Test full semantic parsing pipeline"""
 
         def parse_fn(text_input, query):
-            parser = SemanticParser(
-                d_model=D_MODEL, max_nodes=MAX_NODES, num_hops=NUM_HOPS, num_heads=NUM_HEADS
-            )
+            parser = SemanticParser(d_model=D_MODEL, max_nodes=MAX_NODES, num_hops=NUM_HOPS, num_heads=NUM_HEADS)
             return parser.parse(text_input, query, is_training=False)
 
         transformed = hk.transform(parse_fn)
@@ -350,9 +344,7 @@ class TestSemanticParserFactory(unittest.TestCase):
 
     def test_factory_creates_valid_transform(self):
         """Test factory creates valid Haiku transformed function"""
-        parser_transform = create_semantic_parser_fn(
-            d_model=D_MODEL, max_nodes=MAX_NODES, num_hops=NUM_HOPS
-        )
+        parser_transform = create_semantic_parser_fn(d_model=D_MODEL, max_nodes=MAX_NODES, num_hops=NUM_HOPS)
 
         text_input = jax.random.normal(self.rng, (BATCH_SIZE, SEQ_LEN, D_MODEL))
         query = jax.random.normal(self.rng, (BATCH_SIZE, D_MODEL))

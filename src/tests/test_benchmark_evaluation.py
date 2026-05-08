@@ -448,9 +448,7 @@ class TestIntegration(unittest.TestCase):
             # Create mock batch
             batch_size, seq_len, vocab_size = 4, 16, 100
             logits = jax.random.normal(jax.random.PRNGKey(i), (batch_size, seq_len, vocab_size))
-            targets = jax.random.randint(
-                jax.random.PRNGKey(i + 100), (batch_size, seq_len), 0, vocab_size
-            )
+            targets = jax.random.randint(jax.random.PRNGKey(i + 100), (batch_size, seq_len), 0, vocab_size)
 
             # Track compute
             compute_tracker.start_batch()

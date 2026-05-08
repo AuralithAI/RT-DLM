@@ -86,9 +86,7 @@ class TestMultiModalFusionLayer(unittest.TestCase):
         from src.modules.multimodal.fusion_module import MultiModalFusionLayer
 
         def init_fn():
-            fusion = MultiModalFusionLayer(
-                d_model=64, num_heads=4, modalities=["text", "image", "audio"]
-            )
+            fusion = MultiModalFusionLayer(d_model=64, num_heads=4, modalities=["text", "image", "audio"])
             # Use same sequence length for all modalities (required for concatenation)
             modal_inputs = {
                 "text": jnp.zeros((1, 10, 64)),
@@ -153,9 +151,7 @@ class TestMultiModalFusionLayer(unittest.TestCase):
         from src.modules.multimodal.fusion_module import MultiModalFusionLayer
 
         def forward_fn(modal_inputs):
-            fusion = MultiModalFusionLayer(
-                d_model=64, num_heads=4, modalities=["text", "image", "audio"]
-            )
+            fusion = MultiModalFusionLayer(d_model=64, num_heads=4, modalities=["text", "image", "audio"])
             return fusion(modal_inputs)
 
         init = hk.transform(forward_fn)

@@ -236,9 +236,7 @@ class TestFallbackBehavior(unittest.TestCase):
         from src.core.scalable_training import ScalableMesh
         from src.config.model_parallel_config import ModelParallelConfig
 
-        config = ModelParallelConfig(
-            tensor_parallel=True, tensor_parallel_size=1000, pipeline_parallel=False
-        )
+        config = ModelParallelConfig(tensor_parallel=True, tensor_parallel_size=1000, pipeline_parallel=False)
 
         mesh = ScalableMesh(config)
 

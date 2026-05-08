@@ -90,9 +90,7 @@ class TestFairnessResult(unittest.TestCase):
 
     def test_result_creation(self):
         """Test creating a fairness result."""
-        result = FairnessResult(
-            fairness_score=0.85, demographic_parity_diff=0.05, equalized_odds_diff=0.08
-        )
+        result = FairnessResult(fairness_score=0.85, demographic_parity_diff=0.05, equalized_odds_diff=0.08)
 
         self.assertEqual(result.fairness_score, 0.85)
         self.assertEqual(result.demographic_parity_diff, 0.05)

@@ -193,9 +193,7 @@ class TestSpikingAttention(unittest.TestCase):
         from src.core.model.model_module_self_attention import SelfAttentionModel
 
         def init_fn():
-            model = SelfAttentionModel(
-                d_model=64, num_heads=4, vocab_size=1000, max_seq_length=128, use_spiking=True
-            )
+            model = SelfAttentionModel(d_model=64, num_heads=4, vocab_size=1000, max_seq_length=128, use_spiking=True)
             x = jnp.zeros((1, 10), dtype=jnp.int32)
             return model(x)
 
@@ -210,9 +208,7 @@ class TestSpikingAttention(unittest.TestCase):
         from src.core.model.model_module_self_attention import SelfAttentionModel
 
         def init_fn():
-            model = SelfAttentionModel(
-                d_model=64, num_heads=4, vocab_size=1000, max_seq_length=128, use_spiking=False
-            )
+            model = SelfAttentionModel(d_model=64, num_heads=4, vocab_size=1000, max_seq_length=128, use_spiking=False)
             x = jnp.zeros((1, 10), dtype=jnp.int32)
             return model(x)
 

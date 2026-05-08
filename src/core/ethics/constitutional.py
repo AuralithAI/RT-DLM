@@ -10,6 +10,7 @@ import jax.numpy as jnp
 @dataclass
 class ConstitutionalRule:
     """A single constitutional rule."""
+
     rule_id: str
     category: str
     text: str
@@ -19,6 +20,7 @@ class ConstitutionalRule:
 @dataclass
 class ConstitutionalRuleset:
     """Collection of rules grouped by harm category."""
+
     rules: List[ConstitutionalRule] = field(default_factory=list)
 
     def add(self, rule_id: str, category: str, text: str, severity: float = 1.0) -> None:
@@ -105,9 +107,7 @@ def constitutional_self_critique_loss(
     out: Dict[str, jnp.ndarray] = {}
     out["imitation"] = revision_imitation_loss(revised_logits, revised_labels, revised_mask)
     if original_logits is not None and violation_mask is not None:
-        out["consistency"] = critique_consistency_loss(
-            original_logits, revised_logits, violation_mask
-        )
+        out["consistency"] = critique_consistency_loss(original_logits, revised_logits, violation_mask)
         out["total"] = out["imitation"] + consistency_weight * out["consistency"]
     else:
         out["total"] = out["imitation"]

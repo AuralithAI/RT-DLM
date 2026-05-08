@@ -1,7 +1,7 @@
 """Direct Preference Optimization (DPO) loss for offline alignment."""
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 import jax
 import jax.numpy as jnp
@@ -10,14 +10,13 @@ import jax.numpy as jnp
 @dataclass
 class DPOConfig:
     """DPO hyperparameters."""
+
     beta: float = 0.1
     label_smoothing: float = 0.0
     reference_free: bool = False
 
 
-def _sequence_logprob(
-    logits: jnp.ndarray, labels: jnp.ndarray, mask: Optional[jnp.ndarray]
-) -> jnp.ndarray:
+def _sequence_logprob(logits: jnp.ndarray, labels: jnp.ndarray, mask: Optional[jnp.ndarray]) -> jnp.ndarray:
     """Sum of token log-probabilities along the sequence, respecting `mask`."""
     log_probs = jax.nn.log_softmax(logits, axis=-1)
     one_hot = jax.nn.one_hot(labels, logits.shape[-1])
@@ -47,18 +46,13 @@ def dpo_loss(
         ref_c = jnp.zeros_like(pi_c)
         ref_r = jnp.zeros_like(pi_r)
     else:
-        ref_c = jax.lax.stop_gradient(
-            _sequence_logprob(ref_chosen_logits, chosen_labels, chosen_mask)
-        )
-        ref_r = jax.lax.stop_gradient(
-            _sequence_logprob(ref_rejected_logits, rejected_labels, rejected_mask)
-        )
+        ref_c = jax.lax.stop_gradient(_sequence_logprob(ref_chosen_logits, chosen_labels, chosen_mask))
+        ref_r = jax.lax.stop_gradient(_sequence_logprob(ref_rejected_logits, rejected_labels, rejected_mask))
 
     logits = cfg.beta * ((pi_c - ref_c) - (pi_r - ref_r))
     if cfg.label_smoothing > 0.0:
         loss = -(
-            (1.0 - cfg.label_smoothing) * jax.nn.log_sigmoid(logits)
-            + cfg.label_smoothing * jax.nn.log_sigmoid(-logits)
+            (1.0 - cfg.label_smoothing) * jax.nn.log_sigmoid(logits) + cfg.label_smoothing * jax.nn.log_sigmoid(-logits)
         )
     else:
         loss = -jax.nn.log_sigmoid(logits)
@@ -96,8 +90,6 @@ def ipo_loss(
     return jnp.mean((margin - target) ** 2)
 
 
-def dpo_accuracy(
-    policy_chosen_logp: jnp.ndarray, policy_rejected_logp: jnp.ndarray
-) -> jnp.ndarray:
+def dpo_accuracy(policy_chosen_logp: jnp.ndarray, policy_rejected_logp: jnp.ndarray) -> jnp.ndarray:
     """Fraction of pairs where chosen logp exceeds rejected logp."""
     return jnp.mean((policy_chosen_logp > policy_rejected_logp).astype(jnp.float32))

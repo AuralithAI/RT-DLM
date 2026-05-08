@@ -31,9 +31,7 @@ class TestMixedPrecisionPolicy:
         """Test bfloat16 mixed precision policy"""
         from src.core.training_utils import MixedPrecisionPolicy
 
-        policy = MixedPrecisionPolicy(
-            param_dtype="bfloat16", compute_dtype="bfloat16", output_dtype="float32"
-        )
+        policy = MixedPrecisionPolicy(param_dtype="bfloat16", compute_dtype="bfloat16", output_dtype="float32")
         assert policy.param_dtype == jnp.bfloat16
         assert policy.compute_dtype == jnp.bfloat16
         assert policy.output_dtype == jnp.float32
@@ -140,9 +138,7 @@ class TestDistributedTraining:
         """Test effective batch size calculation"""
         from src.core.training_utils import DistributedTrainingConfig
 
-        config = DistributedTrainingConfig(
-            enabled=True, num_devices=4, gradient_accumulation_steps=2
-        )
+        config = DistributedTrainingConfig(enabled=True, num_devices=4, gradient_accumulation_steps=2)
         assert config.effective_batch_size_multiplier == 8
 
     def test_shard_batch(self):

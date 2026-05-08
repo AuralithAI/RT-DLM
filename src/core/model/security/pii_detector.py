@@ -92,9 +92,7 @@ class PIIDetector:
 
     # Compiled patterns for each PII type
     PATTERNS: Dict[PIIType, Pattern] = {
-        PIIType.EMAIL: re.compile(
-            r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b", re.IGNORECASE
-        ),
+        PIIType.EMAIL: re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b", re.IGNORECASE),
         PIIType.PHONE: re.compile(
             r"\b(?:\+?1[-.\s]?)?"  # Country code
             r"(?:\(?\d{3}\)?[-.\s]?)?"  # Area code
@@ -121,9 +119,7 @@ class PIIDetector:
             r"(?:19|20)\d{2}[/\-](?:0?[1-9]|1[0-2])[/\-](?:0?[1-9]|[12]\d|3[01])"  # YYYY/MM/DD
             r")\b"
         ),
-        PIIType.IBAN: re.compile(
-            r"\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}(?:[A-Z0-9]?){0,16}\b", re.IGNORECASE
-        ),
+        PIIType.IBAN: re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}(?:[A-Z0-9]?){0,16}\b", re.IGNORECASE),
         PIIType.PASSPORT: re.compile(r"\b[A-Z]{1,2}\d{6,9}\b", re.IGNORECASE),
         PIIType.DRIVERS_LICENSE: re.compile(r"\b[A-Z]{1,2}\d{5,8}\b", re.IGNORECASE),
     }
@@ -356,9 +352,7 @@ class PIIDetector:
         # Mod 97 check
         return int(converted) % 97 == 1
 
-    def add_custom_pattern(
-        self, name: str, pattern: str, validator: Optional[Callable[[str], bool]] = None
-    ) -> None:
+    def add_custom_pattern(self, name: str, pattern: str, validator: Optional[Callable[[str], bool]] = None) -> None:
         """
         Add a custom PII pattern.
 

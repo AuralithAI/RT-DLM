@@ -90,12 +90,8 @@ class RetrievalContrastiveLoss:
         metrics = {}
 
         # Normalize embeddings
-        query_norm = query_embeddings / (
-            jnp.linalg.norm(query_embeddings, axis=-1, keepdims=True) + 1e-8
-        )
-        pos_norm = positive_embeddings / (
-            jnp.linalg.norm(positive_embeddings, axis=-1, keepdims=True) + 1e-8
-        )
+        query_norm = query_embeddings / (jnp.linalg.norm(query_embeddings, axis=-1, keepdims=True) + 1e-8)
+        pos_norm = positive_embeddings / (jnp.linalg.norm(positive_embeddings, axis=-1, keepdims=True) + 1e-8)
 
         # Positive similarity
         pos_sim = jnp.sum(query_norm * pos_norm, axis=-1)  # [batch]
@@ -103,9 +99,7 @@ class RetrievalContrastiveLoss:
 
         if negative_embeddings is not None:
             # Negative similarities
-            neg_norm = negative_embeddings / (
-                jnp.linalg.norm(negative_embeddings, axis=-1, keepdims=True) + 1e-8
-            )
+            neg_norm = negative_embeddings / (jnp.linalg.norm(negative_embeddings, axis=-1, keepdims=True) + 1e-8)
             neg_sim = jnp.sum(query_norm[:, None, :] * neg_norm, axis=-1)  # [batch, num_neg]
 
             metrics["negative_similarity"] = jnp.mean(neg_sim)

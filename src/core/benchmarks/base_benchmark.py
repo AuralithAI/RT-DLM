@@ -296,17 +296,12 @@ class BenchmarkBase(abc.ABC):
 
             if verbose:
                 status = "✓" if is_correct else "✗"
-                logger.info(
-                    f"  [{status}] {sample.sample_id}: "
-                    f"pred={prediction}, truth={sample.correct_answer}"
-                )
+                logger.info(f"  [{status}] {sample.sample_id}: " f"pred={prediction}, truth={sample.correct_answer}")
 
         elapsed = time.time() - start_time
 
         # Per-category accuracy
-        category_scores = {
-            cat: cat_correct[cat] / cat_total[cat] for cat in cat_total if cat_total[cat] > 0
-        }
+        category_scores = {cat: cat_correct[cat] / cat_total[cat] for cat in cat_total if cat_total[cat] > 0}
 
         result = BenchmarkResult(
             benchmark_name=self.name,

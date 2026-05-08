@@ -192,14 +192,10 @@ class HybridAudioEncoder(hk.Module):
         rnn_features = self.rnn_encoder(audio_features)
 
         # Transformer features for long-range dependencies
-        transformer_features = self.transformer_encoder(
-            audio_features, audio_features, audio_features
-        )
+        transformer_features = self.transformer_encoder(audio_features, audio_features, audio_features)
 
         # Fuse all features
-        all_features = jnp.concatenate(
-            [signal_features, cnn_features, rnn_features, transformer_features], axis=-1
-        )
+        all_features = jnp.concatenate([signal_features, cnn_features, rnn_features, transformer_features], axis=-1)
 
         fused_features = self.feature_fusion(all_features)
 
@@ -298,9 +294,7 @@ class SignalProcessingBackbone(hk.Module):
         rms_energy = jnp.sqrt(jnp.mean(spectrogram**2, axis=-1, keepdims=True))
 
         # Combine features
-        features = jnp.concatenate(
-            [spectral_centroid, rolloff_indices.astype(jnp.float32), zcr, rms_energy], axis=-1
-        )
+        features = jnp.concatenate([spectral_centroid, rolloff_indices.astype(jnp.float32), zcr, rms_energy], axis=-1)
 
         # Pad to d_model if needed
         if features.shape[-1] < self.d_model:
@@ -358,9 +352,7 @@ class ConvNeXtBlock(hk.Module):
         )
 
         # Pointwise convolution
-        pointwise_conv = hk.Conv1D(
-            output_channels=self.out_channels, kernel_shape=1, name="pointwise_conv"
-        )
+        pointwise_conv = hk.Conv1D(output_channels=self.out_channels, kernel_shape=1, name="pointwise_conv")
 
         # Layer normalization
         layer_norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name="layer_norm")
@@ -407,9 +399,7 @@ class RNNAudioEncoder(hk.Module):
         self.d_model = d_model
 
         # Simple RNN-like temporal modeling using convolutions
-        self.temporal_conv = hk.Conv1D(
-            output_channels=d_model, kernel_shape=5, padding="SAME", name="temporal_conv"
-        )
+        self.temporal_conv = hk.Conv1D(output_channels=d_model, kernel_shape=5, padding="SAME", name="temporal_conv")
 
         # Attention for temporal modeling
         self.temporal_attention = hk.MultiHeadAttention(

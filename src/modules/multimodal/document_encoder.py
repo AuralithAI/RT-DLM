@@ -15,9 +15,7 @@ def _2d_sinusoidal_bias(rows: int, cols: int, dim: int) -> jnp.ndarray:
     c = jnp.arange(cols, dtype=jnp.float32)[:, None] * div
     row_emb = jnp.concatenate([jnp.sin(r), jnp.cos(r)], axis=-1)
     col_emb = jnp.concatenate([jnp.sin(c), jnp.cos(c)], axis=-1)
-    grid = jnp.concatenate(
-        [jnp.repeat(row_emb, cols, axis=0), jnp.tile(col_emb, (rows, 1))], axis=-1
-    )
+    grid = jnp.concatenate([jnp.repeat(row_emb, cols, axis=0), jnp.tile(col_emb, (rows, 1))], axis=-1)
     if grid.shape[-1] < dim:
         grid = jnp.concatenate([grid, jnp.zeros((grid.shape[0], dim - grid.shape[-1]))], axis=-1)
     return grid[:, :dim]
@@ -33,12 +31,8 @@ class TableStructureEncoder(hk.Module):
         self.max_cols = max_cols
 
     def __call__(self, cells: jnp.ndarray, rows: int, cols: int) -> jnp.ndarray:
-        row_emb = hk.get_parameter(
-            "row_emb", [self.max_rows, self.d_model], init=hk.initializers.TruncatedNormal(0.02)
-        )
-        col_emb = hk.get_parameter(
-            "col_emb", [self.max_cols, self.d_model], init=hk.initializers.TruncatedNormal(0.02)
-        )
+        row_emb = hk.get_parameter("row_emb", [self.max_rows, self.d_model], init=hk.initializers.TruncatedNormal(0.02))
+        col_emb = hk.get_parameter("col_emb", [self.max_cols, self.d_model], init=hk.initializers.TruncatedNormal(0.02))
         grid_rows = jnp.repeat(row_emb[:rows], cols, axis=0)
         grid_cols = jnp.tile(col_emb[:cols], (rows, 1))
         bias = (grid_rows + grid_cols)[None, : rows * cols, :]
@@ -60,8 +54,10 @@ class ChartDecoder(hk.Module):
         )
         self.bbox_head = hk.Linear(8, name="axis_bbox")
         self.value_attn = hk.MultiHeadAttention(
-            num_heads=num_heads, key_size=d_model // num_heads,
-            w_init=hk.initializers.TruncatedNormal(0.02), name="value_attn",
+            num_heads=num_heads,
+            key_size=d_model // num_heads,
+            w_init=hk.initializers.TruncatedNormal(0.02),
+            name="value_attn",
         )
         self.value_proj = hk.Linear(1, name="value_proj")
 
@@ -93,7 +89,10 @@ class DocumentEncoder(hk.Module):
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.patch_embed = hk.Conv2D(
-            d_model, kernel_shape=patch_size, stride=patch_size, padding="VALID",
+            d_model,
+            kernel_shape=patch_size,
+            stride=patch_size,
+            padding="VALID",
             name="patch_embed",
         )
         self.layers = []
@@ -101,13 +100,13 @@ class DocumentEncoder(hk.Module):
         for i in range(num_layers):
             self.layers.append(
                 hk.MultiHeadAttention(
-                    num_heads=num_heads, key_size=d_model // num_heads,
-                    w_init=hk.initializers.TruncatedNormal(0.02), name=f"doc_attn_{i}",
+                    num_heads=num_heads,
+                    key_size=d_model // num_heads,
+                    w_init=hk.initializers.TruncatedNormal(0.02),
+                    name=f"doc_attn_{i}",
                 )
             )
-            self.norms.append(
-                hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name=f"doc_ln_{i}")
-            )
+            self.norms.append(hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name=f"doc_ln_{i}"))
         self.table_encoder = TableStructureEncoder(d_model, name="table_encoder")
         self.chart_decoder = ChartDecoder(d_model, name="chart_decoder")
 

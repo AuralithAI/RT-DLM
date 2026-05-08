@@ -149,9 +149,7 @@ class TestAdaptiveForgettingCurve(unittest.TestCase):
 
         current_time = time.time()
         rare_retention = self.curve.calculate_retention_probability(rarely_accessed, current_time)
-        freq_retention = self.curve.calculate_retention_probability(
-            frequently_accessed, current_time
-        )
+        freq_retention = self.curve.calculate_retention_probability(frequently_accessed, current_time)
 
         self.assertLess(rare_retention, freq_retention)
 

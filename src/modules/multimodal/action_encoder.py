@@ -1,5 +1,4 @@
 import haiku as hk
-import jax
 import jax.numpy as jnp
 from typing import Dict
 
@@ -32,13 +31,13 @@ class ActionEncoder(hk.Module):
         for i in range(num_layers):
             self.layers.append(
                 hk.MultiHeadAttention(
-                    num_heads=num_heads, key_size=d_model // num_heads,
-                    w_init=hk.initializers.TruncatedNormal(0.02), name=f"action_attn_{i}",
+                    num_heads=num_heads,
+                    key_size=d_model // num_heads,
+                    w_init=hk.initializers.TruncatedNormal(0.02),
+                    name=f"action_attn_{i}",
                 )
             )
-            self.norms.append(
-                hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name=f"action_ln_{i}")
-            )
+            self.norms.append(hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name=f"action_ln_{i}"))
         self.predictor = hk.Linear(num_axes * num_bins, name="action_pred")
 
     def _discretize(self, actions: jnp.ndarray) -> jnp.ndarray:

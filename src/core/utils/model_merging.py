@@ -38,9 +38,7 @@ def weighted_average(params_list: Sequence[Any], weights: Sequence[float]) -> An
     norm = [w / total for w in weights]
     flats = [_flatten(p) for p in params_list]
     keys = list(flats[0].keys())
-    merged: Dict[str, Any] = {
-        k: sum(norm[i] * flats[i][k] for i in range(len(flats))) for k in keys
-    }
+    merged: Dict[str, Any] = {k: sum(norm[i] * flats[i][k] for i in range(len(flats))) for k in keys}
     return _unflatten_like(params_list[0], merged)
 
 

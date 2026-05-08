@@ -72,9 +72,7 @@ class TestThinkBudgetScaling:
         budgets = [256, 1024, 4096, 8192]
         step_counts = [self._run_apply_think_budget(b)[0] for b in budgets]
         for i in range(len(step_counts) - 1):
-            assert (
-                step_counts[i] <= step_counts[i + 1]
-            ), f"Steps should be monotonically increasing: {step_counts}"
+            assert step_counts[i] <= step_counts[i + 1], f"Steps should be monotonically increasing: {step_counts}"
 
 
 class TestComputePlanWithThinkBudget:

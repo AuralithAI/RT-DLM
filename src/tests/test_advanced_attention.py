@@ -132,9 +132,7 @@ class TestGroupedQueryAttention:
         head_dim = 32
 
         def forward(x):
-            gqa = GroupedQueryAttention(
-                num_heads, num_kv_heads, head_dim, use_rope=True, max_seq_length=64
-            )
+            gqa = GroupedQueryAttention(num_heads, num_kv_heads, head_dim, use_rope=True, max_seq_length=64)
             return gqa(x, is_training=False)
 
         forward_fn = hk.transform(forward)
@@ -379,9 +377,7 @@ class TestAdvancedSelfAttention:
 
     def test_linear_attention_mode(self):
         """Test linear attention mode."""
-        config = AttentionConfig(
-            d_model=64, num_heads=4, attention_type="linear", position_encoding="none"
-        )
+        config = AttentionConfig(d_model=64, num_heads=4, attention_type="linear", position_encoding="none")
         vocab_size = 500
 
         def forward(inputs):
@@ -475,9 +471,7 @@ class TestUtilityFunctions:
 
     def test_estimate_kv_cache_size(self):
         """Test KV cache size estimation."""
-        cache_info = estimate_kv_cache_size(
-            batch_size=4, seq_len=2048, d_model=512, num_layers=24, num_kv_heads=8
-        )
+        cache_info = estimate_kv_cache_size(batch_size=4, seq_len=2048, d_model=512, num_layers=24, num_kv_heads=8)
 
         assert "kv_cache_gb" in cache_info
         assert cache_info["kv_cache_gb"] > 0
@@ -485,14 +479,10 @@ class TestUtilityFunctions:
     def test_kv_cache_reduction_with_gqa(self):
         """Test that GQA reduces KV cache size."""
         # Standard MHA with 8 KV heads
-        cache_mha = estimate_kv_cache_size(
-            batch_size=4, seq_len=2048, d_model=512, num_layers=24, num_kv_heads=8
-        )
+        cache_mha = estimate_kv_cache_size(batch_size=4, seq_len=2048, d_model=512, num_layers=24, num_kv_heads=8)
 
         # GQA with 2 KV heads
-        cache_gqa = estimate_kv_cache_size(
-            batch_size=4, seq_len=2048, d_model=512, num_layers=24, num_kv_heads=2
-        )
+        cache_gqa = estimate_kv_cache_size(batch_size=4, seq_len=2048, d_model=512, num_layers=24, num_kv_heads=2)
 
         # GQA should have ~4x smaller cache
         assert cache_gqa["kv_cache_gb"] < cache_mha["kv_cache_gb"]

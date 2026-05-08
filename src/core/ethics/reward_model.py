@@ -101,9 +101,7 @@ class MultidimensionalBiasDetector(hk.Module):
             ]
         )
 
-    def detect_bias(
-        self, input_embedding: jnp.ndarray, output_embedding: jnp.ndarray
-    ) -> Dict[str, float]:
+    def detect_bias(self, input_embedding: jnp.ndarray, output_embedding: jnp.ndarray) -> Dict[str, float]:
         """Detect various types of bias in input-output pairs."""
         combined_input = jnp.concatenate([input_embedding, output_embedding], axis=-1)
 
@@ -123,9 +121,7 @@ class MultidimensionalBiasDetector(hk.Module):
 
         return bias_scores
 
-    def evaluate_fairness(
-        self, input_embedding: jnp.ndarray, output_embedding: jnp.ndarray
-    ) -> Dict[str, float]:
+    def evaluate_fairness(self, input_embedding: jnp.ndarray, output_embedding: jnp.ndarray) -> Dict[str, float]:
         """Evaluate fairness across ethical dimensions."""
         combined_input = jnp.concatenate([input_embedding, output_embedding], axis=-1)
         fairness_scores = self.fairness_evaluator(combined_input)
@@ -213,13 +209,9 @@ class EthicalRewardModel(hk.Module):
         self.cultural_awareness = CulturalAwarenessModule(d_model)
 
         # Ethical dimension-specific evaluators
-        self.harm_evaluator = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid]
-        )
+        self.harm_evaluator = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid])
 
-        self.truthfulness_evaluator = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid]
-        )
+        self.truthfulness_evaluator = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid])
 
         self.norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
 
@@ -373,12 +365,8 @@ def train_reward_model(config, feedback_dataset: List[Dict], processor):
     outputs = []
     targets = []
     for item in feedback_dataset:
-        input_tokens = processor.pad_sequence(
-            processor.tokenize(item["input"]), config.max_seq_length
-        )
-        output_tokens = processor.pad_sequence(
-            processor.tokenize(item["output"]), config.max_seq_length
-        )
+        input_tokens = processor.pad_sequence(processor.tokenize(item["input"]), config.max_seq_length)
+        output_tokens = processor.pad_sequence(processor.tokenize(item["output"]), config.max_seq_length)
         inputs.append(input_tokens)
         outputs.append(output_tokens)
         targets.append(item["feedback_score"])

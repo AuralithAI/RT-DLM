@@ -1,4 +1,3 @@
-import jax
 import jax.numpy as jnp
 from typing import Optional, Tuple
 
@@ -36,12 +35,8 @@ class StreamingVideoBuffer:
             self.timestamps = self.timestamps.at[self.length].set(timestamp)
             self.length += 1
         else:
-            self.buffer = jnp.concatenate(
-                [self.buffer[1:], frame_tokens[None, ...]], axis=0
-            )
-            self.timestamps = jnp.concatenate(
-                [self.timestamps[1:], jnp.asarray([timestamp])], axis=0
-            )
+            self.buffer = jnp.concatenate([self.buffer[1:], frame_tokens[None, ...]], axis=0)
+            self.timestamps = jnp.concatenate([self.timestamps[1:], jnp.asarray([timestamp])], axis=0)
 
     def view(self) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """Returns (tokens [F*P, d_model], timestamps [F])."""

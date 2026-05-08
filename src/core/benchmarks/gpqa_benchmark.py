@@ -93,9 +93,7 @@ class GPQABenchmark(BenchmarkBase):
             )
             logger.info(f"Loaded GPQA Diamond: {len(ds)} samples")
         except Exception as e:
-            logger.warning(
-                f"Could not load GPQA from HuggingFace: {e}. " f"Using synthetic fallback data."
-            )
+            logger.warning(f"Could not load GPQA from HuggingFace: {e}. " f"Using synthetic fallback data.")
             return self._synthetic_fallback()
 
         rng = random.Random(self.seed)

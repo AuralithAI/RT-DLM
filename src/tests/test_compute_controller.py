@@ -243,9 +243,7 @@ class TestComputeController:
         confidence = jnp.ones((batch_size, 1)) * 0.5
 
         params = controller_fn.init(rng, hidden, memory, uncertainty, confidence)
-        halt_prob, module_probs = controller_fn.apply(
-            params, rng, hidden, memory, uncertainty, confidence
-        )
+        halt_prob, module_probs = controller_fn.apply(params, rng, hidden, memory, uncertainty, confidence)
 
         # halt_prob is a float from action.halt_probability
         assert isinstance(halt_prob, (float, jnp.ndarray))
@@ -268,9 +266,7 @@ class TestComputeController:
 
         params = controller_fn.init(rng, hidden, memory, uncertainty, confidence_high)
 
-        halt_high, _ = controller_fn.apply(
-            params, rng, hidden, memory, uncertainty, confidence_high
-        )
+        halt_high, _ = controller_fn.apply(params, rng, hidden, memory, uncertainty, confidence_high)
         halt_low, _ = controller_fn.apply(params, rng, hidden, memory, uncertainty, confidence_low)
 
         # Higher confidence should generally lead to higher halt probability
@@ -600,9 +596,7 @@ class TestControllerLossComputer:
         """Test loss computer initialization."""
         from src.core.agi.compute_controller import ControllerLossComputer
 
-        loss_computer = ControllerLossComputer(
-            lambda_compute=0.01, lambda_utilization=0.005, lambda_calibration=0.1
-        )
+        loss_computer = ControllerLossComputer(lambda_compute=0.01, lambda_utilization=0.005, lambda_calibration=0.1)
 
         assert loss_computer.lambda_compute == pytest.approx(0.01)
         assert loss_computer.lambda_utilization == pytest.approx(0.005)
@@ -758,9 +752,7 @@ class TestControllerRewardShaper:
         """Test reward shaper initialization."""
         from src.core.agi.compute_controller import ControllerRewardShaper
 
-        shaper = ControllerRewardShaper(
-            reward_correct=1.0, reward_efficiency=0.1, penalty_wrong=-0.5
-        )
+        shaper = ControllerRewardShaper(reward_correct=1.0, reward_efficiency=0.1, penalty_wrong=-0.5)
 
         assert shaper.reward_correct == pytest.approx(1.0)
         assert shaper.gamma == pytest.approx(0.99)
@@ -803,9 +795,7 @@ class TestControllerRewardShaper:
 
         shaper = ControllerRewardShaper(reward_correct=1.0, reward_efficiency=0.1)
 
-        reward = shaper.compute_final_reward(
-            is_correct=True, total_cost=0.3, num_steps=5, max_steps=10
-        )
+        reward = shaper.compute_final_reward(is_correct=True, total_cost=0.3, num_steps=5, max_steps=10)
 
         # Should get positive reward
         assert reward > 0
@@ -817,9 +807,7 @@ class TestControllerRewardShaper:
 
         shaper = ControllerRewardShaper(penalty_wrong=-0.5)
 
-        reward = shaper.compute_final_reward(
-            is_correct=False, total_cost=0.3, num_steps=5, max_steps=10
-        )
+        reward = shaper.compute_final_reward(is_correct=False, total_cost=0.3, num_steps=5, max_steps=10)
 
         # Should get negative reward
         assert reward < 0
@@ -870,9 +858,7 @@ class TestControllerIntegrationMixin:
                 self.model = True
 
         agi_system = MockAGISystem()
-        executors = ControllerIntegrationMixin.create_module_executors_from_agi(
-            agi_system, d_model=64
-        )
+        executors = ControllerIntegrationMixin.create_module_executors_from_agi(agi_system, d_model=64)
 
         # Should have executors for all module types
         assert ModuleType.MEMORY_RETRIEVAL in executors
@@ -888,9 +874,7 @@ class TestControllerIntegrationMixin:
                 self.memory_bank = True
 
         agi_system = MockAGISystem()
-        executors = ControllerIntegrationMixin.create_module_executors_from_agi(
-            agi_system, d_model=64
-        )
+        executors = ControllerIntegrationMixin.create_module_executors_from_agi(agi_system, d_model=64)
 
         # Create test state
         state = ComputeState(
@@ -951,13 +935,9 @@ class TestControlledAGIForward:
                 ModuleType.OUTPUT_GENERATION: output_executor,
             }
 
-            controlled_forward = ControlledAGIForward(
-                d_model=d_model, max_steps=5, initial_budget=1.0
-            )
+            controlled_forward = ControlledAGIForward(d_model=d_model, max_steps=5, initial_budget=1.0)
 
-            output, trace = controlled_forward(
-                hidden=hidden, module_executors=executors, return_trace=True
-            )
+            output, trace = controlled_forward(hidden=hidden, module_executors=executors, return_trace=True)
 
             return output, trace
 
@@ -1010,9 +990,7 @@ class TestControlledAGIForward:
                 d_model=d_model, max_steps=10, initial_budget=0.5  # Limited budget
             )
 
-            output, trace = controlled_forward(
-                hidden=hidden, module_executors=executors, return_trace=True
-            )
+            output, trace = controlled_forward(hidden=hidden, module_executors=executors, return_trace=True)
 
             return trace["total_cost"]
 
@@ -1036,9 +1014,7 @@ class TestCreateControlledAGIFn:
         """Test that factory creates valid Haiku transform."""
         from src.core.agi.compute_controller import create_controlled_agi_fn
 
-        fn = create_controlled_agi_fn(
-            d_model=64, max_steps=5, initial_budget=1.0, halt_threshold=0.8
-        )
+        fn = create_controlled_agi_fn(d_model=64, max_steps=5, initial_budget=1.0, halt_threshold=0.8)
 
         assert hasattr(fn, "init")
         assert hasattr(fn, "apply")

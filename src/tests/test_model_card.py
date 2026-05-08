@@ -157,11 +157,19 @@ def test_markdown_handles_minimal_card():
 def test_compute_disclosure_pue_scaling():
     """Energy must scale linearly with PUE."""
     a = build_compute_disclosure(
-        num_params=1, training_tokens=1, accelerator="nvidia-a100-80gb",
-        accelerator_count=1, accelerator_hours=1.0, pue=1.0,
+        num_params=1,
+        training_tokens=1,
+        accelerator="nvidia-a100-80gb",
+        accelerator_count=1,
+        accelerator_hours=1.0,
+        pue=1.0,
     )
     b = build_compute_disclosure(
-        num_params=1, training_tokens=1, accelerator="nvidia-a100-80gb",
-        accelerator_count=1, accelerator_hours=1.0, pue=2.0,
+        num_params=1,
+        training_tokens=1,
+        accelerator="nvidia-a100-80gb",
+        accelerator_count=1,
+        accelerator_hours=1.0,
+        pue=2.0,
     )
     assert b.energy_kwh == pytest.approx(2.0 * (a.energy_kwh or 0.0))

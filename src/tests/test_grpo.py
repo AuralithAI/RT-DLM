@@ -104,7 +104,7 @@ class TestGRPOValueHead:
         params = fn.init(rng, hidden)
 
         # Should have: value_fc1 (d_model -> d_model//2), value_ln, value_out (d_model//2 -> 1)
-        flat_params = hk.data_structures.to_mutable_dict(params)
+        hk.data_structures.to_mutable_dict(params)
         total_params = sum(p.size for p in jax.tree.leaves(params))
         assert total_params > 0, "Should have parameters"
 
@@ -502,17 +502,13 @@ class TestControllerRewardShaper:
     def test_compute_final_reward_correct(self):
         """Test final reward for correct answers."""
         shaper = ControllerRewardShaper()
-        reward = shaper.compute_final_reward(
-            is_correct=True, total_cost=0.3, num_steps=3, max_steps=10
-        )
+        reward = shaper.compute_final_reward(is_correct=True, total_cost=0.3, num_steps=3, max_steps=10)
         assert reward > 0
 
     def test_compute_final_reward_wrong(self):
         """Test final reward for wrong answers."""
         shaper = ControllerRewardShaper()
-        reward = shaper.compute_final_reward(
-            is_correct=False, total_cost=0.3, num_steps=3, max_steps=10
-        )
+        reward = shaper.compute_final_reward(is_correct=False, total_cost=0.3, num_steps=3, max_steps=10)
         assert reward < 0
 
     def test_compute_returns(self):

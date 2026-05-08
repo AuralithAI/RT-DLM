@@ -10,6 +10,7 @@ import jax.numpy as jnp
 @dataclass
 class AbstentionConfig:
     """Abstention training hyperparameters."""
+
     abstain_token_id: int = 0
     confidence_threshold: float = 0.6
     abstain_loss_weight: float = 0.1
@@ -62,16 +63,12 @@ def abstention_loss(
     }
 
 
-def uncertainty_routing_decision(
-    confidence: float, threshold: float = 0.6
-) -> str:
+def uncertainty_routing_decision(confidence: float, threshold: float = 0.6) -> str:
     """Return 'verify' for low-confidence predictions, 'commit' otherwise."""
     return "verify" if confidence < threshold else "commit"
 
 
-def expected_calibration_loss(
-    confidence: jnp.ndarray, correct: jnp.ndarray, n_bins: int = 10
-) -> jnp.ndarray:
+def expected_calibration_loss(confidence: jnp.ndarray, correct: jnp.ndarray, n_bins: int = 10) -> jnp.ndarray:
     """Differentiable surrogate for ECE (binned squared confidence-vs-accuracy gap)."""
     edges = jnp.linspace(0.0, 1.0, n_bins + 1)
     total = jnp.zeros(())

@@ -449,9 +449,7 @@ class ComputeController(hk.Module):
         encoded = state_encoder(projected)
 
         # Add step and budget information
-        step_embedding = hk.Embed(
-            vocab_size=self.max_steps + 1, embed_dim=self.d_model, name="step_embedding"
-        )
+        step_embedding = hk.Embed(vocab_size=self.max_steps + 1, embed_dim=self.d_model, name="step_embedding")
         step_features = step_embedding(jnp.array([min(state.step, self.max_steps)]))
         step_features = jnp.broadcast_to(step_features, encoded.shape)
 
@@ -526,9 +524,7 @@ class ComputeController(hk.Module):
             available_mask = available_mask.at[contract.module_type.value - 1].set(1.0)
 
         # Apply mask (set unavailable to -inf)
-        masked_logits = jnp.where(
-            available_mask[None, :] > 0, module_logits, jnp.full_like(module_logits, -1e9)
-        )
+        masked_logits = jnp.where(available_mask[None, :] > 0, module_logits, jnp.full_like(module_logits, -1e9))
 
         # Temperature-scaled softmax
         module_probs = jax.nn.softmax(masked_logits / self.temperature, axis=-1)
@@ -577,13 +573,9 @@ class ComputeController(hk.Module):
             selected_modules = [ModuleType(int(selected_idx) + 1)]
 
         # Extract scalar values for halt logic and action
-        halt_prob_scalar = (
-            halt_prob[0].item() if hasattr(halt_prob[0], "item") else float(halt_prob[0])
-        )
+        halt_prob_scalar = halt_prob[0].item() if hasattr(halt_prob[0], "item") else float(halt_prob[0])
         budget_scalar = (
-            budget_allocation[0].item()
-            if hasattr(budget_allocation[0], "item")
-            else float(budget_allocation[0])
+            budget_allocation[0].item() if hasattr(budget_allocation[0], "item") else float(budget_allocation[0])
         )
 
         # Check halt conditions using Python scalars
@@ -651,9 +643,7 @@ class ComputeController(hk.Module):
         # Error penalty - discourages halting when uncertain
         # If we halt with low confidence, penalize
         error_penalty = (
-            mu_error
-            * (1.0 - confidence_at_halt)
-            * jnp.array(actual_steps < self.max_steps, dtype=jnp.float32)
+            mu_error * (1.0 - confidence_at_halt) * jnp.array(actual_steps < self.max_steps, dtype=jnp.float32)
         )
 
         # Ponder cost (from PonderNet) - regularizes thinking time
@@ -669,9 +659,7 @@ class ComputeController(hk.Module):
             actual_halt_dist = halt_probs_stack.mean(axis=-1)
             actual_halt_dist = actual_halt_dist / (actual_halt_dist.sum() + 1e-8)
 
-            ponder_cost = jnp.sum(
-                actual_halt_dist * jnp.log(actual_halt_dist / (prior_probs + 1e-8) + 1e-8)
-            )
+            ponder_cost = jnp.sum(actual_halt_dist * jnp.log(actual_halt_dist / (prior_probs + 1e-8) + 1e-8))
         else:
             ponder_cost = jnp.array(0.0)
 
@@ -714,9 +702,7 @@ class ComputePlan(hk.Module):
         self.max_steps = max_steps
         self.initial_budget = initial_budget
 
-    def _get_all_gate_params(
-        self, hidden_pooled: jnp.ndarray
-    ) -> Tuple[List[jnp.ndarray], List[jnp.ndarray]]:
+    def _get_all_gate_params(self, hidden_pooled: jnp.ndarray) -> Tuple[List[jnp.ndarray], List[jnp.ndarray]]:
         """
         Get or create all gate parameters deterministically.
 
@@ -757,9 +743,7 @@ class ComputePlan(hk.Module):
         b = biases[safe_step]
         return jax.nn.sigmoid(hidden_pooled @ w + b)
 
-    def initialize_state(
-        self, hidden: jnp.ndarray, memory_summary: Optional[jnp.ndarray] = None
-    ) -> ComputeState:
+    def initialize_state(self, hidden: jnp.ndarray, memory_summary: Optional[jnp.ndarray] = None) -> ComputeState:
         """Initialize compute state from input hidden representation."""
         batch_size = hidden.shape[0]
 
@@ -810,9 +794,7 @@ class ComputePlan(hk.Module):
 
         # Update hidden (3D) if needed
         if state.hidden.ndim == 3:
-            new_hidden = (
-                state.hidden + gate_value[:, None, :] * module_output.hidden_delta[:, None, :]
-            )
+            new_hidden = state.hidden + gate_value[:, None, :] * module_output.hidden_delta[:, None, :]
         else:
             new_hidden = new_hidden_pooled
 
@@ -978,9 +960,7 @@ class ComputePlan(hk.Module):
                 should_halt = bool(raw_should_halt)
 
             if should_halt:
-                logger.debug(
-                    f"Halting at step {step} with confidence {state.confidence.mean():.3f}"
-                )
+                logger.debug(f"Halting at step {step} with confidence {state.confidence.mean():.3f}")
                 break
 
         execution_trace["final_step"] = state.step
@@ -1005,9 +985,7 @@ def create_compute_controller_fn(
         memory_summary: Optional[jnp.ndarray] = None,
         is_training: bool = True,
     ):
-        controller = ComputeController(
-            d_model=d_model, max_steps=max_steps, halt_threshold=halt_threshold
-        )
+        controller = ComputeController(d_model=d_model, max_steps=max_steps, halt_threshold=halt_threshold)
 
         plan = ComputePlan(d_model=d_model, max_steps=max_steps, initial_budget=initial_budget)
 
@@ -1061,9 +1039,7 @@ class ControllerLossComputer:
         self.target_utilization = target_utilization
         self.prior_halt_prob = prior_halt_prob
 
-    def compute_efficiency_loss(
-        self, total_cost: float, task_difficulty: Optional[jnp.ndarray] = None
-    ) -> jnp.ndarray:
+    def compute_efficiency_loss(self, total_cost: float, task_difficulty: Optional[jnp.ndarray] = None) -> jnp.ndarray:
         """
         Compute efficiency loss - penalize unnecessary computation.
 
@@ -1096,9 +1072,7 @@ class ControllerLossComputer:
 
         return self.lambda_utilization * deviation
 
-    def compute_calibration_loss(
-        self, predicted_confidence: jnp.ndarray, actual_accuracy: jnp.ndarray
-    ) -> jnp.ndarray:
+    def compute_calibration_loss(self, predicted_confidence: jnp.ndarray, actual_accuracy: jnp.ndarray) -> jnp.ndarray:
         """
         Confidence calibration loss - align confidence with accuracy.
 
@@ -1109,9 +1083,7 @@ class ControllerLossComputer:
 
         return self.lambda_calibration * calibration_error
 
-    def compute_budget_loss(
-        self, budget_remaining: float, initial_budget: float = 1.0
-    ) -> jnp.ndarray:
+    def compute_budget_loss(self, budget_remaining: float, initial_budget: float = 1.0) -> jnp.ndarray:
         """
         Budget adherence loss - penalize budget violations.
 
@@ -1198,14 +1170,7 @@ class ControllerLossComputer:
         ponder_loss = self.compute_ponder_loss(halt_probs)
 
         # Total loss
-        total_loss = (
-            task_loss
-            + efficiency_loss
-            + utilization_loss
-            + calibration_loss
-            + budget_loss
-            + ponder_loss
-        )
+        total_loss = task_loss + efficiency_loss + utilization_loss + calibration_loss + budget_loss + ponder_loss
 
         loss_components = {
             "task_loss": task_loss,
@@ -1242,9 +1207,7 @@ class ControllerRewardShaper:
         self.penalty_wasteful = penalty_wasteful
         self.gamma = gamma
 
-    def compute_step_reward(
-        self, state: ComputeState, module_output: ModuleOutput, module_cost: float
-    ) -> float:
+    def compute_step_reward(self, state: ComputeState, module_output: ModuleOutput, module_cost: float) -> float:
         """Compute reward for a single step."""
         reward = 0.0
 
@@ -1264,9 +1227,7 @@ class ControllerRewardShaper:
 
         return reward
 
-    def compute_final_reward(
-        self, is_correct: bool, total_cost: float, num_steps: int, max_steps: int
-    ) -> float:
+    def compute_final_reward(self, is_correct: bool, total_cost: float, num_steps: int, max_steps: int) -> float:
         """Compute final reward after execution."""
         reward = 0.0
 
@@ -1473,9 +1434,7 @@ def compute_grpo_loss(
     kl_div = jnp.mean(jnp.exp(old_log_probs) * (old_log_probs - log_probs))
 
     # Total loss
-    total_loss = (
-        policy_loss + value_loss_coeff * value_loss - entropy_coeff * entropy + kl_coeff * kl_div
-    )
+    total_loss = policy_loss + value_loss_coeff * value_loss - entropy_coeff * entropy + kl_coeff * kl_div
 
     loss_components = {
         "policy_loss": policy_loss,
@@ -1507,9 +1466,7 @@ class ControllerIntegrationMixin:
     """
 
     @staticmethod
-    def create_module_executors_from_agi(
-        agi_system: Any, d_model: int
-    ) -> Dict[ModuleType, Callable]:
+    def create_module_executors_from_agi(agi_system: Any, d_model: int) -> Dict[ModuleType, Callable]:
         """
         Create module executor functions from an AGI system.
 
@@ -1557,10 +1514,7 @@ class ControllerIntegrationMixin:
 
         # Symbolic Reasoning
         def symbolic_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
-            if (
-                hasattr(agi_system, "hybrid_architecture")
-                and agi_system.hybrid_architecture is not None
-            ):
+            if hasattr(agi_system, "hybrid_architecture") and agi_system.hybrid_architecture is not None:
                 delta = state.hidden_pooled * 0.1  # Placeholder
                 return make_output(delta, confidence=0.7, cost=0.10)
             return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
@@ -1569,10 +1523,7 @@ class ControllerIntegrationMixin:
 
         # Probabilistic Inference
         def probabilistic_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
-            if (
-                hasattr(agi_system, "hybrid_architecture")
-                and agi_system.hybrid_architecture is not None
-            ):
+            if hasattr(agi_system, "hybrid_architecture") and agi_system.hybrid_architecture is not None:
                 delta = state.hidden_pooled * 0.08  # Placeholder
                 uncertainty = 0.4  # Probabilistic module reduces uncertainty
                 return make_output(delta, confidence=0.6, uncertainty=uncertainty, cost=0.08)
@@ -1600,10 +1551,7 @@ class ControllerIntegrationMixin:
 
         # Scientific Discovery
         def scientific_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
-            if (
-                hasattr(agi_system, "scientific_engine")
-                and agi_system.scientific_engine is not None
-            ):
+            if hasattr(agi_system, "scientific_engine") and agi_system.scientific_engine is not None:
                 delta = state.hidden_pooled * 0.18  # Placeholder
                 return make_output(delta, confidence=0.55, cost=0.18)
             return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
@@ -1631,10 +1579,7 @@ class ControllerIntegrationMixin:
 
         # Multimodal Fusion
         def multimodal_executor(state: ComputeState, is_training: bool) -> ModuleOutput:
-            if (
-                hasattr(agi_system, "multimodal_fusion")
-                and agi_system.multimodal_fusion is not None
-            ):
+            if hasattr(agi_system, "multimodal_fusion") and agi_system.multimodal_fusion is not None:
                 delta = state.hidden_pooled * 0.12  # Placeholder
                 return make_output(delta, confidence=0.6, cost=0.12)
             return make_output(jnp.zeros_like(state.hidden_pooled), cost=0.01)
@@ -1708,9 +1653,7 @@ class ControlledAGIForward(hk.Module):
             d_model=self.d_model, max_steps=self.max_steps, halt_threshold=self.halt_threshold
         )
 
-        plan = ComputePlan(
-            d_model=self.d_model, max_steps=self.max_steps, initial_budget=self.initial_budget
-        )
+        plan = ComputePlan(d_model=self.d_model, max_steps=self.max_steps, initial_budget=self.initial_budget)
 
         registry = ModuleRegistry()
 

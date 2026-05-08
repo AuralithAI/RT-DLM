@@ -473,9 +473,7 @@ class TestGradientAccumulationIntegration(unittest.TestCase):
         from src.core.gradient_accumulation import BatchGradientAccumulator
 
         # Model that expects inputs={"text": ...} and multimodal_inputs (like RTDLMModel)
-        def model_with_structured_args(
-            params, rng, inputs, multimodal_inputs=None, return_reasoning=False
-        ):
+        def model_with_structured_args(params, rng, inputs, multimodal_inputs=None, return_reasoning=False):
             """Model that expects structured inputs, not **batch."""
             x = inputs["text"].astype(jnp.float32)
             logits = jnp.dot(x, params["W"]) + params["b"]

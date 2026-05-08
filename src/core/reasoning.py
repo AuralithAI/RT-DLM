@@ -125,9 +125,7 @@ class ChainOfThoughtReasoning(hk.Module):
         self.use_semantic_graph = use_semantic_graph and SEMANTIC_PARSER_AVAILABLE
 
         # Reasoning steps
-        self.reasoning_steps = [
-            ReasoningStep(d_model, name=f"step_{i}") for i in range(max_reasoning_steps)
-        ]
+        self.reasoning_steps = [ReasoningStep(d_model, name=f"step_{i}") for i in range(max_reasoning_steps)]
 
         # SemanticParser for graph-based multi-hop reasoning
         if self.use_semantic_graph:
@@ -207,9 +205,7 @@ class ChainOfThoughtReasoning(hk.Module):
             if previous_thoughts is None:
                 previous_thoughts = step_result["thought_representation"]
             else:
-                previous_thoughts = jnp.concatenate(
-                    [previous_thoughts, step_result["thought_representation"]], axis=1
-                )
+                previous_thoughts = jnp.concatenate([previous_thoughts, step_result["thought_representation"]], axis=1)
 
             # Early stopping based on confidence and stop probability
             stop_input = step_result["hypothesis"].mean(axis=1, keepdims=True)
@@ -235,9 +231,7 @@ class ChainOfThoughtReasoning(hk.Module):
             "thought_summary": thought_summary,
         }
 
-    def multi_hop_reasoning(
-        self, query: jnp.ndarray, context: jnp.ndarray, is_training: bool = True
-    ) -> Dict[str, Any]:
+    def multi_hop_reasoning(self, query: jnp.ndarray, context: jnp.ndarray, is_training: bool = True) -> Dict[str, Any]:
         """
         Perform graph-based multi-hop reasoning using SemanticParser.
 
@@ -263,16 +257,10 @@ class ChainOfThoughtReasoning(hk.Module):
         query_vector = query.mean(axis=1)  # [batch, d_model]
 
         # Full semantic parsing with graph-based reasoning
-        semantic_result = self.semantic_parser.parse(
-            context, query=query_vector, mask=None, is_training=is_training
-        )
+        semantic_result = self.semantic_parser.parse(context, query=query_vector, mask=None, is_training=is_training)
 
         # Extract graph-based reasoning output
-        graph_answer = (
-            semantic_result["reasoning"]["answer_embedding"]
-            if semantic_result["reasoning"]
-            else None
-        )
+        graph_answer = semantic_result["reasoning"]["answer_embedding"] if semantic_result["reasoning"] else None
         semantic_representation = semantic_result["semantic_representation"]
 
         # Also run chain-of-thought reasoning for comparison
@@ -298,9 +286,7 @@ class ChainOfThoughtReasoning(hk.Module):
             "graph_reasoning": semantic_result["reasoning"],
             "semantic_representation": semantic_representation,
             "hop_embeddings": (
-                semantic_result["reasoning"]["hop_embeddings"]
-                if semantic_result["reasoning"]
-                else None
+                semantic_result["reasoning"]["hop_embeddings"] if semantic_result["reasoning"] else None
             ),
         }
 
@@ -342,9 +328,7 @@ class VerificationHead(hk.Module):
 
         self.input_proj = hk.Linear(d_model, name="verify_input_proj")
 
-    def __call__(
-        self, answer: jnp.ndarray, thought_summary: jnp.ndarray, query_summary: jnp.ndarray
-    ) -> jnp.ndarray:
+    def __call__(self, answer: jnp.ndarray, thought_summary: jnp.ndarray, query_summary: jnp.ndarray) -> jnp.ndarray:
         """
         Verify a candidate answer.
 
@@ -480,9 +464,7 @@ class VerifyReflectReasoning(hk.Module):
         self.confidence_threshold = confidence_threshold
 
         # Core reasoning engine
-        self.chain_of_thought = ChainOfThoughtReasoning(
-            d_model, max_reasoning_steps, use_semantic_graph, name="cot"
-        )
+        self.chain_of_thought = ChainOfThoughtReasoning(d_model, max_reasoning_steps, use_semantic_graph, name="cot")
 
         # Verify/Reflect components
         self.verifier = VerificationHead(d_model, name="verifier")
@@ -610,17 +592,11 @@ class SelfCritiqueHead(hk.Module):
         )
 
         # Separate heads for quality and revision
-        self.quality_head = hk.Sequential(
-            [hk.Linear(1, name="quality_out"), jax.nn.sigmoid], name="quality_head"
-        )
+        self.quality_head = hk.Sequential([hk.Linear(1, name="quality_out"), jax.nn.sigmoid], name="quality_head")
 
-        self.revision_head = hk.Sequential(
-            [hk.Linear(d_model, name="revision_out"), jax.nn.tanh], name="revision_head"
-        )
+        self.revision_head = hk.Sequential([hk.Linear(d_model, name="revision_out"), jax.nn.tanh], name="revision_head")
 
-    def __call__(
-        self, hidden_state: jnp.ndarray, is_training: bool = True
-    ) -> Dict[str, jnp.ndarray]:
+    def __call__(self, hidden_state: jnp.ndarray, is_training: bool = True) -> Dict[str, jnp.ndarray]:
         """
         Evaluate output quality and generate revision signal.
 
@@ -650,9 +626,7 @@ class SelfCritiqueHead(hk.Module):
             "needs_revision": needs_revision,
         }
 
-    def revise(
-        self, hidden_state: jnp.ndarray, revision_signal: jnp.ndarray, iteration: int = 0
-    ) -> jnp.ndarray:
+    def revise(self, hidden_state: jnp.ndarray, revision_signal: jnp.ndarray, iteration: int = 0) -> jnp.ndarray:
         """
         Apply revision signal to hidden state.
 
@@ -890,9 +864,7 @@ class SelfImprovementModule(hk.Module):
         self.experience_memory = hk.get_state(
             "experience_memory", [memory_size, d_model], init=jnp.zeros, dtype=jnp.float32
         )
-        self.memory_scores = hk.get_state(
-            "memory_scores", [memory_size], init=jnp.zeros, dtype=jnp.float32
-        )
+        self.memory_scores = hk.get_state("memory_scores", [memory_size], init=jnp.zeros, dtype=jnp.float32)
 
     def store_experience(self, experience, performance_score):
         """Store successful experiences for replay"""
@@ -924,9 +896,7 @@ class SelfImprovementModule(hk.Module):
 
         # Broadcast best_experiences to match batch size
         batch_size = task_encoding.shape[0]
-        best_experiences_batched = jnp.broadcast_to(
-            best_experiences, (batch_size, best_experiences.shape[-1])
-        )
+        best_experiences_batched = jnp.broadcast_to(best_experiences, (batch_size, best_experiences.shape[-1]))
 
         # Generate improvement strategy
         combined_input = jnp.concatenate([best_experiences_batched, task_encoding], axis=-1)
@@ -1028,11 +998,7 @@ class ReasoningEngine(hk.Module):
 
         # Integrate all reasoning components
         reasoning_features = reasoning_result["thought_summary"]
-        meta_features = (
-            meta_result["task_representation"]
-            if meta_result
-            else jnp.zeros_like(reasoning_features)
-        )
+        meta_features = meta_result["task_representation"] if meta_result else jnp.zeros_like(reasoning_features)
         improvement_features = improvement_result["improvement_strategy"]
 
         integrated_reasoning = self.reasoning_integrator(

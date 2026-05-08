@@ -220,16 +220,12 @@ class RLMOrchestrator:
 
         query_embedding = self._embedding_fn(query)
         query_embedding = (
-            jnp.array(query_embedding)
-            if not isinstance(query_embedding, jnp.ndarray)
-            else query_embedding
+            jnp.array(query_embedding) if not isinstance(query_embedding, jnp.ndarray) else query_embedding
         )
         return query_embedding[None, :] if query_embedding.ndim == 1 else query_embedding
 
     def _should_use_direct_pass(self, context_len: int) -> bool:
-        return (
-            context_len <= self.config.direct_context_threshold and self.config.fallback_to_direct
-        )
+        return context_len <= self.config.direct_context_threshold and self.config.fallback_to_direct
 
     def solve(
         self,
@@ -353,13 +349,9 @@ class RLMOrchestrator:
             if selection.tool == ToolType.TERMINATE:
                 break
 
-            tool_result = self._execute_tool(
-                selection, query, context_var, recursion_context, params, rng
-            )
+            tool_result = self._execute_tool(selection, query, context_var, recursion_context, params, rng)
 
-            recursion_context.record_tool_call(
-                selection.tool.value, selection.parameters, tool_result
-            )
+            recursion_context.record_tool_call(selection.tool.value, selection.parameters, tool_result)
 
             tool_trace.append(
                 {
@@ -526,9 +518,7 @@ class RLMOrchestrator:
         rng: jnp.ndarray,
     ) -> Dict[str, Any]:
         rng_keys = jax.random.split(rng, len(subcalls) + 1)
-        subcall_rngs = {
-            (sc["query"], sc["context_var"]): rng_keys[i] for i, sc in enumerate(subcalls)
-        }
+        subcall_rngs = {(sc["query"], sc["context_var"]): rng_keys[i] for i, sc in enumerate(subcalls)}
 
         def solve_subcall(sub_query: str, sub_context_var: str, ctx: RecursionContext) -> Any:
             sub_rng = subcall_rngs.get(
@@ -536,13 +526,9 @@ class RLMOrchestrator:
                 jax.random.fold_in(rng_keys[-1], hash((sub_query, sub_context_var))),
             )
             sub_query_emb = self._prepare_query_embedding(sub_query)
-            return self._solve_recursive(
-                sub_query, sub_query_emb, sub_context_var, params, sub_rng, ctx
-            )
+            return self._solve_recursive(sub_query, sub_query_emb, sub_context_var, params, sub_rng, ctx)
 
-        results = self.recursive_manager.spawn_parallel_subcalls(
-            recursion_context, subcalls, solve_subcall
-        )
+        results = self.recursive_manager.spawn_parallel_subcalls(recursion_context, subcalls, solve_subcall)
 
         return self.recursive_manager.aggregate_results(results)
 

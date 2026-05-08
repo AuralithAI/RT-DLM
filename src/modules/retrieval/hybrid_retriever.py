@@ -196,9 +196,7 @@ class SparseRetriever:
 
             # TF component with length normalization
             tf_component = (
-                term_freq
-                * (self.K1 + 1)
-                / (term_freq + self.K1 * (1 - self.B + self.B * doc_len / self.avg_doc_len))
+                term_freq * (self.K1 + 1) / (term_freq + self.K1 * (1 - self.B + self.B * doc_len / self.avg_doc_len))
             )
 
             score += idf * tf_component
@@ -256,9 +254,7 @@ class DenseRetriever:
             try:
                 import faiss
 
-                self.index = faiss.IndexFlatIP(
-                    embedding_dim
-                )  # Inner product (cosine if normalized)
+                self.index = faiss.IndexFlatIP(embedding_dim)  # Inner product (cosine if normalized)
                 logger.info("Dense retriever using FAISS")
             except ImportError:
                 logger.warning("FAISS not available, using numpy")
@@ -398,10 +394,7 @@ class HybridRetriever:
         self.sparse_retriever = SparseRetriever()
         self.dense_retriever = DenseRetriever(embedding_dim=embedding_dim)
 
-        logger.info(
-            f"HybridRetriever: sparse={sparse_weight:.1%}, dense={dense_weight:.1%}, "
-            f"rrf={use_rrf}"
-        )
+        logger.info(f"HybridRetriever: sparse={sparse_weight:.1%}, dense={dense_weight:.1%}, " f"rrf={use_rrf}")
 
     def add_documents(
         self,

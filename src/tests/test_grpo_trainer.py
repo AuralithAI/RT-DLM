@@ -162,9 +162,7 @@ class TestRewardComputer:
         )
         reward = reward_computer.compute_reward(traj, majority, answer)
         assert reward >= (
-            reward_computer.correctness_weight
-            + reward_computer.confidence_bonus
-            + reward_computer.efficiency_weight
+            reward_computer.correctness_weight + reward_computer.confidence_bonus + reward_computer.efficiency_weight
         )
 
     def test_no_majority_answer(self, reward_computer):
@@ -245,9 +243,7 @@ class TestGRPOTrainer:
         rng, init_rng, step_rng = jax.random.split(rng, 3)
         params, opt_state = trainer.init_params(init_rng, dummy)
 
-        new_params, new_opt_state, metrics = trainer.grpo_train_step(
-            params, opt_state, step_rng, dummy
-        )
+        new_params, new_opt_state, metrics = trainer.grpo_train_step(params, opt_state, step_rng, dummy)
 
         assert new_params is not None
         assert new_opt_state is not None
@@ -419,7 +415,7 @@ class TestRTDLMWiring:
             "critique_quality_score": jnp.array([[0.3], [0.7]]),
         }
 
-        loss = compute_agi_loss(logits, targets, aux_outputs, config)
+        compute_agi_loss(logits, targets, aux_outputs, config)
         assert "self_critique_loss" in aux_outputs.get("loss_components", {})
 
 

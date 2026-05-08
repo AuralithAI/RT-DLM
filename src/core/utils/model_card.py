@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-
 GPU_TDP_WATTS: Dict[str, float] = {
     "nvidia-a100-40gb": 400.0,
     "nvidia-a100-80gb": 400.0,
@@ -28,6 +27,7 @@ DEFAULT_GRID_KGCO2_PER_KWH = 0.387
 @dataclass
 class HardwareInventory:
     """Hardware used during a training run."""
+
     accelerator: str
     accelerator_count: int
     accelerator_hours: float
@@ -41,6 +41,7 @@ class HardwareInventory:
 @dataclass
 class ComputeDisclosure:
     """Compute, energy, and carbon footprint of a training run."""
+
     total_flops: float
     training_tokens: int
     hardware: HardwareInventory
@@ -52,9 +53,7 @@ class ComputeDisclosure:
     def estimate_energy_and_carbon(self) -> "ComputeDisclosure":
         """Populate energy_kwh and co2_kg from hardware + PUE + grid intensity."""
         tdp = GPU_TDP_WATTS.get(self.hardware.accelerator.lower(), 400.0)
-        kwh_raw = (
-            tdp * self.hardware.accelerator_count * self.hardware.accelerator_hours / 1000.0
-        )
+        kwh_raw = tdp * self.hardware.accelerator_count * self.hardware.accelerator_hours / 1000.0
         self.energy_kwh = kwh_raw * self.pue
         self.co2_kg = self.energy_kwh * self.grid_kgco2_per_kwh
         return self
@@ -63,6 +62,7 @@ class ComputeDisclosure:
 @dataclass
 class DatasetReference:
     """Single training/eval dataset reference for the model card."""
+
     name: str
     license: str = "unknown"
     homepage: str = ""
@@ -75,6 +75,7 @@ class DatasetReference:
 @dataclass
 class EvaluationResult:
     """Single benchmark result."""
+
     benchmark: str
     metric: str
     value: float
@@ -85,6 +86,7 @@ class EvaluationResult:
 @dataclass
 class ModelCard:
     """HF-compatible model card with safety + compute sections."""
+
     model_name: str
     model_version: str
     description: str
@@ -148,9 +150,7 @@ def _render_eval_table(card: ModelCard) -> str:
         return "_No evaluations recorded._\n"
     rows = ["| Benchmark | Metric | Value | Split | Notes |", "|---|---|---|---|---|"]
     for e in card.evaluations:
-        rows.append(
-            f"| {e.benchmark} | {e.metric} | {e.value:.4f} | {e.split or '-'} | {e.notes or '-'} |"
-        )
+        rows.append(f"| {e.benchmark} | {e.metric} | {e.value:.4f} | {e.split or '-'} | {e.notes or '-'} |")
     return "\n".join(rows) + "\n"
 
 
@@ -231,9 +231,7 @@ def _render_markdown(card: ModelCard) -> str:
     return "".join(parts)
 
 
-def estimate_transformer_flops(
-    num_params: int, training_tokens: int, include_backward: bool = True
-) -> float:
+def estimate_transformer_flops(num_params: int, training_tokens: int, include_backward: bool = True) -> float:
     """Standard 6N×T (fwd+bwd) or 2N×T (fwd-only) FLOPs estimate."""
     multiplier = 6.0 if include_backward else 2.0
     return multiplier * float(num_params) * float(training_tokens)

@@ -75,17 +75,13 @@ class ConceptualKnowledgeGraph:
             "contains",
             "used_for",
         }
-        self.concept_embeddings: Optional[jnp.ndarray] = (
-            None  # Will be JAX array for similarity search
-        )
+        self.concept_embeddings: Optional[jnp.ndarray] = None  # Will be JAX array for similarity search
         self.concept_ids: List[str] = []  # Parallel to embeddings
 
         # Enterprise-scale storage and indexing
         self.concept_cache: Dict[str, Any] = {}  # LRU cache for frequent lookups
         self.relation_index: Dict[str, List[str]] = {}  # Fast relation lookup
-        self.multi_hop_cache: Dict[str, List[List[Tuple[str, str, str]]]] = (
-            {}
-        )  # Cache for multi-hop reasoning
+        self.multi_hop_cache: Dict[str, List[List[Tuple[str, str, str]]]] = {}  # Cache for multi-hop reasoning
 
     def add_concept(self, concept: ConceptNode):
         """Add a new concept to the knowledge graph."""
@@ -135,9 +131,7 @@ class ConceptualKnowledgeGraph:
         self.multi_hop_cache[cache_key] = paths[:5]  # Cache top 5 paths
         return paths[:5]
 
-    def find_similar_concepts(
-        self, query_embedding: jnp.ndarray, top_k: int = 5
-    ) -> List[Tuple[str, float]]:
+    def find_similar_concepts(self, query_embedding: jnp.ndarray, top_k: int = 5) -> List[Tuple[str, float]]:
         """Find concepts similar to the query embedding."""
         if self.concept_embeddings is None or len(self.concept_ids) == 0:
             return []
@@ -146,9 +140,7 @@ class ConceptualKnowledgeGraph:
         query_norm = jnp.linalg.norm(query_embedding)
         concept_norms = jnp.linalg.norm(self.concept_embeddings, axis=1)
 
-        similarities = jnp.dot(self.concept_embeddings, query_embedding) / (
-            concept_norms * query_norm + 1e-8
-        )
+        similarities = jnp.dot(self.concept_embeddings, query_embedding) / (concept_norms * query_norm + 1e-8)
 
         # Get top-k most similar
         top_indices = jnp.argsort(similarities)[-top_k:][::-1]
@@ -161,9 +153,7 @@ class ConceptualKnowledgeGraph:
 
         return results
 
-    def get_concept_relations(
-        self, concept_id: str, relation_type: Optional[str] = None
-    ) -> Dict[str, Set[str]]:
+    def get_concept_relations(self, concept_id: str, relation_type: Optional[str] = None) -> Dict[str, Set[str]]:
         """Get relations for a concept, optionally filtered by type."""
         if concept_id not in self.concepts:
             return {}
@@ -241,9 +231,7 @@ class AnalogicalReasoningEngine(hk.Module):
             ]
         )
 
-    def find_analogies(
-        self, concept_a: jnp.ndarray, concept_b: jnp.ndarray, concept_c: jnp.ndarray
-    ) -> jnp.ndarray:
+    def find_analogies(self, concept_a: jnp.ndarray, concept_b: jnp.ndarray, concept_c: jnp.ndarray) -> jnp.ndarray:
         """
         Find concept D such that A:B::C:D (A is to B as C is to D).
 
@@ -327,9 +315,7 @@ class ZeroShotReasoningEngine(hk.Module):
         )
 
         # Confidence estimation
-        self.confidence_estimator = hk.Sequential(
-            [hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid]
-        )
+        self.confidence_estimator = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid])
 
     def understand_new_concept(
         self,
@@ -362,9 +348,7 @@ class ZeroShotReasoningEngine(hk.Module):
         predicted_type = ConceptType(list(ConceptType)[jnp.argmax(concept_type_probs)])
 
         # Use analogical reasoning to understand properties
-        properties = self._infer_properties_by_analogy(
-            concept_embedding, similar_concepts, knowledge_graph
-        )
+        properties = self._infer_properties_by_analogy(concept_embedding, similar_concepts, knowledge_graph)
 
         # Estimate confidence
         confidence = float(self.confidence_estimator(concept_embedding).squeeze())
@@ -421,9 +405,7 @@ class ZeroShotReasoningEngine(hk.Module):
                 concept_embedding = knowledge_graph.concepts[best_concept_id].embedding
 
                 # Update reasoning state
-                reasoning_input = jnp.concatenate(
-                    [current_state, concept_embedding, goal_embedding]
-                )
+                reasoning_input = jnp.concatenate([current_state, concept_embedding, goal_embedding])
                 new_state = self.reasoning_step(reasoning_input)
 
                 # Calculate confidence for this step
@@ -495,15 +477,11 @@ class ZeroShotReasoningEngine(hk.Module):
                     final_properties[prop_name] = weighted_sum / (total_weight + 1e-8)
                 else:
                     # For categorical properties, use most similar
-                    final_properties[prop_name] = max(values_and_similarities, key=lambda x: x[1])[
-                        0
-                    ]
+                    final_properties[prop_name] = max(values_and_similarities, key=lambda x: x[1])[0]
 
         return final_properties
 
-    def _generate_conclusion(
-        self, final_state: jnp.ndarray, reasoning_steps: List[Dict], confidence: float
-    ) -> str:
+    def _generate_conclusion(self, final_state: jnp.ndarray, reasoning_steps: List[Dict], confidence: float) -> str:
         """Generate human-readable conclusion from reasoning."""
         if not reasoning_steps:
             return "Unable to reach conclusion due to insufficient knowledge."
@@ -511,9 +489,7 @@ class ZeroShotReasoningEngine(hk.Module):
         step_count = len(reasoning_steps)
         concepts_used = [step["concept_used"] for step in reasoning_steps]
 
-        conclusion = (
-            f"Based on {step_count} reasoning steps involving {', '.join(concepts_used[:3])}"
-        )
+        conclusion = f"Based on {step_count} reasoning steps involving {', '.join(concepts_used[:3])}"
         if len(concepts_used) > 3:
             conclusion += f" and {len(concepts_used) - 3} other concepts"
 
@@ -571,9 +547,7 @@ class ZeroShotConceptualSystem:
         self.knowledge_graph.add_relation("basic_agent", "has", "basic_goal")
         self.knowledge_graph.add_relation("basic_causality", "explains", "basic_pattern")
 
-    def understand_concept(
-        self, concept_text: str, context: Optional[List[str]] = None
-    ) -> ConceptNode:
+    def understand_concept(self, concept_text: str, context: Optional[List[str]] = None) -> ConceptNode:
         """
         Understand a new concept from text description and context.
 
@@ -585,9 +559,7 @@ class ZeroShotConceptualSystem:
             ConceptNode representing the understood concept
         """
         # In real implementation, use your text embedding model
-        concept_embedding = jax.random.normal(
-            jax.random.PRNGKey(hash(concept_text)), (self.d_model,)
-        )
+        concept_embedding = jax.random.normal(jax.random.PRNGKey(hash(concept_text)), (self.d_model,))
 
         context_embeddings = []
         if context:
@@ -617,9 +589,7 @@ class ZeroShotConceptualSystem:
 
         return concept_node
 
-    def answer_question(
-        self, question: str, expected_answer_type: Optional[str] = None
-    ) -> ReasoningChain:
+    def answer_question(self, question: str, expected_answer_type: Optional[str] = None) -> ReasoningChain:
         """
         Answer a question using zero-shot reasoning.
 

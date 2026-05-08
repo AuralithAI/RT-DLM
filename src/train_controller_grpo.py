@@ -135,8 +135,7 @@ class RewardComputer:
 
         if majority_answer is not None and answer is not None:
             sim = float(
-                jnp.sum(answer * majority_answer)
-                / (jnp.linalg.norm(answer) * jnp.linalg.norm(majority_answer) + 1e-8)
+                jnp.sum(answer * majority_answer) / (jnp.linalg.norm(answer) * jnp.linalg.norm(majority_answer) + 1e-8)
             )
             if sim > 0.9:
                 reward += self.correctness_weight
@@ -153,10 +152,7 @@ class RewardComputer:
 
         if step_rewards is not None and len(step_rewards) > 0:
             mean_step = float(sum(step_rewards) / len(step_rewards))
-            reward = (
-                self.outcome_reward_weight * reward
-                + self.process_reward_weight * mean_step
-            )
+            reward = self.outcome_reward_weight * reward + self.process_reward_weight * mean_step
 
         return reward
 
@@ -431,9 +427,7 @@ class GRPOTrainer:
             for i in range(num_prompts):
                 for _ in range(self.group_size):
                     rng_inner, sub = jax.random.split(rng_inner)
-                    result = self.controller_fn.apply(
-                        p, sub, batch_hidden[i : i + 1], is_training=True
-                    )
+                    result = self.controller_fn.apply(p, sub, batch_hidden[i : i + 1], is_training=True)
                     values_pred.append(result["value"][0, 0])
 
             values_pred = jnp.stack(values_pred[:total_traj])
@@ -460,9 +454,7 @@ class GRPOTrainer:
             "mean_value": mean_value,
             "num_trajectories": total_traj,
             "mean_steps": float(np.mean([t.steps_taken for g in groups for t in g.trajectories])),
-            "mean_budget_used": float(
-                np.mean([t.budget_used for g in groups for t in g.trajectories])
-            ),
+            "mean_budget_used": float(np.mean([t.budget_used for g in groups for t in g.trajectories])),
         }
 
         return new_params, new_opt_state, metrics
@@ -576,8 +568,7 @@ def main():
     param_count = sum(p.size for p in jax.tree_util.tree_leaves(params))
     logger.info(f"Controller + ValueHead parameters: {param_count:,}")
     logger.info(
-        f"GRPO config: G={args.num_groups}, K={args.group_size}, "
-        f"steps={args.num_steps}, lr={args.learning_rate}"
+        f"GRPO config: G={args.num_groups}, K={args.group_size}, " f"steps={args.num_steps}, lr={args.learning_rate}"
     )
 
     # Training loop

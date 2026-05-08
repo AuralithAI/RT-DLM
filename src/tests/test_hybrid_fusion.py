@@ -98,9 +98,7 @@ class TestHybridFusion:
         num_models = 4
 
         # 3D inputs: [batch, seq, d_model]
-        model_outputs = [
-            jnp.ones((batch_size, seq_len, d_model)) * (i + 1) for i in range(num_models)
-        ]
+        model_outputs = [jnp.ones((batch_size, seq_len, d_model)) * (i + 1) for i in range(num_models)]
         weights = jnp.ones((batch_size, num_models)) / num_models
 
         params = model.init(rng_key, model_outputs, weights)

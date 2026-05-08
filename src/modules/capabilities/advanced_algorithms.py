@@ -130,9 +130,7 @@ def compute_fisher_information(
 
     for idx in sample_indices:
         rng, sample_rng = jax.random.split(rng)
-        sample_grads = log_likelihood_grad(
-            params_for_grad, data_samples[idx], targets[idx], sample_rng
-        )
+        sample_grads = log_likelihood_grad(params_for_grad, data_samples[idx], targets[idx], sample_rng)
 
         # Accumulate squared gradients (diagonal Fisher)
         fisher_diag = jax.tree_util.tree_map(lambda f, g: f + g**2, fisher_diag, sample_grads)
@@ -144,9 +142,7 @@ def compute_fisher_information(
     return fisher_diag
 
 
-def compute_ewc_loss(
-    params: Any, params_star: Any, fisher_matrix: Any, lambda_ewc: float = 1000.0
-) -> Any:
+def compute_ewc_loss(params: Any, params_star: Any, fisher_matrix: Any, lambda_ewc: float = 1000.0) -> Any:
     """
     Compute Elastic Weight Consolidation (EWC) regularization loss.
 
@@ -181,9 +177,7 @@ def compute_ewc_loss(
     return (lambda_ewc / 2.0) * ewc_loss
 
 
-def compute_si_loss(
-    params: Any, params_star: Any, importance_weights: Any, lambda_si: float = 1.0
-) -> Any:
+def compute_si_loss(params: Any, params_star: Any, importance_weights: Any, lambda_si: float = 1.0) -> Any:
     """
     Compute Synaptic Intelligence (SI) regularization loss.
 
@@ -207,9 +201,7 @@ def compute_si_loss(
         """Compute SI loss for a single parameter."""
         return jnp.sum(omega * (param - param_star) ** 2)
 
-    param_losses = jax.tree_util.tree_map(
-        compute_param_loss, params, params_star, importance_weights
-    )
+    param_losses = jax.tree_util.tree_map(compute_param_loss, params, params_star, importance_weights)
 
     si_loss = jax.tree_util.tree_reduce(lambda x, y: x + y, param_losses)
 
@@ -479,9 +471,7 @@ class ContinualLearner(hk.Module):
             features = features + 0.5 * progressive_out
 
         # Compute dynamic importance weights
-        importance_input = jnp.concatenate(
-            [features, importance.repeat(self.d_model, axis=-1)], axis=-1
-        )
+        importance_input = jnp.concatenate([features, importance.repeat(self.d_model, axis=-1)], axis=-1)
         importance_weights = self.importance_network(importance_input)
 
         # Apply importance-weighted consolidation
@@ -522,15 +512,11 @@ class ContinualLearner(hk.Module):
 
         for memory in task_memories:
             if use_ewc and memory.fisher_matrix is not None:
-                ewc_loss = compute_ewc_loss(
-                    params, memory.params_snapshot, memory.fisher_matrix, self.lambda_ewc
-                )
+                ewc_loss = compute_ewc_loss(params, memory.params_snapshot, memory.fisher_matrix, self.lambda_ewc)
                 total_loss += ewc_loss
 
             if use_si and memory.importance_weights is not None:
-                si_loss = compute_si_loss(
-                    params, memory.params_snapshot, memory.importance_weights, self.lambda_si
-                )
+                si_loss = compute_si_loss(params, memory.params_snapshot, memory.importance_weights, self.lambda_si)
                 total_loss += si_loss
 
         return total_loss
@@ -713,14 +699,10 @@ def make_ewc_aware_loss_fn(
 
         for memory in task_memories:
             if memory.fisher_matrix is not None:
-                ewc_loss += compute_ewc_loss(
-                    params, memory.params_snapshot, memory.fisher_matrix, lambda_ewc
-                )
+                ewc_loss += compute_ewc_loss(params, memory.params_snapshot, memory.fisher_matrix, lambda_ewc)
 
             if memory.importance_weights is not None:
-                si_loss += compute_si_loss(
-                    params, memory.params_snapshot, memory.importance_weights, lambda_si
-                )
+                si_loss += compute_si_loss(params, memory.params_snapshot, memory.importance_weights, lambda_si)
 
         total_loss = base_loss + ewc_loss + si_loss
 

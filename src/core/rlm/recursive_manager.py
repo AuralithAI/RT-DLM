@@ -157,10 +157,7 @@ class RecursiveCallManager:
         solve_fn: Callable[[str, str, RecursionContext], Any],
     ) -> List[SubCallResult]:
         if not self.config.parallel_subcalls:
-            return [
-                self.spawn_subcall(parent_context, sc["query"], sc["context_var"], solve_fn)
-                for sc in subcalls
-            ]
+            return [self.spawn_subcall(parent_context, sc["query"], sc["context_var"], solve_fn) for sc in subcalls]
 
         max_parallel = min(self.config.max_parallel_subcalls, len(subcalls))
         results = []
@@ -259,11 +256,7 @@ class RecursiveCallManager:
                 "errors": [r.error for r in failed],
             }
 
-        if (
-            self.config.aggregation_strategy == "weighted_mean"
-            and result_embeddings
-            and query_embedding is not None
-        ):
+        if self.config.aggregation_strategy == "weighted_mean" and result_embeddings and query_embedding is not None:
             aggregated: Any = self._weighted_aggregate(query_embedding, result_embeddings)
         elif self.config.aggregation_strategy == "concat":
             aggregated = self._concat_aggregate(successful)
@@ -302,9 +295,7 @@ class RecursiveCallManager:
 
         for emb in result_embeddings:
             emb_flat = np.asarray(emb).flatten()
-            similarity = np.dot(query_flat, emb_flat) / (
-                np.linalg.norm(query_flat) * np.linalg.norm(emb_flat) + 1e-8
-            )
+            similarity = np.dot(query_flat, emb_flat) / (np.linalg.norm(query_flat) * np.linalg.norm(emb_flat) + 1e-8)
             weights_list.append(max(0, similarity))
 
         weights = np.array(weights_list)

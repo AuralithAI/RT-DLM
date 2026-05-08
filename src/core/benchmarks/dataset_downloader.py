@@ -18,14 +18,13 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_CACHE_DIR = Path(
-    os.environ.get("RTDLM_DATASET_CACHE", str(Path.home() / ".cache" / "rtdlm" / "datasets"))
-)
+DEFAULT_CACHE_DIR = Path(os.environ.get("RTDLM_DATASET_CACHE", str(Path.home() / ".cache" / "rtdlm" / "datasets")))
 
 
 @dataclass
 class DatasetSpec:
     """Declarative dataset descriptor for the registry."""
+
     name: str
     source: str
     repo_id: Optional[str] = None
@@ -103,9 +102,7 @@ class HTTPFetcher:
                 if expected_sha256 is not None:
                     actual = DatasetCache._sha256(dst)
                     if actual != expected_sha256.lower():
-                        raise ValueError(
-                            f"checksum mismatch for {url}: {actual} != {expected_sha256}"
-                        )
+                        raise ValueError(f"checksum mismatch for {url}: {actual} != {expected_sha256}")
                 return dst
             except (urllib.error.URLError, ValueError) as exc:
                 last_err = exc
@@ -138,6 +135,7 @@ class HuggingFaceFetcher:
         """Return True iff the `datasets` library can be imported."""
         try:
             import datasets  # noqa: F401
+
             return True
         except ImportError:
             return False

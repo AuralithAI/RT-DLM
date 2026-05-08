@@ -265,9 +265,7 @@ class TestAGISystemAbstraction(unittest.TestCase):
         creativity_out = jnp.ones((BATCH_SIZE, D_MODEL))
 
         params = transformed.init(self.rng, consciousness_out, reasoning_out, creativity_out)
-        result = transformed.apply(
-            params, self.rng, consciousness_out, reasoning_out, creativity_out
-        )
+        result = transformed.apply(params, self.rng, consciousness_out, reasoning_out, creativity_out)
 
         # Check output structure
         self.assertIn("unified_representation", result)

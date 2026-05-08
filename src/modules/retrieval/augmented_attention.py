@@ -61,9 +61,7 @@ class CrossAttentionRetrieval(hk.Module):
         self.dropout_rate = dropout_rate
         self.use_bias = use_bias
 
-        assert (
-            d_model % num_heads == 0
-        ), f"d_model ({d_model}) must be divisible by num_heads ({num_heads})"
+        assert d_model % num_heads == 0, f"d_model ({d_model}) must be divisible by num_heads ({num_heads})"
 
     def __call__(
         self,
@@ -205,9 +203,9 @@ class RetrievalAugmentedAttention(hk.Module):
         self_attn_output = self_attn(x, x, x)
 
         # Layer norm after self-attention
-        self_attn_output = hk.LayerNorm(
-            axis=-1, create_scale=True, create_offset=True, name="self_attn_norm"
-        )(self_attn_output)
+        self_attn_output = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name="self_attn_norm")(
+            self_attn_output
+        )
 
         # Residual connection
         x = x + self_attn_output

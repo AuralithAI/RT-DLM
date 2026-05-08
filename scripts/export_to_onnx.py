@@ -23,16 +23,14 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(levelname)s] %(asctime)s - %(message)s',
+    format="[%(levelname)s] %(asctime)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Export RT-DLM model to ONNX format"
-    )
-    
+    parser = argparse.ArgumentParser(description="Export RT-DLM model to ONNX format")
+
     # Required arguments
     parser.add_argument(
         "--checkpoint",
@@ -46,7 +44,7 @@ def main():
         required=True,
         help="Output path for ONNX model (.onnx)",
     )
-    
+
     # Model configuration
     parser.add_argument(
         "--preset",
@@ -55,7 +53,7 @@ def main():
         default="medium",
         help="Model preset (default: medium)",
     )
-    
+
     # Export options
     parser.add_argument(
         "--opset",
@@ -75,7 +73,7 @@ def main():
         default=512,
         help="Sequence length for tracing (default: 512)",
     )
-    
+
     # Optimization options
     parser.add_argument(
         "--optimize",
@@ -89,7 +87,7 @@ def main():
         dest="optimize",
         help="Skip ONNX optimizations",
     )
-    
+
     # Validation
     parser.add_argument(
         "--validate",
@@ -109,42 +107,44 @@ def main():
         default=1e-5,
         help="Validation tolerance (default: 1e-5)",
     )
-    
+
     # Verbose output
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose output",
     )
-    
+
     args = parser.parse_args()
-    
+
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
-    
+
     # Validate paths
     checkpoint_path = Path(args.checkpoint)
     if not checkpoint_path.exists():
         logger.error(f"Checkpoint not found: {checkpoint_path}")
         sys.exit(1)
-    
+
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Check dependencies
     try:
         import tensorflow as tf
         from jax.experimental import jax2tf
         import tf2onnx
+
         logger.info(f"TensorFlow version: {tf.__version__}")
     except ImportError as e:
         logger.error(f"Missing dependency: {e}")
         logger.error("Install with: pip install tensorflow tf2onnx")
         sys.exit(1)
-    
+
     # Load model configuration
     from src.config.agi_config import AGIConfig
-    
+
     if args.preset == "tiny":
         config = AGIConfig.tiny()
     elif args.preset == "small":
@@ -155,17 +155,17 @@ def main():
         config = AGIConfig.large()
     else:
         config = AGIConfig()
-    
+
     logger.info(f"Model config: {config.hidden_dim}d, {config.num_layers}L")
-    
+
     # Load checkpoint
     logger.info(f"Loading checkpoint from {checkpoint_path}...")
     try:
         from safetensors.numpy import load_file
         import jax.numpy as jnp
-        
+
         flat_params = load_file(str(checkpoint_path))
-        
+
         # Reconstruct nested params
         params = {}
         for key, value in flat_params.items():
@@ -176,35 +176,36 @@ def main():
                     current[part] = {}
                 current = current[part]
             current[parts[-1]] = jnp.array(value)
-        
+
         logger.info(f"Loaded {len(flat_params)} parameter tensors")
-        
+
     except Exception as e:
         logger.error(f"Failed to load checkpoint: {e}")
         sys.exit(1)
-    
+
     # Create model function
     logger.info("Creating model function...")
-    
+
     from src.rtdlm import create_rtdlm_agi
     import haiku as hk
-    
+
     def model_fn(params, input_ids):
         """Model forward function for export."""
+
         def forward(x):
             model = create_rtdlm_agi(config)
             return model(x, is_training=False)
-        
+
         forward_fn = hk.transform(forward)
         rng = jax.random.PRNGKey(0)
         return forward_fn.apply(params, rng, input_ids)
-    
+
     # Import JAX here to avoid issues
     import jax
-    
+
     # Export to ONNX
     from src.core.export import ONNXExporter, ONNXExportConfig
-    
+
     export_config = ONNXExportConfig(
         opset_version=args.opset,
         batch_size=args.batch_size,
@@ -213,19 +214,19 @@ def main():
         validate_output=args.validate,
         validation_tolerance=args.tolerance,
     )
-    
+
     logger.info(f"Exporting to ONNX (opset {args.opset})...")
-    
+
     try:
         exporter = ONNXExporter(model_fn, params, export_config)
         output_file = exporter.export(str(output_path))
-        
+
         logger.info("=" * 60)
         logger.info("Export Results:")
         logger.info(f"  Output file: {output_file}")
         logger.info(f"  File size:   {output_path.stat().st_size / (1024 * 1024):.2f} MB")
         logger.info("=" * 60)
-        
+
         # Print model info
         if args.verbose:
             info = ONNXExporter.get_model_info(str(output_path))
@@ -234,13 +235,14 @@ def main():
             logger.info(f"  Nodes:     {info['num_nodes']}")
             logger.info(f"  Inputs:    {info['inputs']}")
             logger.info(f"  Outputs:   {info['outputs']}")
-        
+
         logger.info("✅ ONNX export complete!")
-        
+
     except Exception as e:
         logger.error(f"Export failed: {e}")
         if args.verbose:
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
 

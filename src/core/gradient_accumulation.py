@@ -27,9 +27,7 @@ def _zero_nan_grads(grads: Dict) -> Dict:
     Returns:
         Gradient PyTree with NaN values replaced by zeros
     """
-    result: Dict[Any, Any] = jax.tree_util.tree_map(
-        lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x), grads
-    )
+    result: Dict[Any, Any] = jax.tree_util.tree_map(lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x), grads)
     return result
 
 
@@ -117,9 +115,7 @@ class BatchGradientAccumulator:
         if self._accumulated_grads is None:
             self._accumulated_grads = grads
         else:
-            self._accumulated_grads = jax.tree_util.tree_map(
-                lambda a, g: a + g, self._accumulated_grads, grads
-            )
+            self._accumulated_grads = jax.tree_util.tree_map(lambda a, g: a + g, self._accumulated_grads, grads)
 
         self._accumulated_loss += loss
         self._current_step += 1
@@ -168,9 +164,7 @@ class BatchGradientAccumulator:
             raise RuntimeError("No gradients accumulated yet")
 
         # Average the gradients
-        return jax.tree_util.tree_map(
-            lambda g: g / self.accumulation_steps, self._accumulated_grads
-        )
+        return jax.tree_util.tree_map(lambda g: g / self.accumulation_steps, self._accumulated_grads)
 
     def get_accumulated_loss(self) -> float:
         """Get averaged accumulated loss."""
@@ -266,9 +260,7 @@ def create_accumulating_train_step(
             Tuple of (new_params, new_opt_state, avg_loss, metrics)
         """
         if len(micro_batches) != accumulation_steps:
-            raise ValueError(
-                f"Expected {accumulation_steps} micro-batches, got {len(micro_batches)}"
-            )
+            raise ValueError(f"Expected {accumulation_steps} micro-batches, got {len(micro_batches)}")
 
         # Accumulate gradients
         accumulated_grads = None
@@ -281,9 +273,7 @@ def create_accumulating_train_step(
             if accumulated_grads is None:
                 accumulated_grads = grads
             else:
-                accumulated_grads = jax.tree_util.tree_map(
-                    lambda a, g: a + g, accumulated_grads, grads
-                )
+                accumulated_grads = jax.tree_util.tree_map(lambda a, g: a + g, accumulated_grads, grads)
             total_loss += loss
 
         # Average gradients
@@ -322,9 +312,7 @@ def split_batch_for_accumulation(
     batch_size = batch[first_key].shape[0]
 
     if batch_size % accumulation_steps != 0:
-        raise ValueError(
-            f"Batch size {batch_size} not divisible by accumulation_steps {accumulation_steps}"
-        )
+        raise ValueError(f"Batch size {batch_size} not divisible by accumulation_steps {accumulation_steps}")
 
     micro_batch_size = batch_size // accumulation_steps
     micro_batches = []

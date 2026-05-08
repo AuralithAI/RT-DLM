@@ -65,9 +65,7 @@ def test_calibration_loss_nonneg():
 
 def test_synthesize_abstention_examples_balance():
     """Synthesized dataset must contain both factual and abstention examples."""
-    out = synthesize_abstention_examples(
-        [("Q1", "A1"), ("Q2", "A2")], ["Unknown1", "Unknown2"]
-    )
+    out = synthesize_abstention_examples([("Q1", "A1"), ("Q2", "A2")], ["Unknown1", "Unknown2"])
     assert len(out) == 4
     abst = sum(1 for e in out if e["abstain"] == "1")
     assert abst == 2

@@ -175,9 +175,7 @@ class TestReflectionModule:
 
         # Low verification should generally produce larger corrections
         # (due to correction_scale = 1 - v_score)
-        assert (
-            low_norm > high_norm * 0.5
-        ), f"Expected larger correction for low verification: {low_norm} vs {high_norm}"
+        assert low_norm > high_norm * 0.5, f"Expected larger correction for low verification: {low_norm} vs {high_norm}"
 
     def test_reflection_correction_bounded(self, d_model, rng):
         """Test that correction delta is bounded (tanh + gate)."""
@@ -553,9 +551,7 @@ class TestAGIConfigVerifyReflect:
     def test_think_budget_validation(self):
         """Test think budget validation."""
         with pytest.raises(AssertionError):
-            AGIConfig(
-                enable_think_budget=True, think_budget_max_tokens=10, think_budget_min_tokens=100
-            )
+            AGIConfig(enable_think_budget=True, think_budget_max_tokens=10, think_budget_min_tokens=100)
 
     def test_kv_cache_defaults(self):
         """Test default KV cache settings."""

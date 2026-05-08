@@ -39,9 +39,9 @@ class TestRetrievalConfig:
 
         config = RetrievalConfig()
 
-        assert config.enabled == False
+        assert config.enabled is False
         assert config.top_k == 5
-        assert config.use_hybrid == True
+        assert config.use_hybrid is True
         assert 0 <= config.augmentation_probability <= 1
 
     def test_retrieval_config_for_training(self):
@@ -50,9 +50,9 @@ class TestRetrievalConfig:
 
         config = RetrievalConfig.for_training()
 
-        assert config.enabled == True
+        assert config.enabled is True
         assert config.augmentation_probability > 0
-        assert config.use_hybrid == True
+        assert config.use_hybrid is True
 
     def test_retrieval_config_for_inference(self):
         """Test inference preset."""
@@ -60,7 +60,7 @@ class TestRetrievalConfig:
 
         config = RetrievalConfig.for_inference()
 
-        assert config.enabled == True
+        assert config.enabled is True
 
     def test_retrieval_config_disabled(self):
         """Test disabled preset."""
@@ -68,7 +68,7 @@ class TestRetrievalConfig:
 
         config = RetrievalConfig.disabled()
 
-        assert config.enabled == False
+        assert config.enabled is False
 
     @pytest.mark.parametrize("aug_prob", [0.0, 0.1, 0.3, 0.5, 1.0])
     def test_augmentation_probability_values(self, aug_prob):
@@ -116,9 +116,7 @@ class TestHybridRetriever:
 
     def test_search_sparse_only(self, retriever, sample_documents):
         """Test sparse-only retrieval."""
-        retriever.add_documents(
-            documents=sample_documents, doc_ids=[f"doc_{i}" for i in range(len(sample_documents))]
-        )
+        retriever.add_documents(documents=sample_documents, doc_ids=[f"doc_{i}" for i in range(len(sample_documents))])
 
         results = retriever.search("neural networks", top_k=2)
 
@@ -265,7 +263,7 @@ class TestAGITrainerRAGIntegration:
         trainer.configure_retrieval(retrieval_config, documents=sample_documents)
 
         assert trainer.retrieval_config is not None
-        assert trainer.retrieval_config.enabled == True
+        assert trainer.retrieval_config.enabled is True
         assert trainer.retriever is not None
         assert trainer.document_ingester is not None
 
@@ -277,14 +275,14 @@ class TestAGITrainerRAGIntegration:
         trainer = AGITrainer(config)
 
         stats_disabled = trainer.get_rag_statistics()
-        assert stats_disabled["rag_enabled"] == False
+        assert stats_disabled["rag_enabled"] is False
 
         retrieval_config = RetrievalConfig.for_training()
         retrieval_config.augmentation_probability = 0.3
         trainer.configure_retrieval(retrieval_config, documents=sample_documents)
 
         stats_enabled = trainer.get_rag_statistics()
-        assert stats_enabled["rag_enabled"] == True
+        assert stats_enabled["rag_enabled"] is True
         assert abs(stats_enabled["augmentation_probability"] - 0.3) < 1e-6
         assert stats_enabled["total_chunks_indexed"] > 0
 
@@ -344,13 +342,11 @@ class TestRAGAblationStudy:
         stats_no_rag = trainer_no_rag.get_rag_statistics()
 
         trainer_with_rag = AGITrainer(config)
-        trainer_with_rag.configure_retrieval(
-            RetrievalConfig.for_training(), documents=["Sample document for testing."]
-        )
+        trainer_with_rag.configure_retrieval(RetrievalConfig.for_training(), documents=["Sample document for testing."])
         stats_with_rag = trainer_with_rag.get_rag_statistics()
 
-        assert stats_no_rag["rag_enabled"] == False
-        assert stats_with_rag["rag_enabled"] == True
+        assert stats_no_rag["rag_enabled"] is False
+        assert stats_with_rag["rag_enabled"] is True
 
     @pytest.mark.parametrize("aug_prob", [0.0, 0.1, 0.3, 0.5])
     def test_different_augmentation_probabilities(self, config, aug_prob):

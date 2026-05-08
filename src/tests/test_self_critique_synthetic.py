@@ -570,9 +570,7 @@ class TestModuleRegistryCodeBoosted:
         from core.agi.compute_controller import ModuleRegistry, ModuleType
 
         registry = ModuleRegistry()
-        costs = registry.get_code_boosted_costs(
-            code_confidence=0.8, threshold=0.6, boost_factor=2.0
-        )
+        costs = registry.get_code_boosted_costs(code_confidence=0.8, threshold=0.6, boost_factor=2.0)
         orig = registry.get(ModuleType.MEMORY_RETRIEVAL).base_cost
         assert costs[ModuleType.MEMORY_RETRIEVAL] == pytest.approx(orig / 2.0)
 
@@ -601,9 +599,7 @@ class TestModuleRegistryCodeBoosted:
         from core.agi.compute_controller import ModuleRegistry, ModuleType
 
         registry = ModuleRegistry()
-        costs = registry.get_code_boosted_costs(
-            code_confidence=0.9, threshold=0.1, boost_factor=3.0
-        )
+        costs = registry.get_code_boosted_costs(code_confidence=0.9, threshold=0.1, boost_factor=3.0)
         orig = registry.get(ModuleType.MEMORY_RETRIEVAL).base_cost
         assert costs[ModuleType.MEMORY_RETRIEVAL] == pytest.approx(orig / 3.0)
 

@@ -251,8 +251,7 @@ class CheckpointManager:
 
         if not SAFETENSORS_AVAILABLE:
             raise ImportError(
-                "SafeTensors is required for secure checkpointing. "
-                "Install with: pip install safetensors>=0.4.0"
+                "SafeTensors is required for secure checkpointing. " "Install with: pip install safetensors>=0.4.0"
             )
 
     def save_checkpoint(
@@ -358,9 +357,7 @@ class CheckpointManager:
         checkpoint_file: Path
         if checkpoint_path is None:
             if epoch is not None:
-                checkpoint_file = (
-                    self.checkpoint_dir / f"{self.model_name}_epoch_{epoch}.safetensors"
-                )
+                checkpoint_file = self.checkpoint_dir / f"{self.model_name}_epoch_{epoch}.safetensors"
             else:
                 latest = self._get_latest_checkpoint()
                 if latest is None:
@@ -629,11 +626,7 @@ def convert_pickle_to_safetensors(pickle_path: str, output_path: Optional[str] =
     # Create manager and save
     manager = CheckpointManager(
         checkpoint_dir=str(output_path_obj.parent),
-        model_name=(
-            output_path_obj.stem.split("_epoch_")[0]
-            if "_epoch_" in output_path_obj.stem
-            else "model"
-        ),
+        model_name=(output_path_obj.stem.split("_epoch_")[0] if "_epoch_" in output_path_obj.stem else "model"),
     )
 
     saved_path = manager.save_checkpoint(

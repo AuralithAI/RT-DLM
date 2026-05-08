@@ -94,11 +94,7 @@ class SpikingMechanism:
 
     def _validate_threshold(self) -> bool:
         """Validate spike threshold is in valid range."""
-        return (
-            self.spike_threshold is not None
-            and self.epsilon is not None
-            and 0 <= self.spike_threshold <= 1
-        )
+        return self.spike_threshold is not None and self.epsilon is not None and 0 <= self.spike_threshold <= 1
 
     def update_threshold(self, new_threshold: float) -> None:
         """Update spike threshold dynamically."""
@@ -180,9 +176,7 @@ class PruningManager:
         """
         return jnp.mean(jnp.abs(ffn_out), axis=(0, 1))
 
-    def get_pruning_mask(
-        self, head_usage: jnp.ndarray, ffn_usage: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def get_pruning_mask(self, head_usage: jnp.ndarray, ffn_usage: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """
         Get boolean masks for components to keep.
 
@@ -209,9 +203,7 @@ class PruningManager:
 
         return active_heads, active_ffn
 
-    def compute_compression_ratio(
-        self, active_heads: jnp.ndarray, active_ffn: jnp.ndarray
-    ) -> Dict[str, float]:
+    def compute_compression_ratio(self, active_heads: jnp.ndarray, active_ffn: jnp.ndarray) -> Dict[str, float]:
         """
         Calculate compression achieved by pruning.
 
@@ -303,9 +295,7 @@ class ReusableAttention(hk.Module):
 
         # Usage tracking state
         if self.enable_usage_tracking:
-            self.head_usage = hk.get_state(
-                "head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros
-            )
+            self.head_usage = hk.get_state("head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros)
 
     def apply_attention(
         self,
@@ -345,9 +335,7 @@ class ReusableAttention(hk.Module):
         Returns:
             Attention output with spiking applied (output, None)
         """
-        return self.__call__(
-            inputs, spike_threshold=spike_threshold, epsilon=epsilon, return_attention=False
-        )
+        return self.__call__(inputs, spike_threshold=spike_threshold, epsilon=epsilon, return_attention=False)
 
     def __call__(
         self,
@@ -410,9 +398,7 @@ class ReusableAttention(hk.Module):
         pruning_manager = PruningManager(self.num_heads, self.d_model)
         head_usage_update = pruning_manager.compute_head_usage(attn_weights)
 
-        current_usage = hk.get_state(
-            "head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros
-        )
+        current_usage = hk.get_state("head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros)
         hk.set_state("head_usage", current_usage + head_usage_update)
 
     def get_head_usage(self) -> jnp.ndarray:
@@ -556,9 +542,7 @@ class ReusableTransformerBlock(hk.Module):
                 inputs, spike_threshold=spike_threshold, epsilon=epsilon, return_attention=True
             )
         else:
-            x = self.attention(
-                inputs, spike_threshold=spike_threshold, epsilon=epsilon, return_attention=False
-            )
+            x = self.attention(inputs, spike_threshold=spike_threshold, epsilon=epsilon, return_attention=False)
             attn_weights = None
 
         output = self.ffn(x)
@@ -613,9 +597,7 @@ def create_transformer_block(
 
 
 # Utility functions
-def apply_shared_spiking(
-    scores: jnp.ndarray, spike_threshold: float = 0.1, epsilon: float = 1e-8
-) -> jnp.ndarray:
+def apply_shared_spiking(scores: jnp.ndarray, spike_threshold: float = 0.1, epsilon: float = 1e-8) -> jnp.ndarray:
     """
     Standalone spiking function for use anywhere in codebase.
 

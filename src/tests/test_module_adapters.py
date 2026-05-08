@@ -43,9 +43,7 @@ class TestModuleContract(unittest.TestCase):
         """Test creating ModuleContract."""
         from src.core.agi.compute_controller import ModuleContract, ModuleType
 
-        contract = ModuleContract(
-            module_type=ModuleType.MEMORY_RETRIEVAL, name="memory_adapter", base_cost=0.1
-        )
+        contract = ModuleContract(module_type=ModuleType.MEMORY_RETRIEVAL, name="memory_adapter", base_cost=0.1)
 
         self.assertEqual(contract.name, "memory_adapter")
         self.assertEqual(contract.base_cost, 0.1)
@@ -140,9 +138,7 @@ class TestModuleAdapter(unittest.TestCase):
         from src.core.agi.compute_controller import ModuleType
 
         def init_adapter():
-            adapter = ModuleAdapter(
-                d_model=64, module_type=ModuleType.MEMORY_RETRIEVAL, name="test_adapter"
-            )
+            adapter = ModuleAdapter(d_model=64, module_type=ModuleType.MEMORY_RETRIEVAL, name="test_adapter")
             return adapter
 
         # Initialize in Haiku context

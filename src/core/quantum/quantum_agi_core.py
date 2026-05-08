@@ -36,9 +36,7 @@ class QuantumInspiredAttention(hk.Module):
         )
 
         # Quantum gates simulation
-        self.hadamard_gate = hk.get_parameter(
-            "hadamard", [num_qubits, num_qubits], init=self._hadamard_init
-        )
+        self.hadamard_gate = hk.get_parameter("hadamard", [num_qubits, num_qubits], init=self._hadamard_init)
 
         self.rotation_gates = hk.get_parameter(
             "rotation_gates",
@@ -341,14 +339,11 @@ class QuantumAGICore(hk.Module):
 
         # Quantum optimization layers
         self.quantum_layers = [
-            QuantumOptimizedLayer(config.d_model, name=f"quantum_layer_{i}")
-            for i in range(config.quantum_layers)
+            QuantumOptimizedLayer(config.d_model, name=f"quantum_layer_{i}") for i in range(config.quantum_layers)
         ]
 
         # Quantum memory
-        self.quantum_memory = QuantumMemoryBank(
-            config.memory_size, config.d_model, num_qubits=config.quantum_qubits
-        )
+        self.quantum_memory = QuantumMemoryBank(config.memory_size, config.d_model, num_qubits=config.quantum_qubits)
 
         # Quantum-classical bridge
         self.quantum_bridge = hk.Sequential(

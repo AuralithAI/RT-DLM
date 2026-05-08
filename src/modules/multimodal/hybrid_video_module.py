@@ -245,9 +245,7 @@ class ResNetBlock(hk.Module):
         else:
             # Adjust dimensions if needed
             if residual.shape[-1] != out.shape[-1]:
-                residual_proj = hk.Conv2D(
-                    output_channels=self.out_channels, kernel_shape=1, name="residual_proj"
-                )
+                residual_proj = hk.Conv2D(output_channels=self.out_channels, kernel_shape=1, name="residual_proj")
                 residual = residual_proj(residual)
             output = residual + out
 
@@ -285,9 +283,7 @@ class VisionTransformerBranch(hk.Module):
         # Layer norms
         self.layer_norms = []
         for i in range(4):
-            norm = hk.LayerNorm(
-                axis=-1, create_scale=True, create_offset=True, name=f"layer_norm_{i}"
-            )
+            norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, name=f"layer_norm_{i}")
             self.layer_norms.append(norm)
 
     def __call__(self, frames: jnp.ndarray) -> jnp.ndarray:
@@ -339,9 +335,7 @@ class TemporalEncoder(hk.Module):
         )
 
         # Temporal convolution (3D-like)
-        self.temporal_conv = hk.Conv1D(
-            output_channels=d_model, kernel_shape=3, padding="SAME", name="temporal_conv"
-        )
+        self.temporal_conv = hk.Conv1D(output_channels=d_model, kernel_shape=3, padding="SAME", name="temporal_conv")
 
         # Frame difference modeling
         self.difference_encoder = hk.Sequential(
@@ -393,9 +387,7 @@ class ObjectTrackingModule(hk.Module):
             name="track_attention",
         )
 
-    def __call__(
-        self, frame_features: jnp.ndarray, temporal_features: jnp.ndarray
-    ) -> Dict[str, Any]:
+    def __call__(self, frame_features: jnp.ndarray, temporal_features: jnp.ndarray) -> Dict[str, Any]:
         """Track objects across frames"""
         # Detect objects in each frame
         object_scores = self.object_detector(frame_features)
@@ -483,17 +475,13 @@ class SceneUnderstandingModule(hk.Module):
             [hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid], name="depth_estimator"
         )
 
-    def __call__(
-        self, frame_features: jnp.ndarray, temporal_features: jnp.ndarray
-    ) -> Dict[str, Any]:
+    def __call__(self, frame_features: jnp.ndarray, temporal_features: jnp.ndarray) -> Dict[str, Any]:
         """Understand scene structure and relationships"""
         # Classify scene type
         scene_probs = self.scene_classifier(frame_features.mean(axis=1))
 
         # Analyze spatial relationships
-        spatial_features = self.spatial_analyzer(
-            frame_features, temporal_features, temporal_features
-        )
+        spatial_features = self.spatial_analyzer(frame_features, temporal_features, temporal_features)
 
         # Estimate depth
         depth_maps = self.depth_estimator(frame_features)

@@ -134,9 +134,7 @@ class AdaptiveForgettingCurve:
         self.base_decay = base_decay
         self.importance_weight = importance_weight
 
-    def calculate_retention_probability(
-        self, memory_item: MemoryItem, current_time: float
-    ) -> float:
+    def calculate_retention_probability(self, memory_item: MemoryItem, current_time: float) -> float:
         """Calculate probability of retaining a memory."""
         # Time-based decay
         time_delta = current_time - memory_item.timestamp
@@ -178,9 +176,7 @@ class ContextualMemoryIndex:
                 self.context_clusters[tag] = []
             self.context_clusters[tag].append(len(self.memory_items) - 1)
 
-    def retrieve_contextual(
-        self, query: np.ndarray, context_tags: List[str], k: int = 5
-    ) -> List[MemoryItem]:
+    def retrieve_contextual(self, query: np.ndarray, context_tags: List[str], k: int = 5) -> List[MemoryItem]:
         """Retrieve memories with contextual filtering."""
         if self.index.ntotal == 0:
             return []
@@ -244,9 +240,7 @@ class LanguageAwareRetrievalFilter:
         scale2 = np.sqrt(2.0 / (self.hidden_dim + 1))
 
         self._params = {
-            "w1": rng.uniform(-scale1, scale1, (self.embedding_dim, self.hidden_dim)).astype(
-                np.float32
-            ),
+            "w1": rng.uniform(-scale1, scale1, (self.embedding_dim, self.hidden_dim)).astype(np.float32),
             "b1": np.zeros(self.hidden_dim, dtype=np.float32),
             "w2": rng.uniform(-scale2, scale2, (self.hidden_dim, 1)).astype(np.float32),
             "b2": np.zeros(1, dtype=np.float32),
@@ -429,9 +423,7 @@ class PersistentLTMStorage:
         self._secure_storage: Optional[SecureStorage] = None
         if encryption_key:
             encryption_salt = self._load_or_create_encryption_salt()
-            self._secure_storage = SecureStorage(
-                encryption_key=encryption_key, salt=encryption_salt
-            )
+            self._secure_storage = SecureStorage(encryption_key=encryption_key, salt=encryption_salt)
 
         # Initialize FAISS index
         self.ltm_index = faiss.IndexFlatL2(d_model)
@@ -452,9 +444,7 @@ class PersistentLTMStorage:
             security_status.append("encrypted")
         security_status.append("hashed-identifiers")
 
-        logger.info(
-            f"PersistentLTMStorage initialized at {storage_dir} [{', '.join(security_status)}]"
-        )
+        logger.info(f"PersistentLTMStorage initialized at {storage_dir} [{', '.join(security_status)}]")
 
     def _load_or_create_salt(self) -> str:
         """Load existing hash salt or create a new one."""
@@ -605,9 +595,7 @@ class PersistentLTMStorage:
         if embedding.ndim == 1:
             embedding = embedding.reshape(1, -1)
 
-        assert (
-            embedding.shape[1] == self.d_model
-        ), f"Expected dim {self.d_model}, got {embedding.shape[1]}"
+        assert embedding.shape[1] == self.d_model, f"Expected dim {self.d_model}, got {embedding.shape[1]}"
 
         # Get next ID
         embedding_id = len(self.embeddings)
@@ -773,9 +761,7 @@ class PersistentLTMStorage:
 
         return results
 
-    def retrieve_by_context(
-        self, context_keywords: List[str], k: int = 5
-    ) -> List[Tuple[np.ndarray, Dict[str, Any]]]:
+    def retrieve_by_context(self, context_keywords: List[str], k: int = 5) -> List[Tuple[np.ndarray, Dict[str, Any]]]:
         """
         Retrieve memories matching context keywords.
 
@@ -999,9 +985,7 @@ class MemoryBank:
         if self.persistent_ltm is None:
             return []
 
-        return self.persistent_ltm.retrieve_ltm(
-            query=query, k=k, session_id=session_id, user_id=user_id
-        )
+        return self.persistent_ltm.retrieve_ltm(query=query, k=k, session_id=session_id, user_id=user_id)
 
     def consolidate_to_ltm(
         self,
@@ -1078,9 +1062,7 @@ class MemoryBank:
         if values_np.ndim == 1:
             values_np = values_np.reshape(1, -1)
 
-        assert (
-            keys_np.shape[1] == self.embedding_dim
-        ), f"Expected dim {self.embedding_dim}, got {keys_np.shape[1]}"
+        assert keys_np.shape[1] == self.embedding_dim, f"Expected dim {self.embedding_dim}, got {keys_np.shape[1]}"
         if len(self.values) + len(keys_np) > self.memory_size:
             remove_count = len(self.values) + len(keys_np) - self.memory_size
             self.values = self.values[remove_count:]
@@ -1088,9 +1070,7 @@ class MemoryBank:
             self.index.add(np.asarray(self.values, dtype=np.float32))
 
         self.values.extend(values_np.tolist())
-        self.feedback_scores.extend(
-            [feedback_scores] * len(keys_np) if feedback_scores else [0.0] * len(keys_np)
-        )
+        self.feedback_scores.extend([feedback_scores] * len(keys_np) if feedback_scores else [0.0] * len(keys_np))
         self.index.add(keys_np)
 
     def retrieve(self, queries_np, spike_threshold=0.1, epsilon=1e-8):

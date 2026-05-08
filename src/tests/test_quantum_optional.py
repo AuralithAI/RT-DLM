@@ -53,13 +53,11 @@ class TestQuantumOverheadEstimation:
         """Test memory estimation for full state vector."""
         from src.core.quantum import estimate_quantum_overhead
 
-        estimate = estimate_quantum_overhead(
-            num_qubits=16, num_layers=4, d_model=384, use_tensor_network=False
-        )
+        estimate = estimate_quantum_overhead(num_qubits=16, num_layers=4, d_model=384, use_tensor_network=False)
 
         assert estimate["num_qubits"] == 16
         assert estimate["num_layers"] == 4
-        assert estimate["use_tensor_network"] == False
+        assert estimate["use_tensor_network"] is False
         assert estimate["state_memory_bytes"] == (2**16) * 16
         assert "O(2^n)" in estimate["memory_formula"]
         assert estimate["gate_parameters"] == 4 * 16 * 3
@@ -73,7 +71,7 @@ class TestQuantumOverheadEstimation:
         )
 
         assert estimate["num_qubits"] == 100
-        assert estimate["use_tensor_network"] == True
+        assert estimate["use_tensor_network"] is True
         assert estimate["state_memory_bytes"] == 100 * 64 * 64 * 16
         assert "O(n × χ²)" in estimate["memory_formula"]
 

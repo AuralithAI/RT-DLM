@@ -18,9 +18,7 @@ class ToolResult:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def success_result(
-        cls, tool: ToolType, data: Any, execution_time: float = 0.0, **metadata
-    ) -> "ToolResult":
+    def success_result(cls, tool: ToolType, data: Any, execution_time: float = 0.0, **metadata) -> "ToolResult":
         return cls(
             tool=tool,
             success=True,
@@ -141,9 +139,7 @@ class ContextTools:
 
         var = self._store.get(context_var)
         if var is None:
-            result = ToolResult.error_result(
-                ToolType.SUMMARIZE, f"Variable '{context_var}' not found"
-            )
+            result = ToolResult.error_result(ToolType.SUMMARIZE, f"Variable '{context_var}' not found")
             self._tool_history.append(result)
             return result
 
@@ -190,9 +186,7 @@ class ContextTools:
         if count == 0:
             var = self._store.get(context_var)
             if var is None:
-                result = ToolResult.error_result(
-                    ToolType.COUNT, f"Variable '{context_var}' not found"
-                )
+                result = ToolResult.error_result(ToolType.COUNT, f"Variable '{context_var}' not found")
                 self._tool_history.append(result)
                 return result
 

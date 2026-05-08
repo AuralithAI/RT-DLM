@@ -213,9 +213,7 @@ class ChunkedQuantumSimulator:
 
         return new_chunks
 
-    def _build_single_qubit_gate_for_chunk(
-        self, gate: jnp.ndarray, target: int, num_qubits: int
-    ) -> jnp.ndarray:
+    def _build_single_qubit_gate_for_chunk(self, gate: jnp.ndarray, target: int, num_qubits: int) -> jnp.ndarray:
         """Build single-qubit gate matrix for chunk"""
         I = jnp.eye(2, dtype=jnp.complex64)
 
@@ -335,7 +333,7 @@ class ChunkedQuantumSimulator:
         U, S, Vh = jnp.linalg.svd(merged_matrix, full_matrices=False)
 
         # Keep top singular values (approximation)
-        k = min(self.config.bond_dimension, len(S))
+        min(self.config.bond_dimension, len(S))
 
         new_chunks = list(chunks)
         new_chunks[chunk1] = U[:, 0] * S[0]  # Simplified: keep dominant component
@@ -361,9 +359,7 @@ class ChunkedQuantumSimulator:
             result = jnp.kron(result, chunk)
         return result
 
-    def measure_chunk(
-        self, chunks: List[jnp.ndarray], chunk_idx: int
-    ) -> Tuple[int, List[jnp.ndarray]]:
+    def measure_chunk(self, chunks: List[jnp.ndarray], chunk_idx: int) -> Tuple[int, List[jnp.ndarray]]:
         """Measure all qubits in a chunk"""
         chunk = chunks[chunk_idx]
         probs = jnp.abs(chunk) ** 2
@@ -443,9 +439,7 @@ class ExtendedQuantumSimulator:
 
     def apply_cnot(self, state_obj: Dict, control: int, target: int) -> Dict:
         """Apply CNOT gate"""
-        CNOT = jnp.array(
-            [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=jnp.complex64
-        )
+        CNOT = jnp.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=jnp.complex64)
         return self._apply_two_qubit_gate(state_obj, CNOT, control, target)
 
     def _apply_single_qubit_gate(self, state_obj: Dict, gate: jnp.ndarray, target: int) -> Dict:
@@ -470,9 +464,7 @@ class ExtendedQuantumSimulator:
 
         return state_obj
 
-    def _apply_gate_dense(
-        self, state: jnp.ndarray, gate: jnp.ndarray, target: int, num_qubits: int
-    ) -> jnp.ndarray:
+    def _apply_gate_dense(self, state: jnp.ndarray, gate: jnp.ndarray, target: int, num_qubits: int) -> jnp.ndarray:
         """
         Apply single-qubit gate to dense state using efficient indexing.
 
@@ -514,23 +506,19 @@ class ExtendedQuantumSimulator:
 
         return new_state
 
-    def _apply_two_qubit_gate(
-        self, state_obj: Dict, gate: jnp.ndarray, qubit1: int, qubit2: int
-    ) -> Dict:
+    def _apply_two_qubit_gate(self, state_obj: Dict, gate: jnp.ndarray, qubit1: int, qubit2: int) -> Dict:
         """Apply two-qubit gate based on state representation"""
         state_type = state_obj["type"]
         num_qubits = state_obj["num_qubits"]
 
         if state_type == "dense":
-            state = state_obj["state"]
+            state_obj["state"]
             # Simplified dense implementation
             return state_obj  # Full impl needed
 
         elif state_type == "chunked":
             chunks = state_obj["chunks"]
-            new_chunks = self.chunked_sim.apply_two_qubit_gate(
-                chunks, gate, qubit1, qubit2, num_qubits
-            )
+            new_chunks = self.chunked_sim.apply_two_qubit_gate(chunks, gate, qubit1, qubit2, num_qubits)
             return {**state_obj, "chunks": new_chunks}
 
         return state_obj

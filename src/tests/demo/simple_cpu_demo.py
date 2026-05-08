@@ -119,9 +119,7 @@ def test_basic_components():
         memory_dim = config.d_model
 
         # Initialize memory
-        memory_bank = hk.get_state(
-            "memory", [memory_size, memory_dim], init=jnp.zeros, dtype=jnp.float32
-        )
+        memory_bank = hk.get_state("memory", [memory_size, memory_dim], init=jnp.zeros, dtype=jnp.float32)
 
         # Query
         query = jax.random.normal(rng, (1, memory_dim))
@@ -222,9 +220,7 @@ def test_simple_inference():
             attended = jnp.einsum("bst,btd->bsd", weights, v)
 
             # Feed forward
-            ff = hk.Sequential(
-                [hk.Linear(config.d_model * 2), jax.nn.relu, hk.Linear(config.d_model)]
-            )
+            ff = hk.Sequential([hk.Linear(config.d_model * 2), jax.nn.relu, hk.Linear(config.d_model)])
 
             return x + attended + ff(attended)
 

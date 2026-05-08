@@ -168,9 +168,7 @@ class GraphNeuron(hk.Module):
         self.use_ffn = use_ffn
         self.ffn_expansion = ffn_expansion
 
-    def __call__(
-        self, node_features: jnp.ndarray, adjacency: jnp.ndarray, is_training: bool = True
-    ) -> jnp.ndarray:
+    def __call__(self, node_features: jnp.ndarray, adjacency: jnp.ndarray, is_training: bool = True) -> jnp.ndarray:
         """
         Apply graph neuron processing.
 
@@ -183,9 +181,7 @@ class GraphNeuron(hk.Module):
             Updated node features: [batch, num_nodes, d_model]
         """
         # Graph attention with residual
-        graph_attn = GraphAttentionUnit(
-            self.d_model, self.num_heads, self.dropout_rate, name="graph_attn"
-        )
+        graph_attn = GraphAttentionUnit(self.d_model, self.num_heads, self.dropout_rate, name="graph_attn")
         attn_output, _ = graph_attn(node_features, adjacency, is_training)
 
         # Residual connection and layer norm
@@ -233,9 +229,7 @@ class DynamicGraphBuilder(hk.Module):
         self.edge_threshold = edge_threshold
         self.num_edge_types = num_edge_types
 
-    def __call__(
-        self, embeddings: jnp.ndarray, mask: Optional[jnp.ndarray] = None
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def __call__(self, embeddings: jnp.ndarray, mask: Optional[jnp.ndarray] = None) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """
         Build graph from embeddings.
 
@@ -304,9 +298,7 @@ class RelationalRouter(hk.Module):
     where related tokens can influence each other's expert selection.
     """
 
-    def __init__(
-        self, d_model: int, num_experts: int, num_edge_types: int = 4, name: Optional[str] = None
-    ):
+    def __init__(self, d_model: int, num_experts: int, num_edge_types: int = 4, name: Optional[str] = None):
         super().__init__(name=name)
         self.d_model = d_model
         self.num_experts = num_experts
@@ -583,9 +575,9 @@ class GraphIntegratedTransformerBlock(hk.Module):
             # Project back to sequence length if needed
             if graph_output.shape[1] != x.shape[1]:
                 # Simple upsampling via tiling (could use more sophisticated methods)
-                graph_output = jnp.tile(
-                    graph_output[:, :1, :], (1, x.shape[1] // graph_output.shape[1] + 1, 1)
-                )[:, : x.shape[1], :]
+                graph_output = jnp.tile(graph_output[:, :1, :], (1, x.shape[1] // graph_output.shape[1] + 1, 1))[
+                    :, : x.shape[1], :
+                ]
 
             # Combine with residual
             combine_gate = hk.Linear(1, name="graph_combine_gate")

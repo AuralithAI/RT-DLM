@@ -103,9 +103,7 @@ class TestGetFeedbackDataset(unittest.TestCase):
 
         # Add multiple feedback entries
         for i in range(5):
-            collector.collect(
-                input_text=f"Input {i}", output_text=f"Output {i}", feedback_score=i / 5
-            )
+            collector.collect(input_text=f"Input {i}", output_text=f"Output {i}", feedback_score=i / 5)
 
         dataset = collector.get_feedback_dataset()
 
@@ -139,9 +137,7 @@ class TestClear(unittest.TestCase):
 
         # Add some feedback
         for i in range(3):
-            collector.collect(
-                input_text=f"Input {i}", output_text=f"Output {i}", feedback_score=0.5
-            )
+            collector.collect(input_text=f"Input {i}", output_text=f"Output {i}", feedback_score=0.5)
 
         self.assertEqual(len(collector.feedback_store), 3)
 
@@ -194,9 +190,7 @@ class TestMetadataHandling(unittest.TestCase):
             "nested": {"key": "value"},
         }
 
-        collector.collect(
-            input_text="Test", output_text="Test", feedback_score=0.7, metadata=metadata
-        )
+        collector.collect(input_text="Test", output_text="Test", feedback_score=0.7, metadata=metadata)
 
         stored_metadata = collector.feedback_store[0]["metadata"]
 

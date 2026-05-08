@@ -72,12 +72,8 @@ class TransformerBlock(hk.Module):
         ffn_usage_update = self._pruning_manager.compute_ffn_usage(ffn_out)
 
         # Accumulate to Haiku state
-        current_head_usage = hk.get_state(
-            "head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros
-        )
-        current_ffn_usage = hk.get_state(
-            "ffn_usage", [self.d_model], dtype=jnp.float32, init=jnp.zeros
-        )
+        current_head_usage = hk.get_state("head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros)
+        current_ffn_usage = hk.get_state("ffn_usage", [self.d_model], dtype=jnp.float32, init=jnp.zeros)
         hk.set_state("head_usage", current_head_usage + head_usage_update)
         hk.set_state("ffn_usage", current_ffn_usage + ffn_usage_update)
 
@@ -90,9 +86,7 @@ class TransformerBlock(hk.Module):
         for mask generation while keeping model-specific instantiation.
         """
         # Get usage statistics from Haiku state
-        usage_heads = hk.get_state(
-            "head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros
-        )
+        usage_heads = hk.get_state("head_usage", [self.num_heads], dtype=jnp.float32, init=jnp.zeros)
         usage_ffn = hk.get_state("ffn_usage", [self.d_model], dtype=jnp.float32, init=jnp.zeros)
 
         # Update pruning manager thresholds and get masks
@@ -120,16 +114,14 @@ class TransformerBlock(hk.Module):
         new_model.mha.w_o = new_o
 
         intermediate_size = new_d_model * 2
-        new_ffn = hk.Sequential(
+        hk.Sequential(
             [
                 hk.Linear(intermediate_size, w_init=hk.initializers.VarianceScaling(1.0)),
                 jax.nn.silu,
                 hk.Linear(new_d_model, w_init=hk.initializers.VarianceScaling(1.0)),
             ]
         )
-        new_ffn_in = jnp.take(self.ffn.layers[0].w, active_ffn_indices, axis=0)[
-            :, :intermediate_size
-        ]
+        new_ffn_in = jnp.take(self.ffn.layers[0].w, active_ffn_indices, axis=0)[:, :intermediate_size]
         new_ffn_out = jnp.take(self.ffn.layers[2].w, active_ffn_indices, axis=0)
         new_model.ffn.layers[0].w = new_ffn_in
         new_model.ffn.layers[2].w = new_ffn_out
@@ -174,8 +166,7 @@ class TransformerModel(hk.Module):
         Returns a new model with pruned layers or updates in-place.
         """
         new_layers = [
-            layer.prune_components(head_threshold=threshold, ffn_threshold=threshold)
-            for layer in self.layers
+            layer.prune_components(head_threshold=threshold, ffn_threshold=threshold) for layer in self.layers
         ]
         new_model = TransformerModel(
             d_model=new_layers[0].d_model,

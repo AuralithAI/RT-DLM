@@ -100,9 +100,7 @@ class TestDocumentChunking:
         """Test sliding window chunking."""
         from src.modules.retrieval.document_ingester import TextChunker, ChunkingStrategy
 
-        chunker = TextChunker(
-            chunk_size=50, chunk_overlap=25, strategy=ChunkingStrategy.SLIDING_WINDOW
-        )
+        chunker = TextChunker(chunk_size=50, chunk_overlap=25, strategy=ChunkingStrategy.SLIDING_WINDOW)
 
         text = "A" * 100
         chunks = chunker.chunk_text(text)

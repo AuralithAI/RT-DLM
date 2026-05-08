@@ -80,27 +80,21 @@ class ONNXExporter:
 
             self.tf = tf
         except ImportError:
-            raise ImportError(
-                "TensorFlow is required for ONNX export. " "Install with: pip install tensorflow"
-            )
+            raise ImportError("TensorFlow is required for ONNX export. " "Install with: pip install tensorflow")
 
         try:
             from jax.experimental import jax2tf
 
             self.jax2tf = jax2tf
         except ImportError:
-            raise ImportError(
-                "jax2tf is required for ONNX export. " "This should be included with JAX."
-            )
+            raise ImportError("jax2tf is required for ONNX export. " "This should be included with JAX.")
 
         try:
             import tf2onnx
 
             self.tf2onnx = tf2onnx
         except ImportError:
-            raise ImportError(
-                "tf2onnx is required for ONNX export. " "Install with: pip install tf2onnx"
-            )
+            raise ImportError("tf2onnx is required for ONNX export. " "Install with: pip install tf2onnx")
 
     def _create_tf_function(self) -> Tuple[Any, List[Any]]:
         """
@@ -110,16 +104,14 @@ class ONNXExporter:
             Tuple of (tf_function, input_specs)
         """
         # Create input signature
-        input_shape = (
-            self.config.batch_size,
-            self.config.sequence_length,
-        )
 
         # Convert JAX function to TF
         @self.tf.function
         def tf_model(input_ids):
             # Use jax2tf to convert
-            jax_fn = lambda x: self.model_fn(self.params, x)
+            def jax_fn(x):
+                return self.model_fn(self.params, x)
+
             tf_fn = self.jax2tf.convert(
                 jax_fn,
                 polymorphic_shapes=["(b, s)"],

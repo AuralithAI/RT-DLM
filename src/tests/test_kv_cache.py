@@ -350,9 +350,7 @@ class TestKVPrefixCacheManagement:
 
     def test_is_full(self):
         """Test is_full property."""
-        cache = KVPrefixCache(
-            num_layers=1, max_prefix_len=4, num_kv_heads=1, head_dim=4, max_entries=2
-        )
+        cache = KVPrefixCache(num_layers=1, max_prefix_len=4, num_kv_heads=1, head_dim=4, max_entries=2)
         k = jnp.ones((1, 1, 4, 4))
         v = jnp.ones((1, 1, 4, 4))
 
@@ -495,7 +493,7 @@ class TestKVCacheIntegration:
 
                 # Concatenate cached prefix with new tokens
                 full_k = jnp.concatenate([cached_k, new_k], axis=2)
-                full_v = jnp.concatenate([cached_v, new_v], axis=2)
+                jnp.concatenate([cached_v, new_v], axis=2)
 
                 assert full_k.shape[2] == 20 + 8  # prefix + new
 

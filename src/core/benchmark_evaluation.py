@@ -142,9 +142,7 @@ class ProductionMetrics:
         }
 
         if self.benchmark_results:
-            result["benchmarks"] = {
-                name: br.to_dict() for name, br in self.benchmark_results.items()
-            }
+            result["benchmarks"] = {name: br.to_dict() for name, br in self.benchmark_results.items()}
 
         if self.calibration:
             result["calibration"] = self.calibration.to_dict()
@@ -579,9 +577,7 @@ class BenchmarkEvaluator:
         elapsed = time.time() - start_time
 
         # Compute per-category scores
-        category_scores = {
-            cat: category_correct[cat] / category_total[cat] for cat in category_total
-        }
+        category_scores = {cat: category_correct[cat] / category_total[cat] for cat in category_total}
 
         return BenchmarkResult(
             benchmark_name=benchmark_name,
@@ -659,9 +655,7 @@ class BenchmarkEvaluator:
 
             # Compute loss
             log_probs = jax.nn.log_softmax(logits, axis=-1)
-            target_log_probs = jnp.take_along_axis(log_probs, targets[:, :, None], axis=-1).squeeze(
-                -1
-            )
+            target_log_probs = jnp.take_along_axis(log_probs, targets[:, :, None], axis=-1).squeeze(-1)
 
             # Mask padding
             mask = (targets != 0).astype(jnp.float32)
@@ -729,9 +723,7 @@ class BenchmarkEvaluator:
         if mmlu_data:
             logger.info("Evaluating MMLU...")
             rng, bench_rng = jax.random.split(rng)
-            benchmark_results["mmlu"] = self.evaluate_multiple_choice(
-                params, mmlu_data, "MMLU", bench_rng
-            )
+            benchmark_results["mmlu"] = self.evaluate_multiple_choice(params, mmlu_data, "MMLU", bench_rng)
 
         if hellaswag_data:
             logger.info("Evaluating HellaSwag...")
@@ -750,9 +742,7 @@ class BenchmarkEvaluator:
         if bbh_data:
             logger.info("Evaluating BBH...")
             rng, bench_rng = jax.random.split(rng)
-            benchmark_results["bbh"] = self.evaluate_multiple_choice(
-                params, bbh_data, "BBH", bench_rng
-            )
+            benchmark_results["bbh"] = self.evaluate_multiple_choice(params, bbh_data, "BBH", bench_rng)
 
         # Compute efficiency
         compute_metrics = self.compute_tracker.compute()
@@ -947,9 +937,7 @@ class MultimodalEvaluator:
             report.per_modality_joint[mod] = joint.accuracy
             report.interference[mod] = max(0.0, solo.accuracy - joint.accuracy)
         report.aggregate_interference = (
-            sum(report.interference.values()) / len(report.interference)
-            if report.interference
-            else 0.0
+            sum(report.interference.values()) / len(report.interference) if report.interference else 0.0
         )
         return report
 
@@ -963,9 +951,6 @@ class MultimodalEvaluator:
         for name, (task_fn, samples) in suite.items():
             rng, sub = jax.random.split(rng)
             modality, _, _suffix = name.partition(":")
-            results[name] = self.evaluate_modality(
-                params, modality, task_fn, samples, sub, joint=False
-            )
+            results[name] = self.evaluate_modality(params, modality, task_fn, samples, sub, joint=False)
         self._task_results.update(results)
         return results
-

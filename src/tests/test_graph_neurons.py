@@ -97,9 +97,7 @@ class TestGraphAttentionUnit:
         for h in range(num_heads):
             diag_attn = jnp.diag(attention_weights[0, h])
             off_diag_sum = jnp.sum(attention_weights[0, h]) - jnp.sum(diag_attn)
-            assert (
-                off_diag_sum < 1e-3
-            ), "Off-diagonal attention should be near zero with only self-loops"
+            assert off_diag_sum < 1e-3, "Off-diagonal attention should be near zero with only self-loops"
 
 
 class TestGraphNeuron:
@@ -120,9 +118,7 @@ class TestGraphNeuron:
         rng = jax.random.PRNGKey(42)
 
         node_features = jax.random.normal(rng, (batch_size, num_nodes, d_model))
-        adjacency = (jax.random.uniform(rng, (batch_size, num_nodes, num_nodes)) > 0.3).astype(
-            jnp.float32
-        )
+        adjacency = (jax.random.uniform(rng, (batch_size, num_nodes, num_nodes)) > 0.3).astype(jnp.float32)
 
         params = forward_fn.init(rng, node_features, adjacency)
         output = forward_fn.apply(params, rng, node_features, adjacency)
@@ -214,9 +210,7 @@ class TestMultiHopGraphReasoner:
         rng = jax.random.PRNGKey(42)
 
         node_features = jax.random.normal(rng, (batch_size, num_nodes, d_model))
-        adjacency = (jax.random.uniform(rng, (batch_size, num_nodes, num_nodes)) > 0.3).astype(
-            jnp.float32
-        )
+        adjacency = (jax.random.uniform(rng, (batch_size, num_nodes, num_nodes)) > 0.3).astype(jnp.float32)
 
         params = forward_fn.init(rng, node_features, adjacency)
         final_features, reasoning_paths = forward_fn.apply(params, rng, node_features, adjacency)
@@ -243,9 +237,7 @@ class TestMultiHopGraphReasoner:
         query = jax.random.normal(rng, (batch_size, d_model))
 
         params = forward_fn.init(rng, node_features, adjacency, query)
-        final_features, reasoning_paths = forward_fn.apply(
-            params, rng, node_features, adjacency, query
-        )
+        final_features, reasoning_paths = forward_fn.apply(params, rng, node_features, adjacency, query)
 
         # Reasoning paths should sum to 1 (probability distribution)
         path_sums = jnp.sum(reasoning_paths, axis=-1)
@@ -270,9 +262,7 @@ class TestGraphMoE:
         rng = jax.random.PRNGKey(42)
 
         features = jax.random.normal(rng, (batch_size, seq_len, d_model))
-        adjacency = (jax.random.uniform(rng, (batch_size, seq_len, seq_len)) > 0.5).astype(
-            jnp.float32
-        )
+        adjacency = (jax.random.uniform(rng, (batch_size, seq_len, seq_len)) > 0.5).astype(jnp.float32)
 
         params = forward_fn.init(rng, features, adjacency)
         output, expert_indices, aux_loss = forward_fn.apply(params, rng, features, adjacency)

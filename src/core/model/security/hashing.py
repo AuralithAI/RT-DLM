@@ -226,13 +226,9 @@ class IdentifierManager:
         user_config = HashConfig(salt_filename=".user_salt")
         session_config = HashConfig(salt_filename=".session_salt")
 
-        self._user_hasher = IdentifierHasher(
-            salt=user_salt, storage_dir=storage_dir, config=user_config
-        )
+        self._user_hasher = IdentifierHasher(salt=user_salt, storage_dir=storage_dir, config=user_config)
 
-        self._session_hasher = IdentifierHasher(
-            salt=session_salt, storage_dir=storage_dir, config=session_config
-        )
+        self._session_hasher = IdentifierHasher(salt=session_salt, storage_dir=storage_dir, config=session_config)
 
     def hash_user_id(self, user_id: Optional[str]) -> Optional[str]:
         """Hash a user ID."""

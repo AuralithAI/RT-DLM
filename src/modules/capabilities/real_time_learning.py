@@ -48,9 +48,7 @@ class RealTimeFeedbackBuffer:
         self.max_size = max_size
         self.priority_threshold = priority_threshold
         self.buffer: deque[FeedbackSample] = deque(maxlen=max_size)
-        self.priority_buffer: deque[FeedbackSample] = deque(
-            maxlen=max_size // 4
-        )  # High-priority samples
+        self.priority_buffer: deque[FeedbackSample] = deque(maxlen=max_size // 4)  # High-priority samples
         self.skill_buffers: Dict[str, deque[FeedbackSample]] = {}  # Per-skill buffers
 
     def add_feedback(self, sample: FeedbackSample):
@@ -107,9 +105,7 @@ class DynamicSkillAcquisition(hk.Module):
         self.skill_adapters: Dict[str, Any] = {}
 
         # Skill routing network
-        self.skill_router = hk.Sequential(
-            [hk.Linear(base_d_model), jax.nn.silu, hk.Linear(max_skills), jax.nn.softmax]
-        )
+        self.skill_router = hk.Sequential([hk.Linear(base_d_model), jax.nn.silu, hk.Linear(max_skills), jax.nn.softmax])
 
         # Meta-skill learning network
         self.meta_learner = hk.Sequential(
@@ -231,9 +227,7 @@ class RealTimeLearningSystem:
         """Allow setting skill acquisition module."""
         self._skill_acquisition = value
 
-    def process_user_feedback(
-        self, input_text: str, output_text: str, feedback: Dict[str, Any]
-    ) -> bool:
+    def process_user_feedback(self, input_text: str, output_text: str, feedback: Dict[str, Any]) -> bool:
         """
         Process real-time user feedback and trigger learning if needed.
 
@@ -299,9 +293,7 @@ class RealTimeLearningSystem:
             logger.error(f"Immediate adaptation failed: {e}")
             return False
 
-    def learn_new_skill(
-        self, skill_definition: SkillDefinition, training_samples: List[FeedbackSample]
-    ) -> bool:
+    def learn_new_skill(self, skill_definition: SkillDefinition, training_samples: List[FeedbackSample]) -> bool:
         """
         Learn a completely new skill from user demonstrations.
 
@@ -358,9 +350,7 @@ class RealTimeLearningSystem:
 
         return jnp.array(inputs), jnp.array(targets), jnp.array(weights)
 
-    def _fast_adaptation_step(
-        self, inputs: jnp.ndarray, targets: jnp.ndarray, weights: jnp.ndarray
-    ) -> bool:
+    def _fast_adaptation_step(self, inputs: jnp.ndarray, targets: jnp.ndarray, weights: jnp.ndarray) -> bool:
         """Perform fast adaptation using the feedback data."""
         try:
             # This would integrate with your existing training loop
@@ -404,9 +394,7 @@ class RealTimeLearningSystem:
             "active_skills_count": len(self.skills_registry),
             "feedback_samples_count": len(self.feedback_buffer.buffer),
             "priority_samples_count": len(self.feedback_buffer.priority_buffer),
-            "recent_learning_events": len(
-                [s for s in self.feedback_buffer.buffer if abs(s.user_rating) > 0.8]
-            ),
+            "recent_learning_events": len([s for s in self.feedback_buffer.buffer if abs(s.user_rating) > 0.8]),
         }
 
     def export_learned_skills(self) -> Dict[str, Any]:

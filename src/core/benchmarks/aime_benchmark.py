@@ -109,9 +109,7 @@ class AIMEBenchmark(BenchmarkBase):
             )
             logger.info(f"Loaded AIME dataset: {len(ds)} problems")
         except Exception as e:
-            logger.warning(
-                f"Could not load AIME from HuggingFace: {e}. " f"Using synthetic fallback data."
-            )
+            logger.warning(f"Could not load AIME from HuggingFace: {e}. " f"Using synthetic fallback data.")
             return self._synthetic_fallback()
 
         samples: List[BenchmarkSample] = []
@@ -172,8 +170,7 @@ class AIMEBenchmark(BenchmarkBase):
         # Curated AIME-style problems with known answers
         problems = [
             (
-                "Find the number of positive integers n ≤ 100 such that "
-                "n² + n + 1 is divisible by 3.",
+                "Find the number of positive integers n ≤ 100 such that " "n² + n + 1 is divisible by 3.",
                 "67",
             ),
             (
@@ -182,8 +179,7 @@ class AIMEBenchmark(BenchmarkBase):
                 "640",
             ),
             (
-                "How many integers between 1 and 1000 inclusive are "
-                "divisible by neither 3 nor 5?",
+                "How many integers between 1 and 1000 inclusive are " "divisible by neither 3 nor 5?",
                 "533",
             ),
             (
@@ -195,8 +191,7 @@ class AIMEBenchmark(BenchmarkBase):
                 "1",
             ),
             (
-                "How many 3-element subsets of {1,2,...,10} contain "
-                "no two consecutive integers?",
+                "How many 3-element subsets of {1,2,...,10} contain " "no two consecutive integers?",
                 "56",
             ),
             (

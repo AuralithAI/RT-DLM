@@ -470,7 +470,7 @@ class TestMetricLogger:
         """Test logger creates necessary directories."""
         from src.core.evaluation import MetricLogger
 
-        logger = MetricLogger(log_dir=temp_log_dir, experiment_name="test_experiment")
+        MetricLogger(log_dir=temp_log_dir, experiment_name="test_experiment")
 
         experiment_dir = Path(temp_log_dir) / "test_experiment"
         assert experiment_dir.exists()
@@ -604,10 +604,7 @@ class TestValidationRunner:
         runner = ValidationRunner(mock_model, evaluator)
 
         # Create small validation set
-        val_data = [
-            (jnp.ones((2, 10), dtype=jnp.int32), jnp.ones((2, 10), dtype=jnp.int32))
-            for _ in range(5)
-        ]
+        val_data = [(jnp.ones((2, 10), dtype=jnp.int32), jnp.ones((2, 10), dtype=jnp.int32)) for _ in range(5)]
 
         metrics = runner.run_validation(params={}, val_data=val_data)
 

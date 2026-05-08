@@ -27,9 +27,7 @@ def test_embedding():
         embedding_layer = EmbeddingLayer(vocab_size, d_model, max_seq_length)
         return embedding_layer(token_ids, seq_length=token_ids.shape[1])
 
-    model = hk.transform(
-        forward_fn
-    )  # So here we wrap the feedforward function in a Haiku transform.
+    model = hk.transform(forward_fn)  # So here we wrap the feedforward function in a Haiku transform.
 
     # Example inputs
     inputs = jnp.array([[1, 2, 3], [4, 5, 6]])

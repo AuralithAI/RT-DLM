@@ -11,6 +11,7 @@ import jax.numpy as jnp
 @dataclass
 class LoRAConfig:
     """Hyperparameters for a LoRA adapter bank."""
+
     rank: int = 64
     alpha: float = 128.0
     dropout: float = 0.0
@@ -58,9 +59,7 @@ class LoRALinear(hk.Module):
             shape=[in_features, self.rank],
             init=hk.initializers.TruncatedNormal(0.02),
         )
-        b_lora = hk.get_parameter(
-            "lora_B", shape=[self.rank, self.out_features], init=jnp.zeros
-        )
+        b_lora = hk.get_parameter("lora_B", shape=[self.rank, self.out_features], init=jnp.zeros)
         delta = x
         if is_training and self.dropout > 0.0:
             delta = hk.dropout(hk.next_rng_key(), self.dropout, delta)
@@ -71,9 +70,7 @@ class LoRALinear(hk.Module):
 class LoRAAdapter(hk.Module):
     """Standalone low-rank adapter (no base linear) — overlay on a frozen layer."""
 
-    def __init__(
-        self, in_features: int, out_features: int, config: LoRAConfig, name: Optional[str] = None
-    ):
+    def __init__(self, in_features: int, out_features: int, config: LoRAConfig, name: Optional[str] = None):
         super().__init__(name=name)
         self.in_features = in_features
         self.out_features = out_features

@@ -80,9 +80,7 @@ class TestScaleZeroPointComputation(unittest.TestCase):
 
         tensor = jnp.array([[1.0, 2.0, -3.0, 4.0]])
 
-        scale, zero_point = compute_scale_zero_point(
-            tensor, bits=8, symmetric=True, per_channel=False
-        )
+        scale, zero_point = compute_scale_zero_point(tensor, bits=8, symmetric=True, per_channel=False)
 
         # Symmetric quantization has zero_point = 0
         self.assertTrue(jnp.all(zero_point == 0))
@@ -95,9 +93,7 @@ class TestScaleZeroPointComputation(unittest.TestCase):
 
         tensor = jnp.array([[0.0, 1.0, 2.0, 3.0]])
 
-        scale, zero_point = compute_scale_zero_point(
-            tensor, bits=8, symmetric=False, per_channel=False
-        )
+        scale, zero_point = compute_scale_zero_point(tensor, bits=8, symmetric=False, per_channel=False)
 
         # Scale should be positive
         self.assertTrue(jnp.all(scale > 0))
@@ -108,9 +104,7 @@ class TestScaleZeroPointComputation(unittest.TestCase):
 
         tensor = jnp.array([[1.0, 2.0, 3.0], [10.0, 20.0, 30.0]])
 
-        scale, zero_point = compute_scale_zero_point(
-            tensor, bits=8, symmetric=True, per_channel=True, axis=-1
-        )
+        scale, zero_point = compute_scale_zero_point(tensor, bits=8, symmetric=True, per_channel=True, axis=-1)
 
         # Should have different scales for different channels
         self.assertEqual(scale.shape[-1], 1)  # Keepdims
@@ -121,9 +115,7 @@ class TestScaleZeroPointComputation(unittest.TestCase):
 
         tensor = jnp.array([[1.0, 2.0, 3.0, 4.0]])
 
-        scale, zero_point = compute_scale_zero_point(
-            tensor, bits=4, symmetric=True, per_channel=False
-        )
+        scale, zero_point = compute_scale_zero_point(tensor, bits=4, symmetric=True, per_channel=False)
 
         # Scale should accommodate 4-bit range (-8 to 7)
         self.assertTrue(jnp.all(scale > 0))
@@ -216,7 +208,7 @@ class TestQuantizationIntegration(unittest.TestCase):
             quantize_tensor,
         )
 
-        config = QuantizationConfig(precision="int8")
+        QuantizationConfig(precision="int8")
 
         # Simulate model params
         params = {

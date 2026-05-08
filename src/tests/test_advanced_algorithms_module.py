@@ -119,9 +119,7 @@ class TestEWCLoss(unittest.TestCase):
 
             fisher_matrix = {"w": jnp.ones((5, 5)), "b": jnp.ones(5)}
 
-            ewc_loss = compute_ewc_loss(
-                params=params, params_star=params, fisher_matrix=fisher_matrix, lambda_ewc=1.0
-            )
+            ewc_loss = compute_ewc_loss(params=params, params_star=params, fisher_matrix=fisher_matrix, lambda_ewc=1.0)
 
             # Should be zero or very small
             self.assertLess(float(ewc_loss), 1e-6)
@@ -226,9 +224,7 @@ class TestImportanceWeights(unittest.TestCase):
             num_samples=100,
         )
 
-        self.assertEqual(
-            memory.params_snapshot["layer"].shape, memory.importance_weights["layer"].shape
-        )
+        self.assertEqual(memory.params_snapshot["layer"].shape, memory.importance_weights["layer"].shape)
 
 
 class TestRegularizationStrength(unittest.TestCase):
