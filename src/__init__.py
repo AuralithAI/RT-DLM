@@ -28,7 +28,7 @@ from src.config.agi_config import AGIConfig
 __all__ = [
     # Model factory functions
     "create_rtdlm_agi",
-    "create_agi_optimizer", 
+    "create_agi_optimizer",
     "compute_agi_loss",
     # Model classes
     "RTDLMAGISystem",

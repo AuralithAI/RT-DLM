@@ -84,6 +84,10 @@ transformers==4.47.1  # For alignment techniques
 torch==2.5.1  # Sometimes needed for certain alignment tools
 fairlearn==0.10.0  # Fairness assessment and mitigation
 
+# Experiment tracking and benchmarks
+mlflow>=2.10.0  # Experiment tracking, metric logging, model registry
+# datasets>=2.18.0  # OPTIONAL: only needed if use_huggingface=True in benchmarks
+
 # Development and testing
 pytest==8.3.4
 black==24.10.0

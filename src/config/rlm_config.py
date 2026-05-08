@@ -40,14 +40,22 @@ class RLMConfig:
     fallback_to_direct: bool = True
     direct_context_threshold: int = 2000
     tool_temperature: float = 0.1
-    available_tools: List[ToolType] = field(default_factory=lambda: [
-        ToolType.PEEK,
-        ToolType.GREP,
-        ToolType.PARTITION,
-        ToolType.SUMMARIZE,
-        ToolType.RECURSIVE_CALL,
-        ToolType.TERMINATE,
-    ])
+    # Hierarchical compression
+    enable_hierarchical_compression: bool = False
+    auto_compress_threshold: int = 32000
+    store_utilisation_threshold: float = 0.70
+    tier1_max_tokens: int = 2000
+    tier2_max_tokens: int = 500
+    available_tools: List[ToolType] = field(
+        default_factory=lambda: [
+            ToolType.PEEK,
+            ToolType.GREP,
+            ToolType.PARTITION,
+            ToolType.SUMMARIZE,
+            ToolType.RECURSIVE_CALL,
+            ToolType.TERMINATE,
+        ]
+    )
 
     @classmethod
     def minimal(cls) -> "RLMConfig":

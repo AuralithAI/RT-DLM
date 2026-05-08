@@ -115,8 +115,9 @@ jobs:
 
       - name: Check dependencies for vulnerabilities
         run: |
-          pip install -r requirements.txt
-          safety check --full-report || true
+          # safety can scan a requirements file directly -- no need to install
+          # the full GPU stack (~10 GB) which blows the runner disk.
+          safety check -r requirements.txt --full-report || true
         continue-on-error: true
 
       - name: Upload security report

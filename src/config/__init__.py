@@ -19,19 +19,19 @@ from .compute_controller_config import (
 )
 
 __all__ = [
-    'AGIConfig',
-    'ModelParallelConfig',
-    'TensorNetworkConfig',
-    'RetrievalConfig',
-    'RetrievalProvider',
-    'ChunkingStrategy',
+    "AGIConfig",
+    "ModelParallelConfig",
+    "TensorNetworkConfig",
+    "RetrievalConfig",
+    "RetrievalProvider",
+    "ChunkingStrategy",
     # Compute Controller
-    'ComputeControllerConfig',
-    'ComputeStrategy',
-    'ModuleCostConfig',
-    'TaskTypeConfig',
-    'DEFAULT_CONFIG',
-    'FAST_CONFIG',
-    'THOROUGH_CONFIG',
-    'BALANCED_CONFIG',
+    "ComputeControllerConfig",
+    "ComputeStrategy",
+    "ModuleCostConfig",
+    "TaskTypeConfig",
+    "DEFAULT_CONFIG",
+    "FAST_CONFIG",
+    "THOROUGH_CONFIG",
+    "BALANCED_CONFIG",
 ]

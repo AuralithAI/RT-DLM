@@ -85,9 +85,22 @@ Classical simulation of quantum computing primitives:
 - Quantum attention mechanisms
 
 #### Multimodal Processing
-Cross-modal fusion capabilities:
-- Audio emotion detection and hybrid audio module
-- Video understanding with temporal modeling
+Cross-modal fusion across heterogeneous inputs:
+- **Text, Vision, Audio, Video** with cross-modal attention and fusion
+- **RGBD vision** via per-channel `in_channels` parameter on `VisionEncoder`
+- **Spatiotemporal video** with patch-token preservation, motion CNN branch, 3D RoPE, and sparse temporal causal mask
+- **Real STFT + learnable mel filterbank** for waveform audio (`stft`, `LearnableFilterbank`)
+- **Document understanding** via `DocumentEncoder` + `TableStructureEncoder` + `ChartDecoder`
+- **3D point clouds** via `PointCloudEncoder` (PointNet++ style set abstraction)
+- **Biosignals** (EEG/ECG/EMG) via `BiosignalEncoder` with channel attention
+- **Tactile sensor arrays** via `TactileEncoder`
+- **Action / control signals** via `ActionEncoder` with discretized bins
+- **Streaming long-form video** via `StreamingVideoBuffer` (circular buffer with timestamp tracking)
+- **Reconstruction heads**: `SpectrogramDecoder` (audio mel resynthesis), `VQVAEImageTokenizer` (discrete image codes)
+- **Cross-modal sync** via `sinusoidal_timestamp_embedding` + `modality_synchronization_loss`
+- **Interference profiling** via `MultimodalEvaluator.evaluate_with_interference`
+
+Enable per-modality flags on `AGIConfig`: `enable_document_modality`, `enable_pointcloud_modality`, `enable_biosignal_modality`, `enable_tactile_modality`, `enable_action_modality`, `enable_image_vq`, `enable_spectrogram_decoder`. See [Architecture](docs/ARCHITECTURE.md) for the full list.
 
 ### Training Pipeline
 

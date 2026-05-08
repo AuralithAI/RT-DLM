@@ -53,17 +53,14 @@ Utility Functions:
 from .agi_system import (
     # Main abstraction
     AGISystemAbstraction,
-    
     # Core components
     ComponentFusion,
     StageTracker,
     EthicalAlignmentModule,
-    
     # Data structures
     AGIStage,
     StageThresholds,
     AGIMetrics,
-    
     # Factory function
     create_agi_system_fn,
 )
@@ -72,32 +69,30 @@ from .compute_controller import (
     # Controller
     ComputeController,
     ComputePlan,
-    
     # State and actions
     ComputeState,
     ComputeAction,
-    
     # Module contracts
     ModuleContract,
     ModuleOutput,
     ModuleRegistry,
     ModuleType,
-    
     # Factory function
     create_compute_controller_fn,
-    
     ControllerLossComputer,
     ControllerRewardShaper,
-    
     ControllerIntegrationMixin,
     ControlledAGIForward,
     create_controlled_agi_fn,
+    # GRPO
+    GRPOValueHead,
+    compute_grpo_advantages,
+    compute_grpo_loss,
 )
 
 from .module_adapters import (
     # Base adapter
     ModuleAdapter,
-    
     # Specific adapters
     MemoryRetrievalAdapter,
     GraphReasoningAdapter,
@@ -106,7 +101,6 @@ from .module_adapters import (
     MoERoutingAdapter,
     ConsciousnessAdapter,
     OutputGenerationAdapter,
-    
     # Factory function
     create_module_executors,
 )
@@ -114,20 +108,16 @@ from .module_adapters import (
 __all__ = [
     # Main abstraction
     "AGISystemAbstraction",
-    
     # Core components
     "ComponentFusion",
     "StageTracker",
     "EthicalAlignmentModule",
-    
     # Data structures
     "AGIStage",
     "StageThresholds",
     "AGIMetrics",
-    
     # Factory function
     "create_agi_system_fn",
-    
     # Compute Controller
     "ComputeController",
     "ComputePlan",
@@ -138,14 +128,15 @@ __all__ = [
     "ModuleRegistry",
     "ModuleType",
     "create_compute_controller_fn",
-    
     "ControllerLossComputer",
     "ControllerRewardShaper",
-
     "ControllerIntegrationMixin",
     "ControlledAGIForward",
     "create_controlled_agi_fn",
-    
+    # GRPO
+    "GRPOValueHead",
+    "compute_grpo_advantages",
+    "compute_grpo_loss",
     # Module Adapters
     "ModuleAdapter",
     "MemoryRetrievalAdapter",

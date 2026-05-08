@@ -67,9 +67,9 @@ class ContextStore:
             return
         current_time = time.time()
         expired = [
-            name for name, var in self._variables.items()
-            if (current_time - var.metadata.last_accessed) > self._cache_ttl
-            and var.metadata.parent_var is None
+            name
+            for name, var in self._variables.items()
+            if (current_time - var.metadata.last_accessed) > self._cache_ttl and var.metadata.parent_var is None
         ]
         for name in expired:
             self.delete(name)
@@ -100,7 +100,7 @@ class ContextStore:
         if self._embedding_fn is not None:
             try:
                 embedding = self._embedding_fn(content)
-                metadata.embedding_dim = embedding.shape[-1] if hasattr(embedding, 'shape') else None
+                metadata.embedding_dim = embedding.shape[-1] if hasattr(embedding, "shape") else None
             except Exception as e:
                 logger.debug(f"Embedding generation failed for variable '{name}': {e}")
 
@@ -153,10 +153,7 @@ class ContextStore:
         return var.metadata if var else None
 
     def _get_existing_chunk_names(self, parent_name: str) -> List[str]:
-        return [
-            name for name in self._variables.keys()
-            if self._variables[name].metadata.parent_var == parent_name
-        ]
+        return [name for name in self._variables.keys() if self._variables[name].metadata.parent_var == parent_name]
 
     def partition(
         self,
@@ -222,28 +219,35 @@ class ContextStore:
             return []
 
         results = []
-        lines = var.content.split('\n')
+        lines = var.content.split("\n")
 
         if regex:
             try:
                 compiled = re.compile(pattern, re.IGNORECASE)
             except re.error:
                 return []
-            match_fn = lambda line: compiled.search(line) is not None
+
+            def match_fn(line):
+                return compiled.search(line) is not None
+
         else:
             pattern_lower = pattern.lower()
-            match_fn = lambda line: pattern_lower in line.lower()
+
+            def match_fn(line):
+                return pattern_lower in line.lower()
 
         for i, line in enumerate(lines):
             if match_fn(line):
                 start_idx = max(0, i - context_lines)
                 end_idx = min(len(lines), i + context_lines + 1)
-                context = '\n'.join(lines[start_idx:end_idx])
-                results.append({
-                    'line_number': i,
-                    'line': line,
-                    'context': context if context_lines > 0 else line,
-                })
+                context = "\n".join(lines[start_idx:end_idx])
+                results.append(
+                    {
+                        "line_number": i,
+                        "line": line,
+                        "context": context if context_lines > 0 else line,
+                    }
+                )
 
         return results
 
@@ -266,17 +270,14 @@ class ContextStore:
 
     def stats(self) -> Dict[str, Any]:
         return {
-            'num_variables': len(self._variables),
-            'total_size': self._total_size,
-            'max_variables': self._max_variables,
-            'max_total_size': self._max_total_size,
+            "num_variables": len(self._variables),
+            "total_size": self._total_size,
+            "max_variables": self._max_variables,
+            "max_total_size": self._max_total_size,
         }
 
     def _evict_if_needed(self, new_size: int) -> None:
-        while (
-            len(self._variables) >= self._max_variables
-            or self._total_size + new_size > self._max_total_size
-        ):
+        while len(self._variables) >= self._max_variables or self._total_size + new_size > self._max_total_size:
             if not self._access_order:
                 break
             oldest = self._access_order[0]
@@ -287,14 +288,12 @@ class ContextStore:
             self._access_order.remove(name)
         self._access_order.append(name)
 
-    def _partition_fixed_size(
-        self, content: str, chunk_size: int, overlap: int
-    ) -> List[str]:
+    def _partition_fixed_size(self, content: str, chunk_size: int, overlap: int) -> List[str]:
         # Ensure overlap doesn't exceed chunk_size to prevent infinite loops
         effective_overlap = min(overlap, chunk_size - 1) if chunk_size > 1 else 0
         if effective_overlap < 0:
             effective_overlap = 0
-        
+
         chunks = []
         start = 0
         while start < len(content):
@@ -308,7 +307,7 @@ class ContextStore:
         return chunks
 
     def _partition_paragraph(self, content: str, max_size: int) -> List[str]:
-        paragraphs = re.split(r'\n\s*\n', content)
+        paragraphs = re.split(r"\n\s*\n", content)
         chunks = []
         current_chunk = ""
 
@@ -326,7 +325,7 @@ class ContextStore:
         return chunks if chunks else [content]
 
     def _partition_sentence(self, content: str, max_size: int) -> List[str]:
-        sentences = re.split(r'(?<=[.!?])\s+', content)
+        sentences = re.split(r"(?<=[.!?])\s+", content)
         chunks = []
         current_chunk = ""
 
@@ -344,7 +343,7 @@ class ContextStore:
         return chunks if chunks else [content]
 
     def _partition_semantic(self, content: str, max_size: int) -> List[str]:
-        paragraphs = re.split(r'\n\s*\n', content)
+        paragraphs = re.split(r"\n\s*\n", content)
 
         if self._embedding_fn is None:
             return self._partition_paragraph(content, max_size)

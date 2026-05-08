@@ -3,13 +3,14 @@ import jax
 import jax.numpy as jnp
 import optax
 import numpy as np
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 
 
 class EthicalDimension(Enum):
     """Ethical evaluation dimensions for comprehensive assessment."""
+
     FAIRNESS = "fairness"
     HARM_PREVENTION = "harm_prevention"
     TRUTHFULNESS = "truthfulness"
@@ -23,20 +24,22 @@ class EthicalDimension(Enum):
 @dataclass
 class EthicalContext:
     """Context information for ethical decision making."""
+
     user_demographics: Optional[Dict] = None
     cultural_context: Optional[str] = None
     domain: Optional[str] = None
     stakes: str = "medium"  # low, medium, high
     affected_parties: Optional[List[str]] = None
-    
+
     def __post_init__(self):
         if self.affected_parties is None:
             self.affected_parties = []
 
 
-@dataclass 
+@dataclass
 class BiasDetectionResult:
     """Result of bias detection analysis."""
+
     bias_type: str
     severity: float  # 0-1 scale
     confidence: float
@@ -47,169 +50,169 @@ class BiasDetectionResult:
 
 class MultidimensionalBiasDetector(hk.Module):
     """Advanced bias detection across multiple dimensions."""
-    
+
     def __init__(self, d_model: int, name=None):
         super().__init__(name=name)
         self.d_model = d_model
-        
+
         # Bias detection networks for different dimensions
-        self.gender_bias_detector = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(d_model // 2),
-            jax.nn.silu,
-            hk.Linear(1),
-            jax.nn.sigmoid
-        ])
-        
-        self.racial_bias_detector = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(d_model // 2),
-            jax.nn.silu,
-            hk.Linear(1),
-            jax.nn.sigmoid
-        ])
-        
-        self.cultural_bias_detector = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(d_model // 2),
-            jax.nn.silu,
-            hk.Linear(1),
-            jax.nn.sigmoid
-        ])
-        
+        self.gender_bias_detector = hk.Sequential(
+            [
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(d_model // 2),
+                jax.nn.silu,
+                hk.Linear(1),
+                jax.nn.sigmoid,
+            ]
+        )
+
+        self.racial_bias_detector = hk.Sequential(
+            [
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(d_model // 2),
+                jax.nn.silu,
+                hk.Linear(1),
+                jax.nn.sigmoid,
+            ]
+        )
+
+        self.cultural_bias_detector = hk.Sequential(
+            [
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(d_model // 2),
+                jax.nn.silu,
+                hk.Linear(1),
+                jax.nn.sigmoid,
+            ]
+        )
+
         # Fairness assessment network
-        self.fairness_evaluator = hk.Sequential([
-            hk.Linear(d_model * 2),
-            jax.nn.silu,
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(len(EthicalDimension)),
-            jax.nn.sigmoid
-        ])
-        
-    def detect_bias(self, input_embedding: jnp.ndarray, 
-                   output_embedding: jnp.ndarray) -> Dict[str, float]:
+        self.fairness_evaluator = hk.Sequential(
+            [
+                hk.Linear(d_model * 2),
+                jax.nn.silu,
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(len(EthicalDimension)),
+                jax.nn.sigmoid,
+            ]
+        )
+
+    def detect_bias(self, input_embedding: jnp.ndarray, output_embedding: jnp.ndarray) -> Dict[str, float]:
         """Detect various types of bias in input-output pairs."""
         combined_input = jnp.concatenate([input_embedding, output_embedding], axis=-1)
-        
+
         # Get bias scores and handle batched inputs by averaging
         gender_bias = self.gender_bias_detector(combined_input)
         racial_bias = self.racial_bias_detector(combined_input)
         cultural_bias = self.cultural_bias_detector(combined_input)
-        
+
         bias_scores = {
             "gender_bias": float(jnp.mean(gender_bias)),
             "racial_bias": float(jnp.mean(racial_bias)),
-            "cultural_bias": float(jnp.mean(cultural_bias))
+            "cultural_bias": float(jnp.mean(cultural_bias)),
         }
-        
+
         # Overall bias score
         bias_scores["overall_bias"] = float(np.mean(list(bias_scores.values())))
-        
+
         return bias_scores
-        
-    def evaluate_fairness(self, input_embedding: jnp.ndarray,
-                         output_embedding: jnp.ndarray) -> Dict[str, float]:
+
+    def evaluate_fairness(self, input_embedding: jnp.ndarray, output_embedding: jnp.ndarray) -> Dict[str, float]:
         """Evaluate fairness across ethical dimensions."""
         combined_input = jnp.concatenate([input_embedding, output_embedding], axis=-1)
         fairness_scores = self.fairness_evaluator(combined_input)
-        
+
         # Handle batched inputs - average across batch for dimension scores
         if fairness_scores.ndim > 1:
             fairness_scores = jnp.mean(fairness_scores, axis=0)
-        
+
         dimension_scores = {}
         for i, dimension in enumerate(EthicalDimension):
             dimension_scores[dimension.value] = float(fairness_scores[i])
-            
+
         return dimension_scores
 
 
 class CulturalAwarenessModule(hk.Module):
     """Module for cultural context awareness in ethical reasoning."""
-    
+
     def __init__(self, d_model: int, num_cultures: int = 10, name=None):
         super().__init__(name=name)
         self.d_model = d_model
         self.num_cultures = num_cultures
-        
+
         # Cultural context encoder
-        self.culture_encoder = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(d_model // 2),
-            jax.nn.silu,
-            hk.Linear(num_cultures),
-            jax.nn.softmax
-        ])
-        
+        self.culture_encoder = hk.Sequential(
+            [
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(d_model // 2),
+                jax.nn.silu,
+                hk.Linear(num_cultures),
+                jax.nn.softmax,
+            ]
+        )
+
         # Cultural adaptation layer
-        self.cultural_adaptation = hk.Sequential([
-            hk.Linear(d_model + num_cultures),
-            jax.nn.silu,
-            hk.Linear(d_model),
-            jax.nn.tanh
-        ])
-        
-    def adapt_to_culture(self, content_embedding: jnp.ndarray,
-                        cultural_context: Optional[jnp.ndarray] = None) -> jnp.ndarray:
+        self.cultural_adaptation = hk.Sequential(
+            [hk.Linear(d_model + num_cultures), jax.nn.silu, hk.Linear(d_model), jax.nn.tanh]
+        )
+
+    def adapt_to_culture(
+        self, content_embedding: jnp.ndarray, cultural_context: Optional[jnp.ndarray] = None
+    ) -> jnp.ndarray:
         """Adapt ethical reasoning to cultural context."""
         if cultural_context is None:
             # Infer cultural context from content
             cultural_weights = self.culture_encoder(content_embedding)
         else:
             cultural_weights = cultural_context
-            
+
         # Adapt content based on cultural context
         adapted_input = jnp.concatenate([content_embedding, cultural_weights])
         adapted_embedding = self.cultural_adaptation(adapted_input)
-        
+
         return adapted_embedding
+
 
 class EthicalRewardModel(hk.Module):
     """
     Enhanced Ethical Reward Model with multi-dimensional bias detection and cultural awareness.
     """
+
     def __init__(self, d_model: int, vocab_size: int, max_seq_length: int, name=None):
         super().__init__(name=name)
         self.d_model = d_model
         self.embedding = hk.Embed(vocab_size, d_model)
         self.position_enc = hk.Embed(max_seq_length, d_model)
-        
+
         # Enhanced reward prediction network
-        self.reward_network = hk.Sequential([
-            hk.Linear(d_model * 2),
-            jax.nn.silu,
-            hk.LayerNorm(axis=-1, create_scale=True, create_offset=True),
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(d_model // 2),
-            jax.nn.silu,
-            hk.Linear(1)  # Output a single reward score
-        ])
-        
+        self.reward_network = hk.Sequential(
+            [
+                hk.Linear(d_model * 2),
+                jax.nn.silu,
+                hk.LayerNorm(axis=-1, create_scale=True, create_offset=True),
+                hk.Linear(d_model),
+                jax.nn.silu,
+                hk.Linear(d_model // 2),
+                jax.nn.silu,
+                hk.Linear(1),  # Output a single reward score
+            ]
+        )
+
         # Bias detection and fairness evaluation
         self.bias_detector = MultidimensionalBiasDetector(d_model)
         self.cultural_awareness = CulturalAwarenessModule(d_model)
-        
+
         # Ethical dimension-specific evaluators
-        self.harm_evaluator = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(1),
-            jax.nn.sigmoid
-        ])
-        
-        self.truthfulness_evaluator = hk.Sequential([
-            hk.Linear(d_model),
-            jax.nn.silu,
-            hk.Linear(1),
-            jax.nn.sigmoid
-        ])
-        
+        self.harm_evaluator = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid])
+
+        self.truthfulness_evaluator = hk.Sequential([hk.Linear(d_model), jax.nn.silu, hk.Linear(1), jax.nn.sigmoid])
+
         self.norm = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
 
     def __call__(self, inputs, outputs, ethical_context: Optional[EthicalContext] = None):
@@ -218,53 +221,53 @@ class EthicalRewardModel(hk.Module):
         """
         inputs = jnp.asarray(inputs, dtype=jnp.int32)
         outputs = jnp.asarray(outputs, dtype=jnp.int32)
-        
+
         # Get embeddings
         input_emb = self.embedding(inputs) + self.position_enc(jnp.arange(inputs.shape[1]))
         output_emb = self.embedding(outputs) + self.position_enc(jnp.arange(outputs.shape[1]))
-        
+
         # Pool embeddings
         input_pooled = jnp.mean(input_emb, axis=1)
         output_pooled = jnp.mean(output_emb, axis=1)
-        
+
         # Cultural adaptation if context provided
         if ethical_context and ethical_context.cultural_context:
             input_pooled = self.cultural_awareness.adapt_to_culture(input_pooled)
             output_pooled = self.cultural_awareness.adapt_to_culture(output_pooled)
-        
+
         # Combine input and output representations
         combined = jnp.concatenate([input_pooled, output_pooled], axis=-1)
         combined = self.norm(combined)
-        
+
         # Main reward score
         reward_score = self.reward_network(combined)
-        
+
         # Bias detection
         bias_scores = self.bias_detector.detect_bias(input_pooled, output_pooled)
         fairness_scores = self.bias_detector.evaluate_fairness(input_pooled, output_pooled)
-        
+
         # Specific ethical evaluations
         harm_score = self.harm_evaluator(output_pooled)
         truthfulness_score = self.truthfulness_evaluator(output_pooled)
-        
+
         # Adjust reward based on ethical considerations
         ethical_adjustment = 1.0
-        
+
         # Penalize bias
         bias_penalty = bias_scores["overall_bias"] * 0.5
         ethical_adjustment -= bias_penalty
-        
+
         # Penalize potential harm
         harm_penalty = (1.0 - float(jnp.mean(harm_score))) * 0.3
         ethical_adjustment -= harm_penalty
-        
+
         # Reward truthfulness
         truthfulness_bonus = float(jnp.mean(truthfulness_score)) * 0.2
         ethical_adjustment += truthfulness_bonus
-        
+
         # Final adjusted reward
         final_reward = reward_score * ethical_adjustment
-        
+
         # Return comprehensive results
         return {
             "reward_score": jax.nn.sigmoid(final_reward),
@@ -272,11 +275,12 @@ class EthicalRewardModel(hk.Module):
             "fairness_scores": fairness_scores,
             "harm_score": float(jnp.mean(harm_score)),
             "truthfulness_score": float(jnp.mean(truthfulness_score)),
-            "ethical_adjustment": ethical_adjustment
+            "ethical_adjustment": ethical_adjustment,
         }
-    
-    def evaluate_ethical_dimensions(self, inputs, outputs, 
-                                  ethical_context: Optional[EthicalContext] = None) -> Dict[str, float]:
+
+    def evaluate_ethical_dimensions(
+        self, inputs, outputs, ethical_context: Optional[EthicalContext] = None
+    ) -> Dict[str, float]:
         """Comprehensive ethical evaluation across all dimensions."""
         result = self(inputs, outputs, ethical_context)
 
@@ -284,39 +288,39 @@ class EthicalRewardModel(hk.Module):
         reward_score = result["reward_score"]
         if reward_score.ndim > 0:
             reward_score = jnp.mean(reward_score)
-        
+
         ethical_scores = {
             "overall_reward": float(reward_score),
             "bias_score": result["bias_scores"]["overall_bias"],
             "harm_prevention": result["harm_score"],
             "truthfulness": result["truthfulness_score"],
-            "ethical_adjustment": result["ethical_adjustment"]
+            "ethical_adjustment": result["ethical_adjustment"],
         }
-        
+
         # Add fairness scores
         ethical_scores.update(result["fairness_scores"])
-        
+
         return ethical_scores
 
 
 def train_reward_model(config, feedback_dataset: List[Dict], processor):
     """
     Standalone training utility for the EthicalRewardModel.
-    
-    This function enables RLHF-style training of the reward model using 
+
+    This function enables RLHF-style training of the reward model using
     human feedback data. Use this to fine-tune the reward model on domain-specific
     ethical guidelines before integrating into the main AGI pipeline.
-    
+
     Args:
         config: Model configuration with d_model, vocab_size, max_seq_length, batch_size
         feedback_dataset: List of dicts with 'input', 'output', 'feedback_score' keys
                          where feedback_score is a float [0, 1] indicating ethical alignment
         processor: Tokenizer with tokenize() and pad_sequence() methods
                   (e.g., DataProcessor from Auralith-Data-Pipeline)
-    
+
     Returns:
         Tuple of (transformed_model, trained_params)
-    
+
     Example:
         feedback_data = [
             {"input": "How to help someone?", "output": "Here's how...", "feedback_score": 0.95},
@@ -330,14 +334,17 @@ def train_reward_model(config, feedback_dataset: List[Dict], processor):
         model = EthicalRewardModel(
             d_model=config.d_model,
             vocab_size=config.vocab_size,
-            max_seq_length=config.max_seq_length * 2
+            max_seq_length=config.max_seq_length * 2,
         )
         return model(inputs, outputs)
 
     model = hk.transform(forward_fn)
     optimizer = optax.adam(learning_rate=1e-4)
-    params = model.init(rng, jnp.zeros((1, config.max_seq_length), dtype=jnp.int32),
-                        jnp.zeros((1, config.max_seq_length), dtype=jnp.int32))
+    params = model.init(
+        rng,
+        jnp.zeros((1, config.max_seq_length), dtype=jnp.int32),
+        jnp.zeros((1, config.max_seq_length), dtype=jnp.int32),
+    )
     opt_state = optimizer.init(params)
 
     @jax.jit
@@ -372,11 +379,12 @@ def train_reward_model(config, feedback_dataset: List[Dict], processor):
         rng, sub_rng = jax.random.split(rng)
         loss = 0
         for i in range(0, len(inputs), config.batch_size):
-            batch_inputs = inputs[i:i + config.batch_size]
-            batch_outputs = outputs[i:i + config.batch_size]
-            batch_targets = targets[i:i + config.batch_size]
-            params, opt_state, batch_loss = update_fn(params, opt_state, sub_rng,
-                                                     batch_inputs, batch_outputs, batch_targets)
+            batch_inputs = inputs[i : i + config.batch_size]
+            batch_outputs = outputs[i : i + config.batch_size]
+            batch_targets = targets[i : i + config.batch_size]
+            params, opt_state, batch_loss = update_fn(
+                params, opt_state, sub_rng, batch_inputs, batch_outputs, batch_targets
+            )
             loss += batch_loss
         print(f"Epoch {epoch + 1}, Loss: {loss / (len(inputs) // config.batch_size):.4f}")
 

@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: rtdlm
+
+commonLabels:
+  app.kubernetes.io/name: rtdlm
+  app.kubernetes.io/part-of: rt-dlm
+  app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - configmap.yaml
+  - priorityclass.yaml
+  - runtimeclass.yaml
+  - networkpolicy.yaml
+  - storage.yaml
+
+configMapGenerator: []
+secretGenerator: []

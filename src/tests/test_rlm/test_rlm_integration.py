@@ -48,6 +48,7 @@ class TestRecursiveLanguageModelModule:
             return model(query_emb, context_len, depth, calls)
 
         import haiku as hk
+
         init_fn, apply_fn = hk.transform(forward)
 
         rng = jax.random.PRNGKey(42)
@@ -56,9 +57,7 @@ class TestRecursiveLanguageModelModule:
         params = init_fn(rng, query_emb, 5000, 0, 0)
         assert params is not None
 
-        tool_probs, term_prob, parameters, encoded_query = apply_fn(
-            params, rng, query_emb, 5000, 0, 0
-        )
+        tool_probs, term_prob, parameters, encoded_query = apply_fn(params, rng, query_emb, 5000, 0, 0)
 
         assert tool_probs.shape[-1] == len(ToolType)
         assert term_prob.shape[-1] == 1
@@ -71,6 +70,7 @@ class TestRecursiveLanguageModelModule:
             return model(query_emb, context_len, depth, calls)
 
         import haiku as hk
+
         init_fn, apply_fn = hk.transform(forward)
 
         rng = jax.random.PRNGKey(42)
@@ -88,6 +88,7 @@ class TestRecursiveLanguageModelModule:
             return model.synthesize_answer(query_emb, results)
 
         import haiku as hk
+
         init_fn, apply_fn = hk.transform(forward)
 
         rng = jax.random.PRNGKey(42)
@@ -105,6 +106,7 @@ class TestRecursiveLanguageModelModule:
             return model.synthesize_answer(query_emb, results)
 
         import haiku as hk
+
         init_fn, apply_fn = hk.transform(forward)
 
         rng = jax.random.PRNGKey(42)

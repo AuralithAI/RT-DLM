@@ -31,7 +31,10 @@ class TestContextTools:
     @pytest.fixture
     def tools(self):
         store = ContextStore()
-        store.store("test_content", "Hello World. This is a test document with multiple sentences. It contains various words.")
+        store.store(
+            "test_content",
+            "Hello World. This is a test document with multiple sentences. It contains various words.",
+        )
         return ContextTools(store)
 
     def test_peek_success(self, tools):

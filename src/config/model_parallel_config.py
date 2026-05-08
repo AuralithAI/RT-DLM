@@ -6,7 +6,7 @@ tensor parallelism and pipeline parallelism.
 """
 
 from dataclasses import dataclass
-from typing import Tuple, Optional
+from typing import Tuple
 import jax
 
 
@@ -14,32 +14,32 @@ import jax
 class ModelParallelConfig:
     """
     Configuration for model parallelism.
-    
+
     Supports:
     - Tensor parallelism: Split individual layers across devices
     - Pipeline parallelism: Split layers sequentially across devices
     - Combined parallelism: Both tensor and pipeline together
     """
-    
+
     # Device mesh configuration
     num_devices: int = 1
     mesh_shape: Tuple[int, ...] = (1,)  # (data, model) or (data, tensor, pipeline)
     mesh_axis_names: Tuple[str, ...] = ("data",)
-    
+
     # Parallelism strategy
     tensor_parallel: bool = False  # Split individual layers
     pipeline_parallel: bool = False  # Split layers sequentially
     tensor_parallel_size: int = 1  # Number of devices for tensor parallelism
     pipeline_parallel_size: int = 1  # Number of pipeline stages
-    
+
     # Memory optimization
     activation_checkpointing: bool = True
     offload_to_cpu: bool = False  # Offload optimizer states to CPU
-    
+
     # Communication optimization
     async_communication: bool = True
     gradient_compression: bool = False
-    
+
     def __post_init__(self):
         """Initialize device count and validate settings"""
         self.num_devices = jax.device_count()
@@ -50,7 +50,7 @@ class ModelParallelConfig:
             self.tensor_parallel_size = min(self.tensor_parallel_size, self.num_devices)
         elif self.pipeline_parallel:
             self.pipeline_parallel_size = min(self.pipeline_parallel_size, self.num_devices)
-    
+
     @classmethod
     def from_agi_config(cls, agi_config) -> "ModelParallelConfig":
         """Create model parallel config from AGI config"""
@@ -60,7 +60,7 @@ class ModelParallelConfig:
             tensor_parallel_size=agi_config.num_devices,
             activation_checkpointing=agi_config.gradient_checkpointing,
         )
-    
+
     def to_dict(self):
         """Convert config to dictionary"""
         return {
@@ -74,7 +74,7 @@ class ModelParallelConfig:
             "async_communication": self.async_communication,
             "gradient_compression": self.gradient_compression,
         }
-    
+
     def print_summary(self):
         """Print configuration summary"""
         print("=" * 50)

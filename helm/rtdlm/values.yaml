@@ -261,6 +261,7 @@ networkPolicy:
 podDisruptionBudget:
   enabled: false
   minAvailable: 1
+  # maxUnavailable: 0    # mutually exclusive with minAvailable
 
 # =============================================================================
 # Priority Classes
@@ -269,3 +270,41 @@ priorityClass:
   enabled: false
   name: rtdlm-high-priority
   value: 1000000
+  preemptionPolicy: PreemptLowerPriority
+
+# =============================================================================
+# Runtime Class (NVIDIA GPU runtime)
+# =============================================================================
+runtimeClass:
+  enabled: false
+  name: nvidia
+  handler: nvidia
+  scheduling:
+    nodeSelector:
+      nvidia.com/gpu.present: "true"
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+
+# =============================================================================
+# GPU Scheduling Extensions
+# =============================================================================
+gpuScheduling:
+  # Pod anti-affinity: spread distributed workers across nodes
+  spreadAcrossNodes: true
+  # Topology spread across zones (multi-AZ training)
+  spreadAcrossZones: false
+  # Allowed GPU products (matched against nvidia.com/gpu.product label)
+  allowedGpuProducts:
+    - NVIDIA-A100-SXM4-80GB
+    - NVIDIA-A100-SXM4-40GB
+    - NVIDIA-H100-80GB-HBM3
+    - NVIDIA-H200
+  # MIG profile (set to e.g. "1g.10gb" to request a MIG slice instead of full GPU)
+  migProfile: ""
+  # RDMA / InfiniBand resource requests for high-bandwidth distributed training
+  rdma:
+    enabled: false
+    resourceName: "rdma/hca_shared_devices_a"
+    resourceCount: 1

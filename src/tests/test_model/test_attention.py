@@ -11,6 +11,7 @@ import jax.numpy as jnp
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from test_model import SelfAttention
 
+
 def test_attention():
     """
     This function initializes the SelfAttention and applies it to the input tensor.
@@ -39,8 +40,9 @@ def test_attention():
 
     print("Attention Output Shape:", outputs.shape)
     # This should print:  (2, 128, 512)
-    # This ensures the attention mechanism is correctly processing the input tensor without altering its structure, 
+    # This ensures the attention mechanism is correctly processing the input tensor without altering its structure,
     # ensuring compatibility with downstream layers in the Transformer.
+
 
 if __name__ == "__main__":
     test_attention()

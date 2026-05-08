@@ -11,6 +11,7 @@ import jax.numpy as jnp
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from test_model import TransformerBlock
 
+
 def test_transformer_block():
     d_model = 512
     num_heads = 8
@@ -32,5 +33,5 @@ def test_transformer_block():
     # This should print:  (2, 128, 512)
     # This ensures the TransformerBlock is correctly processing the input tensor without altering its structure,
 
-test_transformer_block()
 
+test_transformer_block()

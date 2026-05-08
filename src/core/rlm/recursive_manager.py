@@ -52,13 +52,15 @@ class RecursionContext:
 
     def record_tool_call(self, tool: str, params: Dict[str, Any], result: Any) -> None:
         self.tool_calls_used += 1
-        self.trace.append({
-            "depth": self.depth,
-            "tool": tool,
-            "params": params,
-            "success": getattr(result, 'success', True),
-            "timestamp": time.time(),
-        })
+        self.trace.append(
+            {
+                "depth": self.depth,
+                "tool": tool,
+                "params": params,
+                "success": getattr(result, "success", True),
+                "timestamp": time.time(),
+            }
+        )
 
 
 @dataclass
@@ -141,7 +143,7 @@ class RecursiveCallManager:
             )
 
         parent_context.tool_calls_used = child_context.tool_calls_used
-        parent_context.trace.extend(child_context.trace[len(parent_context.trace):])
+        parent_context.trace.extend(child_context.trace[len(parent_context.trace) :])
 
         if self.config.enable_caching:
             self._results_cache[cache_key] = sub_result
@@ -155,10 +157,7 @@ class RecursiveCallManager:
         solve_fn: Callable[[str, str, RecursionContext], Any],
     ) -> List[SubCallResult]:
         if not self.config.parallel_subcalls:
-            return [
-                self.spawn_subcall(parent_context, sc["query"], sc["context_var"], solve_fn)
-                for sc in subcalls
-            ]
+            return [self.spawn_subcall(parent_context, sc["query"], sc["context_var"], solve_fn) for sc in subcalls]
 
         max_parallel = min(self.config.max_parallel_subcalls, len(subcalls))
         results = []
@@ -167,13 +166,15 @@ class RecursiveCallManager:
             futures = {}
             for sc in subcalls:
                 if not parent_context.can_recurse():
-                    results.append(SubCallResult(
-                        query=sc["query"],
-                        context_var=sc["context_var"],
-                        result=None,
-                        success=False,
-                        error="Recursion limit reached",
-                    ))
+                    results.append(
+                        SubCallResult(
+                            query=sc["query"],
+                            context_var=sc["context_var"],
+                            result=None,
+                            success=False,
+                            error="Recursion limit reached",
+                        )
+                    )
                     continue
 
                 child_context = parent_context.child_context(sc["query"], sc["context_var"])
@@ -193,17 +194,18 @@ class RecursiveCallManager:
                     results.append(result)
                     with parent_context._lock:
                         parent_context.tool_calls_used = max(
-                            parent_context.tool_calls_used,
-                            child_context.tool_calls_used
+                            parent_context.tool_calls_used, child_context.tool_calls_used
                         )
                 except Exception as e:
-                    results.append(SubCallResult(
-                        query=sc["query"],
-                        context_var=sc["context_var"],
-                        result=None,
-                        success=False,
-                        error=str(e),
-                    ))
+                    results.append(
+                        SubCallResult(
+                            query=sc["query"],
+                            context_var=sc["context_var"],
+                            result=None,
+                            success=False,
+                            error=str(e),
+                        )
+                    )
 
         return results
 
@@ -255,9 +257,7 @@ class RecursiveCallManager:
             }
 
         if self.config.aggregation_strategy == "weighted_mean" and result_embeddings and query_embedding is not None:
-            aggregated: Any = self._weighted_aggregate(
-                query_embedding, result_embeddings
-            )
+            aggregated: Any = self._weighted_aggregate(query_embedding, result_embeddings)
         elif self.config.aggregation_strategy == "concat":
             aggregated = self._concat_aggregate(successful)
         else:
@@ -295,9 +295,7 @@ class RecursiveCallManager:
 
         for emb in result_embeddings:
             emb_flat = np.asarray(emb).flatten()
-            similarity = np.dot(query_flat, emb_flat) / (
-                np.linalg.norm(query_flat) * np.linalg.norm(emb_flat) + 1e-8
-            )
+            similarity = np.dot(query_flat, emb_flat) / (np.linalg.norm(query_flat) * np.linalg.norm(emb_flat) + 1e-8)
             weights_list.append(max(0, similarity))
 
         weights = np.array(weights_list)

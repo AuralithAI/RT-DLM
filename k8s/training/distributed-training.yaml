@@ -1,0 +1,129 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rtdlm-training-distributed
+  namespace: rtdlm
+  labels:
+    app.kubernetes.io/name: rtdlm
+    app.kubernetes.io/component: distributed-trainer
+spec:
+  parallelism: 4
+  completions: 4
+  completionMode: Indexed
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rtdlm
+        app.kubernetes.io/component: distributed-trainer
+    spec:
+      restartPolicy: Never
+      subdomain: rtdlm-workers
+      serviceAccountName: rtdlm-training-sa
+      automountServiceAccountToken: false
+      runtimeClassName: nvidia
+      priorityClassName: rtdlm-high-priority
+      hostNetwork: false
+      dnsPolicy: ClusterFirst
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: distributed-trainer
+              topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: distributed-trainer
+      containers:
+        - name: trainer
+          image: ghcr.io/auralithai/rt-dlm:train-latest
+          imagePullPolicy: Always
+          command: ["python", "src/train.py"]
+          args:
+            - "--preset=$(MODEL_PRESET)"
+            - "--distributed"
+            - "--world_size=4"
+            - "--node_rank=$(JOB_COMPLETION_INDEX)"
+            - "--master_addr=rtdlm-training-distributed-0.rtdlm-workers.rtdlm.svc.cluster.local"
+            - "--master_port=29500"
+            - "--checkpoint_dir=/checkpoints"
+          envFrom:
+            - configMapRef:
+                name: rtdlm-config
+          env:
+            - name: NCCL_DEBUG
+              value: "INFO"
+            - name: NCCL_IB_DISABLE
+              value: "0"
+            - name: NCCL_SOCKET_IFNAME
+              value: "eth0"
+            - name: NCCL_IB_HCA
+              value: "mlx5"
+            - name: NCCL_P2P_LEVEL
+              value: "NVL"
+          resources:
+            requests:
+              cpu: "8"
+              memory: "32Gi"
+              ephemeral-storage: "50Gi"
+              nvidia.com/gpu: "4"
+              rdma/hca_shared_devices_a: "1"
+            limits:
+              cpu: "16"
+              memory: "64Gi"
+              ephemeral-storage: "100Gi"
+              nvidia.com/gpu: "4"
+              rdma/hca_shared_devices_a: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              # IPC_LOCK is required so the NCCL/RDMA stack can pin pages
+              # for zero-copy InfiniBand transfers between distributed workers.
+              add: ["IPC_LOCK"]
+          volumeMounts:
+            - name: checkpoints
+              mountPath: /checkpoints
+            - name: logs
+              mountPath: /logs
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: shm
+              mountPath: /dev/shm
+          ports:
+            - name: nccl
+              containerPort: 29500
+            - name: metrics
+              containerPort: 8000
+      volumes:
+        - name: checkpoints
+          persistentVolumeClaim:
+            claimName: rtdlm-checkpoints
+        - name: logs
+          persistentVolumeClaim:
+            claimName: rtdlm-logs
+        - name: data
+          persistentVolumeClaim:
+            claimName: rtdlm-data
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 32Gi

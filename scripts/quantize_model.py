@@ -31,16 +31,14 @@ from src.config.agi_config import AGIConfig
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(levelname)s] %(asctime)s - %(message)s',
+    format="[%(levelname)s] %(asctime)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Quantize RT-DLM model for inference optimization"
-    )
-    
+    parser = argparse.ArgumentParser(description="Quantize RT-DLM model for inference optimization")
+
     # Required arguments
     parser.add_argument(
         "--checkpoint",
@@ -54,7 +52,7 @@ def main():
         required=True,
         help="Output path for quantized model",
     )
-    
+
     # Quantization options
     parser.add_argument(
         "--precision",
@@ -75,7 +73,7 @@ def main():
         default=True,
         help="Use per-channel quantization (default: True)",
     )
-    
+
     # Calibration options
     parser.add_argument(
         "--calibration-data",
@@ -89,7 +87,7 @@ def main():
         default=512,
         help="Number of calibration samples (default: 512)",
     )
-    
+
     # Layers to exclude
     parser.add_argument(
         "--exclude-layers",
@@ -98,39 +96,40 @@ def main():
         default=["embedding", "layer_norm", "final_proj"],
         help="Layer patterns to exclude from quantization",
     )
-    
+
     # Verbose output
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose output",
     )
-    
+
     args = parser.parse_args()
-    
+
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
-    
+
     # Validate paths
     checkpoint_path = Path(args.checkpoint)
     if not checkpoint_path.exists():
         logger.error(f"Checkpoint not found: {checkpoint_path}")
         sys.exit(1)
-    
+
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Load checkpoint
     logger.info(f"Loading checkpoint from {checkpoint_path}...")
     checkpoint_mgr = CheckpointManager(checkpoint_path.parent)
-    
+
     # Load params (assumes SafeTensors format)
     try:
         from safetensors.numpy import load_file
         import jax.numpy as jnp
-        
+
         flat_params = load_file(str(checkpoint_path))
-        
+
         # Reconstruct nested params
         params = {}
         for key, value in flat_params.items():
@@ -141,13 +140,13 @@ def main():
                     current[part] = {}
                 current = current[part]
             current[parts[-1]] = jnp.array(value)
-        
+
         logger.info(f"Loaded {len(flat_params)} parameter tensors")
-        
+
     except Exception as e:
         logger.error(f"Failed to load checkpoint: {e}")
         sys.exit(1)
-    
+
     # Load calibration data if provided
     calibration_data = None
     if args.calibration_data:
@@ -158,7 +157,7 @@ def main():
             logger.info(f"Loaded calibration data: {calibration_data.shape}")
         except Exception as e:
             logger.warning(f"Failed to load calibration data: {e}")
-    
+
     # Create quantization config
     config = QuantizationConfig(
         precision=args.precision,
@@ -167,14 +166,14 @@ def main():
         exclude_layers=args.exclude_layers,
         num_calibration_samples=args.num_calibration_samples,
     )
-    
+
     logger.info(f"Quantization config: {config}")
-    
+
     # Quantize model
     logger.info(f"Starting {args.precision} quantization...")
     quantizer = ModelQuantizer(config)
     result = quantizer.quantize(params, calibration_data=calibration_data)
-    
+
     # Print results
     logger.info("=" * 60)
     logger.info("Quantization Results:")
@@ -182,17 +181,17 @@ def main():
     logger.info(f"  Quantized size:  {result.quantized_size_mb:.2f} MB")
     logger.info(f"  Compression:     {result.compression_ratio:.2f}x")
     logger.info("=" * 60)
-    
+
     # Save quantized model
     logger.info(f"Saving quantized model to {output_path}...")
     quantizer.save(result, str(output_path))
-    
+
     logger.info("✅ Quantization complete!")
-    
+
     # Print file sizes
     original_size = checkpoint_path.stat().st_size / (1024 * 1024)
     quantized_size = output_path.stat().st_size / (1024 * 1024)
-    
+
     logger.info(f"File sizes:")
     logger.info(f"  Original:   {original_size:.2f} MB")
     logger.info(f"  Quantized:  {quantized_size:.2f} MB")

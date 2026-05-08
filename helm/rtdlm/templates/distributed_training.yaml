@@ -31,6 +31,12 @@ spec:
       
       serviceAccountName: {{ include "rtdlm.serviceAccountName" . }}
       automountServiceAccountToken: false
+      {{- if .Values.priorityClass.enabled }}
+      priorityClassName: {{ .Values.priorityClass.name }}
+      {{- end }}
+      {{- if .Values.runtimeClass.enabled }}
+      runtimeClassName: {{ .Values.runtimeClass.name }}
+      {{- end }}
       
       {{- if .Values.training.nodeSelector }}
       nodeSelector:
@@ -41,7 +47,41 @@ spec:
       tolerations:
         {{- toYaml .Values.training.tolerations | nindent 8 }}
       {{- end }}
-      
+
+      {{- if or .Values.gpuScheduling.spreadAcrossNodes .Values.gpuScheduling.allowedGpuProducts }}
+      affinity:
+        {{- if .Values.gpuScheduling.allowedGpuProducts }}
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nvidia.com/gpu.product
+                    operator: In
+                    values:
+                      {{- range .Values.gpuScheduling.allowedGpuProducts }}
+                      - {{ . }}
+                      {{- end }}
+        {{- end }}
+        {{- if .Values.gpuScheduling.spreadAcrossNodes }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: {{ .Values.Name }}-distributed
+              topologyKey: kubernetes.io/hostname
+        {{- end }}
+      {{- end }}
+
+      {{- if .Values.gpuScheduling.spreadAcrossZones }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: {{ .Values.Name }}-distributed
+      {{- end }}
+
       containers:
         - name: trainer
           image: {{ include "rtdlm.training.image" . }}
@@ -85,11 +125,17 @@ spec:
               {{- if .Values.training.gpu.enabled }}
               nvidia.com/gpu: {{ .Values.training.resources.requests."nvidia.com/gpu" }}
               {{- end }}
+              {{- if .Values.gpuScheduling.rdma.enabled }}
+              {{ .Values.gpuScheduling.rdma.resourceName }}: {{ .Values.gpuScheduling.rdma.resourceCount }}
+              {{- end }}
             limits:
               memory: {{ .Values.training.resources.limits.memory | quote }}
               cpu: {{ .Values.training.resources.limits.cpu | quote }}
               {{- if .Values.training.gpu.enabled }}
               nvidia.com/gpu: {{ .Values.training.resources.limits."nvidia.com/gpu" }}
+              {{- end }}
+              {{- if .Values.gpuScheduling.rdma.enabled }}
+              {{ .Values.gpuScheduling.rdma.resourceName }}: {{ .Values.gpuScheduling.rdma.resourceCount }}
               {{- end }}
           
           volumeMounts:
