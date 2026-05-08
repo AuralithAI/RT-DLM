@@ -38,7 +38,7 @@ gradio==5.15.0
 
 # NLP and text processing
 nltk==3.9.1
-requests==2.32.3
+requests==2.33.0
 
 # Hyperparameter optimization
 optuna==4.2.1
