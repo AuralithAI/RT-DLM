@@ -89,7 +89,7 @@ mlflow>=2.10.0  # Experiment tracking, metric logging, model registry
 # datasets>=2.18.0  # OPTIONAL: only needed if use_huggingface=True in benchmarks
 
 # Development and testing
-pytest==8.3.4
+pytest==9.0.3
 black==24.10.0
 isort==5.13.2
 mypy==1.13.0
