@@ -52,7 +52,7 @@ wandb==0.19.2
 
 # Multi-modal processing
 # Image processing
-Pillow>=8.0,<11.0
+Pillow>=8.0,<13.0
 opencv-python==4.10.0.84
 
 # Audio processing

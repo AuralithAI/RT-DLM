@@ -37,7 +37,7 @@ nltk==3.9.1
 optuna==4.2.1
 
 # Image / audio (imported in src/modules/multimodal)
-Pillow>=8.0,<11.0
+Pillow>=8.0,<13.0
 opencv-python==4.10.0.84
 librosa==0.10.2
 soundfile==0.12.1
