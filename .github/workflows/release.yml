@@ -4,11 +4,14 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.github/*.md'
-      - 'tests/**'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump (auto = infer from commits)'
+        required: false
+        default: 'auto'
+        type: choice
+        options: [auto, patch, minor, major]
 
 permissions:
   contents: write
@@ -61,7 +64,15 @@ jobs:
           else
             PATCH=$((PATCH + 1))
           fi
-          
+
+          # Manual override via workflow_dispatch input
+          BUMP="${{ github.event.inputs.bump }}"
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
           NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "New version: $NEW_VERSION"
