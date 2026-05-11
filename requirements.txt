@@ -80,7 +80,7 @@ hydra-core==1.3.2
 ray==2.40.0
 
 # Safety and alignment
-transformers==4.47.1  # For alignment techniques
+transformers==5.0.0rc3  # For alignment techniques
 torch==2.8.0  # Sometimes needed for certain alignment tools
 fairlearn==0.10.0  # Fairness assessment and mitigation
 
