@@ -6,6 +6,7 @@ MODEL_PRESETS = {
         "num_layers": 6,
         "moe_experts": 4,
         "vocab_size": 32000,
+        "base_d_model": 256,
         "description": "Tiny model for testing (~50M params)",
     },
     "small": {
@@ -14,6 +15,7 @@ MODEL_PRESETS = {
         "num_layers": 12,
         "moe_experts": 8,
         "vocab_size": 32000,
+        "base_d_model": 256,
         "description": "Small model for development (~150M params)",
     },
     "base": {
@@ -22,6 +24,7 @@ MODEL_PRESETS = {
         "num_layers": 12,
         "moe_experts": 8,
         "vocab_size": 50000,
+        "base_d_model": 256,
         "description": "Base model for fine-tuning (~350M params)",
     },
     "large": {
@@ -30,6 +33,7 @@ MODEL_PRESETS = {
         "num_layers": 24,
         "moe_experts": 16,
         "vocab_size": 50000,
+        "base_d_model": 256,
         "description": "Large model for production (~1B params)",
     },
     "xlarge": {
@@ -38,6 +42,7 @@ MODEL_PRESETS = {
         "num_layers": 32,
         "moe_experts": 32,
         "vocab_size": 100000,
+        "base_d_model": 256,
         "description": "XLarge model for advanced tasks (~7B params)",
     },
     "xxlarge": {
@@ -46,6 +51,7 @@ MODEL_PRESETS = {
         "num_layers": 48,
         "moe_experts": 64,
         "vocab_size": 150000,
+        "base_d_model": 256,
         "description": "XXLarge model for SOTA performance (~70B params)",
     },
 }
@@ -97,10 +103,16 @@ class AGIConfig:
 
         # --- Advanced AGI Features ---
         self.max_reasoning_steps = kwargs.get("max_reasoning_steps", 10)  # Chain-of-thought reasoning steps
-        self.quantum_qubits = kwargs.get("quantum_qubits", 16)  # Number of qubits for quantum simulation
-        self.quantum_layers = kwargs.get("quantum_layers", 4)  # Number of quantum-inspired layers
+        self.quantum_qubits = kwargs.get("quantum_qubits", 0)  # Number of qubits for quantum simulation (0 = disabled)
+        self.quantum_layers = kwargs.get("quantum_layers", 0)  # Number of quantum-inspired layers (0 = disabled)
         self.meta_learning_enabled = kwargs.get("meta_learning_enabled", True)  # Enable meta-learning
         self.self_improvement_enabled = kwargs.get("self_improvement_enabled", True)  # Enable self-improvement
+
+        # --- muP / MoE regularization ---
+        self.base_d_model = kwargs.get("base_d_model", 256)
+        self.use_mup = kwargs.get("use_mup", False)
+        self.moe_z_loss_weight = kwargs.get("moe_z_loss_weight", 1e-4)
+        self.moe_router_z_loss_weight = kwargs.get("moe_router_z_loss_weight", 1e-3)
 
         # --- Recursive Language Model (RLM) Parameters ---
         self.rlm_enabled = kwargs.get("rlm_enabled", True)  # Enable RLM for long context
@@ -413,6 +425,107 @@ class AGIConfig:
 
         # Validate configuration
         self._validate_config()
+        self._compose_subconfigs()
+
+    def _compose_subconfigs(self):
+        """Build composed sub-config dataclasses mirroring flat fields."""
+        from src.config.architecture_config import ArchitectureConfig
+        from src.config.training_config import TrainingConfig
+        from src.config.precision_config import PrecisionConfig
+        from src.config.parallelism_config import ParallelismConfig
+        from src.config.multimodal_config import MultimodalConfig
+        from src.config.safety_config import SafetyConfig
+
+        self.architecture = ArchitectureConfig(
+            d_model=self.d_model,
+            num_heads=self.num_heads,
+            num_layers=self.num_layers,
+            vocab_size=self.vocab_size,
+            max_seq_length=self.max_seq_length,
+            base_d_model=self.base_d_model,
+            moe_experts=self.moe_experts,
+            moe_top_k=self.moe_top_k,
+            attention_type=self.attention_type,
+            num_kv_heads=self.num_kv_heads,
+            position_encoding=self.position_encoding,
+            rope_theta=self.rope_theta,
+            rope_scaling=self.rope_scaling,
+            sliding_window_size=self.sliding_window_size,
+            use_flash_attention=self.use_flash_attention,
+        )
+        self.training = TrainingConfig(
+            batch_size=self.batch_size,
+            learning_rate=self.learning_rate,
+            num_epochs=self.num_epochs,
+            warmup_steps=self.warmup_steps,
+            decay_steps=self.decay_steps,
+            init_lr=self.init_lr,
+            end_lr=self.end_lr,
+            weight_decay=self.weight_decay,
+            clip_norm=self.clip_norm,
+            label_smoothing=self.label_smoothing,
+            eval_interval=self.eval_interval,
+            moe_z_loss_weight=self.moe_z_loss_weight,
+            moe_router_z_loss_weight=self.moe_router_z_loss_weight,
+            use_mup=self.use_mup,
+        )
+        self.precision = PrecisionConfig(
+            mixed_precision=self.mixed_precision,
+            precision_dtype=self.precision_dtype,
+            compute_dtype=self.compute_dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+            checkpoint_every_n_layers=self.checkpoint_every_n_layers,
+        )
+        self.parallelism = ParallelismConfig(
+            distributed_training=self.distributed_training,
+            num_devices=self.num_devices,
+            data_parallel=self.data_parallel,
+            model_parallel=self.model_parallel,
+            gradient_accumulation_steps=self.gradient_accumulation_steps,
+        )
+        self.multimodal = MultimodalConfig(
+            multimodal_enabled=self.multimodal_enabled,
+            vision_patch_size=self.vision_patch_size,
+            vision_layers=self.vision_layers,
+            audio_freq_bins=self.audio_freq_bins,
+            video_frames=self.video_frames,
+            enable_multi_res_vision=self.enable_multi_res_vision,
+            vision_patch_sizes=list(self.vision_patch_sizes),
+            vision_in_channels=self.vision_in_channels,
+            video_patch_size=self.video_patch_size,
+            video_motion_window=self.video_motion_window,
+            enable_document_modality=self.enable_document_modality,
+            enable_pointcloud_modality=self.enable_pointcloud_modality,
+            enable_biosignal_modality=self.enable_biosignal_modality,
+            enable_tactile_modality=self.enable_tactile_modality,
+            enable_action_modality=self.enable_action_modality,
+            action_num_axes=self.action_num_axes,
+            action_num_bins=self.action_num_bins,
+            enable_image_vq=self.enable_image_vq,
+            image_vq_codes=self.image_vq_codes,
+            image_vq_code_dim=self.image_vq_code_dim,
+            image_vq_downsample=self.image_vq_downsample,
+            enable_spectrogram_decoder=self.enable_spectrogram_decoder,
+            spectrogram_n_mels=self.spectrogram_n_mels,
+            streaming_video_max_frames=self.streaming_video_max_frames,
+            streaming_compressed_size=self.streaming_compressed_size,
+        )
+        self.safety = SafetyConfig(
+            ethics_enabled=self.ethics_enabled,
+            ethics_weight=self.ethics_weight,
+            bias_detection_enabled=self.bias_detection_enabled,
+            fairness_constraints=self.fairness_constraints,
+            alignment_training=self.alignment_training,
+            value_learning=self.value_learning,
+            interpretability=self.interpretability,
+            safety_constraints=self.safety_constraints,
+        )
+        self.architecture.validate()
+        self.training.validate()
+        self.precision.validate()
+        self.parallelism.validate()
+        self.multimodal.validate()
+        self.safety.validate()
 
     def _validate_config(self):
         """Validate configuration parameters"""
@@ -420,7 +533,13 @@ class AGIConfig:
         assert self.num_heads > 0, "num_heads must be positive"
         assert self.vocab_size > 0, "vocab_size must be positive"
         assert 0 <= self.spike_threshold <= 1, "spike_threshold must be between 0 and 1"
-        assert self.quantum_qubits > 0, "quantum_qubits must be positive"
+        assert self.quantum_qubits >= 0, "quantum_qubits must be non-negative"
+        assert self.quantum_layers >= 0, "quantum_layers must be non-negative"
+        if self.quantum_layers > 0:
+            assert self.quantum_qubits > 0, "quantum_qubits must be > 0 when quantum_layers > 0"
+        assert self.base_d_model > 0, "base_d_model must be positive"
+        assert self.moe_z_loss_weight >= 0, "moe_z_loss_weight must be non-negative"
+        assert self.moe_router_z_loss_weight >= 0, "moe_router_z_loss_weight must be non-negative"
         assert self.max_reasoning_steps > 0, "max_reasoning_steps must be positive"
 
         # Validate multi-modal parameters
@@ -538,7 +657,8 @@ class AGIConfig:
 
     def to_dict(self):
         """Convert config to dictionary"""
-        return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
+        skip = {"architecture", "training", "precision", "parallelism", "multimodal", "safety"}
+        return {k: v for k, v in self.__dict__.items() if not k.startswith("_") and k not in skip}
 
     def update(self, **kwargs):
         """Update configuration with new values"""
@@ -548,6 +668,7 @@ class AGIConfig:
             else:
                 print(f"Warning: Unknown configuration parameter: {key}")
         self._validate_config()
+        self._compose_subconfigs()
 
     def save(self, filepath):
         """Save configuration to file"""
@@ -622,7 +743,7 @@ class AGIConfig:
         if self.multimodal_enabled:
             total_params += self.d_model * self.d_model * 4  # Vision/audio encoders
 
-        if self.quantum_layers > 0:
+        if self.quantum_layers > 0 and self.quantum_qubits > 0:
             total_params += self.quantum_layers * self.d_model * self.quantum_qubits
 
         return total_params

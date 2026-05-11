@@ -17,14 +17,25 @@ from src.core.model.model_tms import TMSModel
 from src.modules.multimodal.fusion_module import MultiModalRTDLM
 from src.modules.multimodal.hybrid_audio_module import HybridAudioEncoder
 from src.modules.multimodal.hybrid_video_module import HybridVideoEncoder
-from src.core.quantum.quantum_agi_core import QuantumAGICore
-from src.core.quantum.quantum_readiness import (
-    QubitAssistedOptimization,
-    SelfEvolvingArchitecture,
-    AutonomousScientificDiscovery,
-    AutonomousMultiAgentSystem,
-    VariationalQuantumCircuit,
-)
+
+try:
+    from experimental.quantum.quantum_agi_core import QuantumAGICore
+    from experimental.quantum.quantum_readiness import (
+        QubitAssistedOptimization,
+        SelfEvolvingArchitecture,
+        AutonomousScientificDiscovery,
+        AutonomousMultiAgentSystem,
+        VariationalQuantumCircuit,
+    )
+    _QUANTUM_AVAILABLE = True
+except ImportError:
+    QuantumAGICore = None
+    QubitAssistedOptimization = None
+    SelfEvolvingArchitecture = None
+    AutonomousScientificDiscovery = None
+    AutonomousMultiAgentSystem = None
+    VariationalQuantumCircuit = None
+    _QUANTUM_AVAILABLE = False
 from src.config.agi_config import AGIConfig
 from src.modules.hybrid_architecture.hybrid_integrator import HybridArchitectureIntegrator
 from src.modules.capabilities.advanced_algorithms import ContinualLearner
@@ -926,7 +937,7 @@ class RTDLMAGISystem(hk.Module):
         self.reasoning_engine = ReasoningEngine(config)
 
         # Quantum-enhanced processing
-        self.use_quantum = config.quantum_layers > 0
+        self.use_quantum = config.quantum_layers > 0 and _QUANTUM_AVAILABLE
         if self.use_quantum:
             self.quantum_core = QuantumAGICore(config)
             self.quantum_optimization = QubitAssistedOptimization(config.d_model)
@@ -943,14 +954,14 @@ class RTDLMAGISystem(hk.Module):
         # Scientific discovery engine
         self.scientific_discovery = ScientificDiscoveryEngine(config.d_model)
 
-        # Self-evolving architecture
-        self.self_evolution = SelfEvolvingArchitecture(config.d_model)
-
-        # Autonomous scientific discovery
-        self.autonomous_discovery = AutonomousScientificDiscovery(config.d_model)
-
-        # Multi-agent coordination
-        self.multi_agent_system = AutonomousMultiAgentSystem(config.d_model)
+        if _QUANTUM_AVAILABLE:
+            self.self_evolution = SelfEvolvingArchitecture(config.d_model)
+            self.autonomous_discovery = AutonomousScientificDiscovery(config.d_model)
+            self.multi_agent_system = AutonomousMultiAgentSystem(config.d_model)
+        else:
+            self.self_evolution = None
+            self.autonomous_discovery = None
+            self.multi_agent_system = None
 
         # Scientific discovery
         if config.scientific_reasoning:
@@ -1498,18 +1509,20 @@ class RTDLMAGISystem(hk.Module):
                 logger.warning(f"Quantum processing failed: {e}")
 
         # Self-evolving architecture processing
-        try:
-            system_state = integrated_features.mean(axis=1)
-            evolved_dna, layer_types, predicted_perf = self.self_evolution(system_state)
+        if self.self_evolution is not None:
+            try:
+                system_state = integrated_features.mean(axis=1)
+                evolved_dna, layer_types, predicted_perf = self.self_evolution(system_state)
 
-        except Exception as e:
-            logger.warning(f"Architecture evolution failed: {e}")
+            except Exception as e:
+                logger.warning(f"Architecture evolution failed: {e}")
 
         # Autonomous scientific discovery
-        try:
-            theories, experiments, validation = self.autonomous_discovery(core_features, reasoning_result)
-        except Exception as e:
-            logger.warning(f"Scientific discovery failed: {e}")
+        if self.autonomous_discovery is not None:
+            try:
+                theories, experiments, validation = self.autonomous_discovery(core_features, reasoning_result)
+            except Exception as e:
+                logger.warning(f"Scientific discovery failed: {e}")
 
         # AGI System Orchestration - unify cognitive components and track stage
         agi_system_result = self._orchestrate_agi_system(core_features, reasoning_result, integrated_features)

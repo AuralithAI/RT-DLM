@@ -46,6 +46,19 @@ BENCHMARK_REGISTRY = {
     "aime": "core.benchmarks.aime_benchmark.AIMEBenchmark",
     "swe": "core.benchmarks.swe_bench.SWEBenchBenchmark",
     "livecode": "core.benchmarks.livecode_bench.LiveCodeBenchmark",
+    "mmlu_pro": "core.benchmarks.mmlu_pro.MMLUProBenchmark",
+    "ifeval": "core.benchmarks.ifeval.IFEvalBenchmark",
+    "bbh": "core.benchmarks.bbh.BBHBenchmark",
+    "gsm8k": "core.benchmarks.gsm8k.GSM8KBenchmark",
+    "math500": "core.benchmarks.math500.Math500Benchmark",
+    "mt_bench": "core.benchmarks.mt_bench.MTBenchBenchmark",
+    "arena_hard": "core.benchmarks.arena_hard.ArenaHardBenchmark",
+    "bfcl": "core.benchmarks.bfcl.BFCLBenchmark",
+    "mmmu": "core.benchmarks.mmmu.MMMUBenchmark",
+    "ruler": "core.benchmarks.ruler.RULERBenchmark",
+    "longbench": "core.benchmarks.longbench.LongBenchBenchmark",
+    "harmbench": "core.benchmarks.harmbench.HarmBenchBenchmark",
+    "jailbreakbench": "core.benchmarks.jailbreakbench.JailbreakBenchBenchmark",
 }
 
 

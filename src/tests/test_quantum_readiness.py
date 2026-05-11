@@ -1,3 +1,9 @@
+import os
+import pytest
+
+if os.environ.get("AGI_ENABLE_QUANTUM") != "1":
+    pytest.skip("quantum subsystem opt-in; set AGI_ENABLE_QUANTUM=1", allow_module_level=True)
+
 """
 Tests for Quantum Readiness Module
 
@@ -14,7 +20,7 @@ class TestQuantumGateType(unittest.TestCase):
 
     def test_gate_types_exist(self):
         """Test all gate types are defined."""
-        from src.core.quantum.quantum_readiness import QuantumGateType
+        from experimental.quantum.quantum_readiness import QuantumGateType
 
         self.assertEqual(QuantumGateType.HADAMARD.value, "H")
         self.assertEqual(QuantumGateType.PAULI_X.value, "X")
@@ -31,7 +37,7 @@ class TestQuantumGate(unittest.TestCase):
 
     def test_gate_creation(self):
         """Test creating quantum gates."""
-        from src.core.quantum.quantum_readiness import QuantumGate, QuantumGateType
+        from experimental.quantum.quantum_readiness import QuantumGate, QuantumGateType
 
         # Hadamard gate
         h_gate = QuantumGate(QuantumGateType.HADAMARD, [0])
@@ -53,7 +59,7 @@ class TestQuantumCircuit(unittest.TestCase):
 
     def test_circuit_creation(self):
         """Test creating quantum circuits."""
-        from src.core.quantum.quantum_readiness import QuantumCircuit, QuantumGate, QuantumGateType
+        from experimental.quantum.quantum_readiness import QuantumCircuit, QuantumGate, QuantumGateType
 
         gates = [
             QuantumGate(QuantumGateType.HADAMARD, [0]),
@@ -68,7 +74,7 @@ class TestQuantumCircuit(unittest.TestCase):
 
     def test_circuit_with_measurements(self):
         """Test circuit with custom measurements."""
-        from src.core.quantum.quantum_readiness import QuantumCircuit
+        from experimental.quantum.quantum_readiness import QuantumCircuit
 
         circuit = QuantumCircuit(num_qubits=3, gates=[], measurements=[0, 2])
 
@@ -80,7 +86,7 @@ class TestQuantumSimulator(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from src.core.quantum.quantum_readiness import QuantumSimulator
+        from experimental.quantum.quantum_readiness import QuantumSimulator
 
         self.simulator = QuantumSimulator(max_qubits=10)
 
@@ -107,7 +113,7 @@ class TestQuantumSimulator(unittest.TestCase):
 
     def test_apply_hadamard_gate(self):
         """Test Hadamard gate creates superposition."""
-        from src.core.quantum.quantum_readiness import QuantumGate, QuantumGateType
+        from experimental.quantum.quantum_readiness import QuantumGate, QuantumGateType
 
         state = self.simulator.initialize_state(1)
         h_gate = QuantumGate(QuantumGateType.HADAMARD, [0])
@@ -121,7 +127,7 @@ class TestQuantumSimulator(unittest.TestCase):
 
     def test_apply_pauli_x_gate(self):
         """Test Pauli-X (NOT) gate."""
-        from src.core.quantum.quantum_readiness import QuantumGate, QuantumGateType
+        from experimental.quantum.quantum_readiness import QuantumGate, QuantumGateType
 
         state = self.simulator.initialize_state(1)
         x_gate = QuantumGate(QuantumGateType.PAULI_X, [0])
@@ -134,7 +140,7 @@ class TestQuantumSimulator(unittest.TestCase):
 
     def test_apply_rotation_gates(self):
         """Test rotation gates."""
-        from src.core.quantum.quantum_readiness import QuantumGate, QuantumGateType
+        from experimental.quantum.quantum_readiness import QuantumGate, QuantumGateType
 
         state = self.simulator.initialize_state(1)
 
@@ -147,7 +153,7 @@ class TestQuantumSimulator(unittest.TestCase):
 
     def test_apply_cnot_gate(self):
         """Test CNOT gate."""
-        from src.core.quantum.quantum_readiness import QuantumGate, QuantumGateType
+        from experimental.quantum.quantum_readiness import QuantumGate, QuantumGateType
 
         # Create |10⟩ state (control=1, target=0)
         state = self.simulator.initialize_state(2)
@@ -205,7 +211,7 @@ class TestQuantumReadySystem(unittest.TestCase):
     def test_create_quantum_ready_system(self):
         """Test creating quantum-ready system."""
         try:
-            from src.core.quantum.quantum_readiness import create_quantum_ready_system
+            from experimental.quantum.quantum_readiness import create_quantum_ready_system
 
             system = create_quantum_ready_system(d_model=64, num_qubits=4)
 
@@ -219,13 +225,13 @@ class TestQuantumGateOperations(unittest.TestCase):
 
     def setUp(self):
         """Set up simulator."""
-        from src.core.quantum.quantum_readiness import QuantumSimulator
+        from experimental.quantum.quantum_readiness import QuantumSimulator
 
         self.simulator = QuantumSimulator()
 
     def test_hadamard_is_self_inverse(self):
         """Test H² = I (Hadamard is self-inverse)."""
-        from src.core.quantum.quantum_readiness import QuantumGate, QuantumGateType
+        from experimental.quantum.quantum_readiness import QuantumGate, QuantumGateType
 
         state = self.simulator.initialize_state(1)
         original = state.copy()
@@ -241,7 +247,7 @@ class TestQuantumGateOperations(unittest.TestCase):
 
     def test_pauli_gates_anticommute(self):
         """Test that Pauli gates satisfy expected relations."""
-        from src.core.quantum.quantum_readiness import QuantumGate, QuantumGateType
+        from experimental.quantum.quantum_readiness import QuantumGate, QuantumGateType
 
         state = self.simulator.initialize_state(1)
 

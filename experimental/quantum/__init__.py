@@ -1,15 +1,14 @@
-"""
-Quantum Simulation Module for RT-DLM.
+"""Opt-in quantum subsystem: CLASSICAL SIMULATION only (no real quantum hardware). Gated by AGI_ENABLE_QUANTUM=1."""
 
-IMPORTANT: CLASSICAL SIMULATION ONLY
-These modules provide classical mathematical simulation of quantum concepts
-using JAX/NumPy. NOT running on actual quantum hardware.
+import os
 
-To disable quantum simulation: Set config.quantum_layers=0 in AGIConfig.
-"""
+if os.environ.get("AGI_ENABLE_QUANTUM") != "1":
+    raise ImportError(
+        "experimental.quantum is opt-in. Set AGI_ENABLE_QUANTUM=1 to enable."
+    )
 
-from src.core.quantum.quantum_agi_core import QuantumAGICore
-from src.core.quantum.quantum_readiness import (
+from experimental.quantum.quantum_agi_core import QuantumAGICore
+from experimental.quantum.quantum_readiness import (
     QubitAssistedOptimization,
     SelfEvolvingArchitecture,
     AutonomousScientificDiscovery,
@@ -17,14 +16,14 @@ from src.core.quantum.quantum_readiness import (
     VariationalQuantumCircuit,
     QuantumSimulator,
 )
-from src.core.quantum.extended_quantum_sim import (
+from experimental.quantum.extended_quantum_sim import (
     ExtendedQuantumSimulator,
     ExtendedQuantumConfig,
     SparseStateVector,
     ChunkedQuantumSimulator,
     create_extended_quantum_simulator,
 )
-from src.core.quantum.tensor_network import (
+from experimental.quantum.tensor_network import (
     MatrixProductState,
     TreeTensorNetwork,
     TensorNetworkQuantumSimulator,
@@ -41,30 +40,16 @@ def estimate_quantum_overhead(
     use_tensor_network: bool = False,
     bond_dimension: int = 64,
 ) -> dict:
-    """
-    Estimate memory and compute overhead of quantum simulation.
-
-    Args:
-        num_qubits: Number of simulated qubits
-        num_layers: Number of quantum-inspired layers
-        d_model: Model dimension
-        use_tensor_network: Whether using tensor network approximation
-        bond_dimension: Bond dimension for tensor networks
-
-    Returns:
-        Dictionary with memory and compute estimates
-    """
+    """Estimate memory and compute overhead of quantum simulation."""
     if use_tensor_network:
         state_memory_bytes = num_qubits * bond_dimension**2 * 16
         memory_formula = f"O(n × χ²) = {num_qubits} × {bond_dimension}² × 16 bytes"
     else:
         state_memory_bytes = (2**num_qubits) * 16
         memory_formula = f"O(2^n) = 2^{num_qubits} × 16 bytes"
-
     gate_params = num_layers * num_qubits * 3
     projection_params = 2 * d_model * (2 ** min(6, num_qubits))
     total_params = gate_params + projection_params
-
     return {
         "num_qubits": num_qubits,
         "num_layers": num_layers,

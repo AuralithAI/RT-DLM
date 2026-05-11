@@ -1,3 +1,9 @@
+import os
+import pytest
+
+if os.environ.get("AGI_ENABLE_QUANTUM") != "1":
+    pytest.skip("quantum subsystem opt-in; set AGI_ENABLE_QUANTUM=1", allow_module_level=True)
+
 """
 Tests for Quantum AGI Core Module
 
@@ -16,7 +22,7 @@ class TestQuantumInspiredAttention(unittest.TestCase):
 
     def test_attention_initialization(self):
         """Test QuantumInspiredAttention initialization."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def init_fn():
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)
@@ -31,7 +37,7 @@ class TestQuantumInspiredAttention(unittest.TestCase):
 
     def test_attention_forward_pass(self):
         """Test attention forward pass."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def forward_fn(x):
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)
@@ -49,7 +55,7 @@ class TestQuantumInspiredAttention(unittest.TestCase):
 
     def test_hadamard_gate_initialization(self):
         """Test Hadamard gate initialization."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def init_fn():
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)
@@ -66,7 +72,7 @@ class TestQuantumInspiredAttention(unittest.TestCase):
 
     def test_rotation_gates(self):
         """Test rotation gates are initialized."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def init_fn():
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)
@@ -87,7 +93,7 @@ class TestQuantumGates(unittest.TestCase):
 
     def test_apply_quantum_gates(self):
         """Test quantum gate application."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def test_fn():
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)
@@ -110,7 +116,7 @@ class TestQuantumEntanglement(unittest.TestCase):
 
     def test_entanglement_operation(self):
         """Test quantum entanglement between states."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def test_fn():
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)
@@ -134,7 +140,7 @@ class TestQuantumStatePreparation(unittest.TestCase):
 
     def test_state_prep_network(self):
         """Test state preparation network."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def test_fn(x):
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)
@@ -157,7 +163,7 @@ class TestQueryKeyValueProjections(unittest.TestCase):
 
     def test_query_projection(self):
         """Test query projection."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def test_fn(x):
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)
@@ -174,7 +180,7 @@ class TestQueryKeyValueProjections(unittest.TestCase):
 
     def test_key_projection(self):
         """Test key projection."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def test_fn(x):
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)
@@ -191,7 +197,7 @@ class TestQueryKeyValueProjections(unittest.TestCase):
 
     def test_value_projection(self):
         """Test value projection."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def test_fn(x):
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)
@@ -212,7 +218,7 @@ class TestOutputProjection(unittest.TestCase):
 
     def test_output_projection(self):
         """Test output projection maintains d_model."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def test_fn(x):
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)
@@ -233,7 +239,7 @@ class TestNumericalStability(unittest.TestCase):
 
     def test_no_nan_in_output(self):
         """Test that outputs don't contain NaN."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def forward_fn(x):
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)
@@ -250,7 +256,7 @@ class TestNumericalStability(unittest.TestCase):
 
     def test_no_inf_in_output(self):
         """Test that outputs don't contain Inf."""
-        from src.core.quantum.quantum_agi_core import QuantumInspiredAttention
+        from experimental.quantum.quantum_agi_core import QuantumInspiredAttention
 
         def forward_fn(x):
             attention = QuantumInspiredAttention(d_model=64, num_heads=4, num_qubits=8)

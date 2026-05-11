@@ -121,6 +121,8 @@ class AGITrainer:
         self.opt_state = None
         self.step_count = 0
 
+        self._jit_train_step = self._build_jit_train_step()
+
         # Metrics tracking
         self.training_losses: List[float] = []
         self.validation_losses: List[float] = []
@@ -813,73 +815,65 @@ class AGITrainer:
         input_ids = jax.random.randint(rng, (batch_size, self.config.max_seq_length), 0, self.config.vocab_size)
         return self.create_batch_from_tensors(input_ids)
 
-    @jax.jit
-    def train_step(self, params, opt_state, batch, rng):
-        """Single training step with comprehensive loss and NaN handling
+    def _build_jit_train_step(self):
+        """Build a once-jitted training step closed over model.apply / optimizer.update."""
+        model_apply = self.model.apply
+        optimizer_update = self.optimizer.update
+        config = self.config
 
-        Args:
-            params: Model parameters - can be tuple (params, state) from transform_with_state
-            opt_state: Optimizer state (matches structure of params[0] if tuple)
-            batch: Training batch
-            rng: Random key
-        """
-        if isinstance(params, tuple):
-            actual_params, model_state = params
-        else:
-            actual_params = params
-            model_state = None
-
-        def loss_fn(actual_params, batch, rng):
-            if model_state is not None:
-                full_params = (actual_params, model_state)
-                model_output, _ = self.model.apply(
-                    full_params,
-                    rng,
-                    inputs={"text": batch["input_ids"]},
-                    multimodal_inputs=batch.get("multimodal_inputs"),
-                    return_reasoning=True,
-                )
+        def _step(params, opt_state, batch, rng):
+            if isinstance(params, tuple):
+                actual_params, model_state = params
+                has_state = True
             else:
-                model_output = self.model.apply(
-                    actual_params,
-                    rng,
-                    inputs={"text": batch["input_ids"]},
-                    multimodal_inputs=batch.get("multimodal_inputs"),
-                    return_reasoning=True,
+                actual_params = params
+                model_state = None
+                has_state = False
+
+            def loss_fn(p, b, r):
+                if has_state:
+                    full_params = (p, model_state)
+                    model_output, _ = model_apply(
+                        full_params,
+                        r,
+                        inputs={"text": b["input_ids"]},
+                        multimodal_inputs=b.get("multimodal_inputs"),
+                        return_reasoning=True,
+                    )
+                else:
+                    model_output = model_apply(
+                        p,
+                        r,
+                        inputs={"text": b["input_ids"]},
+                        multimodal_inputs=b.get("multimodal_inputs"),
+                        return_reasoning=True,
+                    )
+                loss = compute_agi_loss(
+                    model_output["logits"],
+                    b["targets"],
+                    aux_outputs=model_output,
+                    config=config,
                 )
+                return loss, model_output
 
-            # Compute comprehensive loss
-            loss = compute_agi_loss(
-                model_output["logits"],
-                batch["targets"],
-                aux_outputs=model_output,
-                config=self.config,
+            (loss, model_output), grads = jax.value_and_grad(loss_fn, has_aux=True)(actual_params, batch, rng)
+            loss = jax.lax.cond(jnp.isnan(loss), lambda _: jnp.float32(0.0), lambda l: l, loss)
+            grads = jax.tree_util.tree_map(
+                lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x), grads
             )
+            updates, new_opt_state = optimizer_update(grads, opt_state, actual_params)
+            new_actual_params = optax.apply_updates(actual_params, updates)
+            if has_state:
+                new_params = (new_actual_params, model_state)
+            else:
+                new_params = new_actual_params
+            return new_params, new_opt_state, loss, model_output
 
-            return loss, model_output
+        return jax.jit(_step)
 
-        # Compute gradients
-        (loss, model_output), grads = jax.value_and_grad(loss_fn, has_aux=True)(actual_params, batch, rng)
-
-        # NaN check for loss - replace with zero if NaN detected
-        loss = jax.lax.cond(jnp.isnan(loss), lambda _: jnp.float32(0.0), lambda l: l, loss)
-
-        # NaN check for gradients - zero out NaN gradients
-        def zero_nan_grads(g):
-            return jax.tree_util.tree_map(lambda x: jnp.where(jnp.isnan(x), jnp.zeros_like(x), x), g)
-
-        grads = zero_nan_grads(grads)
-
-        # Update parameters
-        updates, new_opt_state = self.optimizer.update(grads, opt_state, actual_params)
-        new_actual_params = optax.apply_updates(actual_params, updates)
-
-        if model_state is not None:
-            new_params = (new_actual_params, model_state)
-        else:
-            new_params = new_actual_params
-
-        return new_params, new_opt_state, loss, model_output
+    def train_step(self, params, opt_state, batch, rng):
+        """Single training step (delegates to pre-jitted closure)."""
+        return self._jit_train_step(params, opt_state, batch, rng)
 
     def _make_loss_fn(self):
         """
@@ -1998,7 +1992,7 @@ def main():
         vocab_size=8000,
         # Advanced features
         multimodal_enabled=True,
-        quantum_layers=2,
+        quantum_layers=0,
         max_reasoning_steps=8,
         consciousness_simulation=True,
         # Training settings

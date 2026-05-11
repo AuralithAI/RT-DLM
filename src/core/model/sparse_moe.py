@@ -207,6 +207,8 @@ class SparseMoE(hk.Module):
         top_k: int,
         expert_capacity: int,
         specialization_weight: float = 0.1,
+        z_loss_weight: float = 1e-4,
+        router_z_loss_weight: float = 1e-3,
         name=None,
     ):
         super().__init__(name=name)
@@ -215,6 +217,8 @@ class SparseMoE(hk.Module):
         self.top_k = top_k
         self.expert_capacity = expert_capacity
         self.specialization_weight = specialization_weight
+        self.z_loss_weight = z_loss_weight
+        self.router_z_loss_weight = router_z_loss_weight
 
         # Enhanced experts with different architectures for specialization
         self.experts = []
@@ -402,13 +406,24 @@ class SparseMoE(hk.Module):
             self.num_experts,
         )
 
-        total_aux_loss = load_balance_loss + self.specialization_weight * specialization_loss
+        router_logsumexp = jax.scipy.special.logsumexp(gating_logits, axis=-1)
+        router_z_loss = jnp.mean(jnp.square(router_logsumexp))
+        z_loss = jnp.mean(jnp.square(gating_logits))
+
+        total_aux_loss = (
+            load_balance_loss
+            + self.specialization_weight * specialization_loss
+            + self.router_z_loss_weight * router_z_loss
+            + self.z_loss_weight * z_loss
+        )
 
         # Detailed metrics for monitoring
         metrics = {
             "expert_usage": self.expert_usage,
             "load_balance_loss": load_balance_loss,
             "specialization_loss": specialization_loss,
+            "router_z_loss": router_z_loss,
+            "z_loss": z_loss,
             "usage_entropy": usage_entropy,
             "temperature": temperature,
             "noise_scale": noise_scale,

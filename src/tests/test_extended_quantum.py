@@ -1,3 +1,9 @@
+import os
+import pytest
+
+if os.environ.get("AGI_ENABLE_QUANTUM") != "1":
+    pytest.skip("quantum subsystem opt-in; set AGI_ENABLE_QUANTUM=1", allow_module_level=True)
+
 """
 Tests for Extended Quantum Simulation
 
@@ -20,7 +26,7 @@ class TestExtendedQuantumConfig:
 
     def test_default_config(self):
         """Test default configuration values"""
-        from src.core.quantum.extended_quantum_sim import ExtendedQuantumConfig
+        from experimental.quantum.extended_quantum_sim import ExtendedQuantumConfig
 
         config = ExtendedQuantumConfig()
         assert config.max_qubits == 64
@@ -29,7 +35,7 @@ class TestExtendedQuantumConfig:
 
     def test_custom_config(self):
         """Test custom configuration"""
-        from src.core.quantum.extended_quantum_sim import ExtendedQuantumConfig
+        from experimental.quantum.extended_quantum_sim import ExtendedQuantumConfig
 
         config = ExtendedQuantumConfig(max_qubits=128, chunk_size=8, use_sparse=False)
         assert config.max_qubits == 128
@@ -42,7 +48,7 @@ class TestSparseStateVector:
 
     def test_initialization(self):
         """Test sparse state initialization to |0>"""
-        from src.core.quantum.extended_quantum_sim import SparseStateVector
+        from experimental.quantum.extended_quantum_sim import SparseStateVector
 
         state = SparseStateVector(num_qubits=10)
         assert state.num_qubits == 10
@@ -52,14 +58,14 @@ class TestSparseStateVector:
 
     def test_sparsity(self):
         """Test sparsity calculation"""
-        from src.core.quantum.extended_quantum_sim import SparseStateVector
+        from experimental.quantum.extended_quantum_sim import SparseStateVector
 
         state = SparseStateVector(num_qubits=10)
         assert state.sparsity > 0.99  # Only 1 of 1024 amplitudes non-zero
 
     def test_to_dense(self):
         """Test conversion to dense representation"""
-        from src.core.quantum.extended_quantum_sim import SparseStateVector
+        from experimental.quantum.extended_quantum_sim import SparseStateVector
 
         state = SparseStateVector(num_qubits=4)
         dense = state.to_dense()
@@ -70,7 +76,7 @@ class TestSparseStateVector:
 
     def test_from_dense(self):
         """Test creation from dense state"""
-        from src.core.quantum.extended_quantum_sim import SparseStateVector
+        from experimental.quantum.extended_quantum_sim import SparseStateVector
 
         dense = jnp.zeros(16, dtype=jnp.complex64)
         dense = dense.at[0].set(1 / jnp.sqrt(2))
@@ -84,7 +90,7 @@ class TestSparseStateVector:
 
     def test_normalize(self):
         """Test state normalization"""
-        from src.core.quantum.extended_quantum_sim import SparseStateVector
+        from experimental.quantum.extended_quantum_sim import SparseStateVector
 
         state = SparseStateVector(num_qubits=4)
         state.amplitudes = {0: 2.0, 1: 2.0}
@@ -96,7 +102,7 @@ class TestSparseStateVector:
 
     def test_measure_probabilities(self):
         """Test measurement probability calculation"""
-        from src.core.quantum.extended_quantum_sim import SparseStateVector
+        from experimental.quantum.extended_quantum_sim import SparseStateVector
 
         state = SparseStateVector(num_qubits=4)
         probs = state.measure_probabilities()
@@ -110,7 +116,7 @@ class TestChunkedQuantumSimulator:
 
     def test_initialize_state(self):
         """Test chunked state initialization"""
-        from src.core.quantum.extended_quantum_sim import (
+        from experimental.quantum.extended_quantum_sim import (
             ChunkedQuantumSimulator,
             ExtendedQuantumConfig,
         )
@@ -128,7 +134,7 @@ class TestChunkedQuantumSimulator:
 
     def test_apply_single_qubit_gate(self):
         """Test single qubit gate application"""
-        from src.core.quantum.extended_quantum_sim import (
+        from experimental.quantum.extended_quantum_sim import (
             ChunkedQuantumSimulator,
             ExtendedQuantumConfig,
         )
@@ -147,7 +153,7 @@ class TestChunkedQuantumSimulator:
 
     def test_get_chunk_for_qubit(self):
         """Test qubit to chunk mapping"""
-        from src.core.quantum.extended_quantum_sim import (
+        from experimental.quantum.extended_quantum_sim import (
             ChunkedQuantumSimulator,
             ExtendedQuantumConfig,
         )
@@ -170,7 +176,7 @@ class TestExtendedQuantumSimulator:
 
     def test_create_small_state_dense(self):
         """Test small state uses dense representation"""
-        from src.core.quantum.extended_quantum_sim import ExtendedQuantumSimulator
+        from experimental.quantum.extended_quantum_sim import ExtendedQuantumSimulator
 
         sim = ExtendedQuantumSimulator()
         state = sim.create_state(8)
@@ -180,7 +186,7 @@ class TestExtendedQuantumSimulator:
 
     def test_create_medium_state_sparse(self):
         """Test medium state uses sparse representation"""
-        from src.core.quantum.extended_quantum_sim import ExtendedQuantumSimulator
+        from experimental.quantum.extended_quantum_sim import ExtendedQuantumSimulator
 
         sim = ExtendedQuantumSimulator()
         state = sim.create_state(24)
@@ -190,7 +196,7 @@ class TestExtendedQuantumSimulator:
 
     def test_create_large_state_chunked(self):
         """Test large state uses chunked representation"""
-        from src.core.quantum.extended_quantum_sim import ExtendedQuantumSimulator
+        from experimental.quantum.extended_quantum_sim import ExtendedQuantumSimulator
 
         sim = ExtendedQuantumSimulator()
         state = sim.create_state(48)
@@ -200,7 +206,7 @@ class TestExtendedQuantumSimulator:
 
     def test_apply_hadamard_dense(self):
         """Test Hadamard gate on dense state"""
-        from src.core.quantum.extended_quantum_sim import ExtendedQuantumSimulator
+        from experimental.quantum.extended_quantum_sim import ExtendedQuantumSimulator
 
         sim = ExtendedQuantumSimulator()
         state = sim.create_state(4)
@@ -214,7 +220,7 @@ class TestExtendedQuantumSimulator:
 
     def test_apply_pauli_x(self):
         """Test Pauli-X gate (NOT gate)"""
-        from src.core.quantum.extended_quantum_sim import ExtendedQuantumSimulator
+        from experimental.quantum.extended_quantum_sim import ExtendedQuantumSimulator
 
         sim = ExtendedQuantumSimulator()
         state = sim.create_state(4)
@@ -227,7 +233,7 @@ class TestExtendedQuantumSimulator:
 
     def test_apply_rotation_y(self):
         """Test Y rotation gate"""
-        from src.core.quantum.extended_quantum_sim import ExtendedQuantumSimulator
+        from experimental.quantum.extended_quantum_sim import ExtendedQuantumSimulator
 
         sim = ExtendedQuantumSimulator()
         state = sim.create_state(4)
@@ -240,7 +246,7 @@ class TestExtendedQuantumSimulator:
 
     def test_variational_layer(self):
         """Test variational quantum layer"""
-        from src.core.quantum.extended_quantum_sim import ExtendedQuantumSimulator
+        from experimental.quantum.extended_quantum_sim import ExtendedQuantumSimulator
 
         sim = ExtendedQuantumSimulator()
         state = sim.create_state(4)
@@ -259,7 +265,7 @@ class TestFactoryFunction:
 
     def test_create_from_config(self):
         """Test creating simulator from AGI config"""
-        from src.core.quantum.extended_quantum_sim import create_extended_quantum_simulator
+        from experimental.quantum.extended_quantum_sim import create_extended_quantum_simulator
         from src.config.agi_config import AGIConfig
 
         config = AGIConfig(quantum_max_qubits=64, quantum_sparse_mode=True)
@@ -275,7 +281,7 @@ class TestQuantumScaling:
 
     def test_40_qubit_state(self):
         """Test creating 40 qubit state (chunked)"""
-        from src.core.quantum.extended_quantum_sim import ExtendedQuantumSimulator
+        from experimental.quantum.extended_quantum_sim import ExtendedQuantumSimulator
 
         sim = ExtendedQuantumSimulator()
         state = sim.create_state(40)
@@ -285,7 +291,7 @@ class TestQuantumScaling:
 
     def test_64_qubit_state(self):
         """Test creating 64 qubit state (chunked)"""
-        from src.core.quantum.extended_quantum_sim import ExtendedQuantumSimulator
+        from experimental.quantum.extended_quantum_sim import ExtendedQuantumSimulator
 
         sim = ExtendedQuantumSimulator()
         state = sim.create_state(64)

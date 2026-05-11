@@ -1,3 +1,9 @@
+import os
+import pytest
+
+if os.environ.get("AGI_ENABLE_QUANTUM") != "1":
+    pytest.skip("quantum subsystem opt-in; set AGI_ENABLE_QUANTUM=1", allow_module_level=True)
+
 """
 Tests for Tensor Network Quantum Simulation Module
 
@@ -10,7 +16,7 @@ import jax
 import jax.numpy as jnp
 
 from src.config.tensor_network_config import TensorNetworkConfig
-from src.core.quantum.tensor_network import (
+from experimental.quantum.tensor_network import (
     MatrixProductState,
     TreeTensorNetwork,
     TensorNetworkQuantumSimulator,

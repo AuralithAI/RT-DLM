@@ -16,17 +16,20 @@ import time
 try:
     from .real_time_learning import RealTimeLearningSystem, FeedbackSample
     from .zero_shot_reasoning import ZeroShotConceptualSystem, ReasoningChain
-    from ..quantum.quantum_readiness import create_quantum_ready_system
 except ImportError:
-    # Fallback for module imports
     import sys
     import os
 
     sys.path.append(os.path.dirname(__file__))
     from zero_shot_reasoning import ZeroShotConceptualSystem, ReasoningChain
 
-    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-    from src.core.quantum.quantum_readiness import create_quantum_ready_system
+try:
+    from experimental.quantum.quantum_readiness import create_quantum_ready_system
+
+    _QUANTUM_AVAILABLE = True
+except ImportError:
+    create_quantum_ready_system = None
+    _QUANTUM_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -269,7 +272,7 @@ class IntegratedAGISystem:
 
         # Initialize quantum components if enabled
         self.quantum_system = None
-        if enable_quantum:
+        if enable_quantum and _QUANTUM_AVAILABLE and create_quantum_ready_system is not None:
             self.quantum_system = create_quantum_ready_system(d_model)
 
         # Capability registry

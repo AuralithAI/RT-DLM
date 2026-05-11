@@ -212,6 +212,8 @@ data/**/*.tsv
 dataset/
 datasets/
 data/
+!src/core/data/
+!src/core/data/**
 
 # Training artifacts
 checkpoints/
