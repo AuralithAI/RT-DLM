@@ -20,8 +20,8 @@ jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
-    if: github.repository == 'AuralithAI/RT-DLM'
-    
+    if: github.repository_owner == 'AuralithAI'
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
