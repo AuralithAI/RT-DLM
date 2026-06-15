@@ -2,20 +2,20 @@
 # Model architecture and training - tokenization handled by Auralith-Data-Pipeline
 
 # Core ML/DL frameworks - Compatible with TensorFlow 2.18
-dm_haiku==0.0.13
-jax==0.4.35
-jaxlib==0.4.35
-optax==0.2.3
+dm_haiku==0.0.16
+jax==0.6.2
+jaxlib==0.6.2
+optax==0.2.8
 
 # Data processing and ML utilities
-scikit-learn==1.6.1
+scikit-learn==1.7.2
 numpy>=1.26,<2.1
-tensorflow==2.18.0
+tensorflow==2.21.0
 
 # Memory and retrieval systems
 # Windows: use faiss-cpu (faiss-gpu not supported on Windows)
 # Linux/Mac: use faiss-gpu for GPU acceleration, or faiss-cpu for CPU-only
-faiss-cpu==1.10.0  # For GPU: pip install faiss-gpu instead
+faiss-cpu==1.14.3  # For GPU: pip install faiss-gpu instead
 #faiss-gpu
 
 # Security
@@ -25,43 +25,43 @@ cryptography>=42.0.0
 safetensors>=0.4.0
 
 # Fairness and Ethical AI
-fairlearn>=0.10.0
+fairlearn==0.14.0
 
 # Visualization and monitoring
-matplotlib==3.10.0
+matplotlib==3.10.9
 rich==13.9.4
 
 # Web interfaces and APIs
-fastapi==0.115.8
-pydantic==2.10.6
+fastapi==0.137.0
+pydantic==2.13.4
 gradio==5.15.0
 
 # NLP and text processing
-nltk==3.9.1
-requests==2.32.3
+nltk==3.9.4
+requests==2.34.2
 
 # Hyperparameter optimization
-optuna==4.2.1
+optuna==4.9.0
 
 # Quantum computing simulation
 qiskit==1.3.0
-qiskit-aer==0.15.1
+qiskit-aer==0.17.2
 
 # Experiment tracking
-wandb==0.19.2
+wandb==0.27.2
 
 # Multi-modal processing
 # Image processing
 Pillow>=8.0,<13.0
-opencv-python==4.10.0.84
+opencv-python==4.13.0.92
 
 # Audio processing
-librosa==0.10.2
-soundfile==0.12.1
+librosa==0.11.0
+soundfile==0.14.0
 scipy>=1.11.0,<1.15.0
 
 # Video processing
-moviepy==2.1.1
+moviepy==2.2.1
 
 # Knowledge graphs and reasoning
 networkx==3.4.2
@@ -73,15 +73,15 @@ psutil==6.1.1
 # For data pipeline, see: https://github.com/AuralithAI/Auralith-Data-Pipeline
 
 # Configuration management
-omegaconf==2.3.0
-hydra-core==1.3.2
+omegaconf==2.3.1
+hydra-core==1.3.3
 
 # Distributed computing (for large-scale training)
-ray==2.40.0
+ray==2.55.1
 
 # Safety and alignment
 transformers==4.47.1  # For alignment techniques
-torch==2.8.0  # Sometimes needed for certain alignment tools
+torch==2.12.0  # Sometimes needed for certain alignment tools
 fairlearn==0.10.0  # Fairness assessment and mitigation
 
 # Experiment tracking and benchmarks
@@ -96,4 +96,4 @@ mypy==1.13.0
 
 # Documentation
 sphinx==8.1.3
-sphinx-rtd-theme==3.0.2
+sphinx-rtd-theme==3.1.0
