@@ -34,7 +34,7 @@ rich==13.9.4
 # Web interfaces and APIs
 fastapi==0.115.8
 pydantic==2.10.6
-gradio==5.15.0
+gradio==6.15.0
 
 # NLP and text processing
 nltk==3.9.1
