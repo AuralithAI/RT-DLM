@@ -37,7 +37,7 @@ pydantic==2.10.6
 gradio==5.15.0
 
 # NLP and text processing
-nltk==3.9.1
+nltk==3.10.0
 requests==2.32.3
 
 # Hyperparameter optimization
